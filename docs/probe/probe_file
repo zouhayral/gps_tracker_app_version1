@@ -1,0 +1,154 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../core/network/dio_provider.dart'; // adjust if your dioProvider lives elsewhere
+
+Future<void> runRateProbe(WidgetRef ref, {required int deviceId}) async {
+  final dio = ref.read(dioProvider);
+
+  final frequencies = <String, int>{
+    '1_rps': 1000,
+    '2_rps': 500,
+    '4_rps': 250,
+    '8_rps': 125,
+    '10_rps': 100,
+  };
+
+  final samples = <Map<String, dynamic>>[];
+
+  Future<void> burst(String label, int delayMs) async {
+    for (var i = 0; i < 8; i++) {
+      await _measure(
+        dioCall: () => dio.get('/api/devices'),
+        phase: 'devices',
+        label: label,
+        seq: i,
+        sink: samples,
+      );
+      await _measure(
+        dioCall: () {
+          final to = DateTime.now().toUtc();
+          final from = to.subtract(const Duration(minutes: 5));
+          return dio.get('/api/positions', queryParameters: {
+            'deviceId': deviceId,
+            'from': from.toIso8601String(),
+            'to': to.toIso8601String(),
+          });
+        },
+        phase: 'positions',
+        label: label,
+        seq: i,
+        sink: samples,
+      );
+      await Future.delayed(Duration(milliseconds: delayMs));
+    }
+  }
+
+  for (final e in frequencies.entries) {
+    await burst(e.key, e.value);
+  }
+
+  final summary = _summarize(samples);
+
+  final output = {
+    'meta': {
+      'baseUrl': dio.options.baseUrl,
+      'deviceId': deviceId,
+      'generatedAt': DateTime.now().toUtc().toIso8601String(),
+      'freqs': frequencies.keys.toList(),
+      'traccarVersionAssumed': '5.12'
+    },
+    'aggregates': summary,
+    'rawSamples': samples,
+  };
+
+  final jsonOut = jsonEncode(output);
+  if (kDebugMode) {
+    const chunk = 800;
+    for (var i = 0; i < jsonOut.length; i += chunk) {
+      debugPrint(jsonOut.substring(i, (i + chunk).clamp(0, jsonOut.length)));
+    }
+  }
+}
+
+Future<void> _measure({
+  required Future<dynamic> Function() dioCall,
+  required String phase,
+  required String label,
+  required int seq,
+  required List<Map<String, dynamic>> sink,
+}) async {
+  final start = DateTime.now();
+  final sw = Stopwatch()..start();
+  int? status;
+  String? error;
+  int count = 0;
+
+  try {
+    final r = await dioCall();
+    status = r.statusCode;
+    if (r.data is List) count = (r.data as List).length;
+  } catch (e) {
+    error = e.toString();
+  }
+  sw.stop();
+  sink.add({
+    'phase': phase,
+    'freq': label,
+    'seq': seq,
+    'start': start.toIso8601String(),
+    'durMs': sw.elapsedMilliseconds,
+    if (status != null) 'status': status,
+    'count': count,
+    if (error != null) 'error': error,
+  });
+}
+
+Map<String, dynamic> _summarize(List<Map<String, dynamic>> samples) {
+  final result = <String, dynamic>{};
+  final groups = <String, List<Map<String, dynamic>>>{};
+
+  for (final s in samples) {
+    final key = '${s['freq']}|${s['phase']}';
+    groups.putIfAbsent(key, () => []).add(s);
+  }
+
+  Map<String, num> pct(List<int> vals) {
+    vals.sort();
+    int pick(double p) => vals[(p * (vals.length - 1)).round()];
+    final avg = vals.reduce((a, b) => a + b) / vals.length;
+    return {
+      'min': vals.first,
+      'p50': pick(.50),
+      'p90': pick(.90),
+      'p99': pick(.99),
+      'max': vals.last,
+      'avg': double.parse(avg.toStringAsFixed(1)),
+    };
+  }
+
+  final byFreq = <String, Map<String, dynamic>>{};
+  for (final entry in groups.entries) {
+    final parts = entry.key.split('|');
+    final freq = parts[0];
+    final phase = parts[1];
+    final latencies = entry.value.map((e) => e['durMs'] as int).toList();
+    final statuses = <String, int>{};
+    var errors = 0;
+    for (final s in entry.value) {
+      final st = s['status'];
+      if (st != null) statuses['$st'] = (statuses['$st'] ?? 0) + 1;
+      if (s['error'] != null) errors++;
+    }
+    final phaseObj = {
+      'samples': entry.value.length,
+      'latencyMs': pct(latencies),
+      'statusCounts': statuses,
+      'errors': errors,
+    };
+    byFreq.putIfAbsent(freq, () => {});
+    byFreq[freq]![phase] = phaseObj;
+  }
+  result.addAll(byFreq);
+  return result;
+}
