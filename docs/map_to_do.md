@@ -1,3 +1,5 @@
+- [x] Offline last-known display: when live socket has no data, show last-known via REST /api/positions/{id} and update seamlessly once live arrives (10m provider keep-alive to avoid churn).
+- [x] DAO fallback: persist last-known per-device to local storage and prefill on cold start.
 # Map Page TODO (Planning & Task Breakdown)
 
 Purpose: Implement a production-ready Map experience for the GPS tracker app: real‑time device locations, history playback, contextual info, and future overlays (geofences, routes).
@@ -51,6 +53,10 @@ Open Questions (to close before DAO schema finalization):
 
 Decision: Proceed with minimal model now (deviceId, lat, lon, speed, course, deviceTime, serverTime, attributes) and design DAO columns superset (include nullable altitude, accuracy, id) to avoid destructive migration later.
 
+Note on Persistence & Tests (DONE)
+- Last-known positions are persisted with ObjectBox (legacy Hive data migrated once).
+- Centralized test config at `test/test_utils/test_config.dart` disables map tiles in widget tests and skips ObjectBox DAO tests when native libs are missing.
+
 ### Validation 0.2 – Max Batch Size for History Queries (IN PROGRESS)
 Goal: Empirically determine a safe upper bound (time window → number of positions + payload size) for a single `/api/positions` request to balance performance and avoid server strain.
 
@@ -92,12 +98,12 @@ Results (pending):
 
 
 ## 1. Library & Architecture Decisions
-[ ] Choose map plugin: `flutter_map` (OpenStreetMap, flexible) vs `google_maps_flutter` vs Mapbox.  
-Decision Criteria: licensing, offline tile support, marker clustering, performance.  
-Deliverable: ADR (Architecture Decision Record) `docs/adr/ADR-map-library.md`.
+[x] Choose map plugin: `flutter_map` (OpenStreetMap, flexible) vs `google_maps_flutter` vs Mapbox.  
+Decision: flutter_map (see ADR-001). Criteria: licensing, offline tile support, clustering options, performance.  
+Deliverable: ADR (Architecture Decision Record) `docs/adr/ADR-001-map-library.md`.
 
-[ ] If `flutter_map`: add dependencies (`flutter_map`, `latlong2`, optional `flutter_map_cancellable_tile_provider`, `cached_network_image`).  
-[ ] Abstract map service behind interface so future switch is low impact.
+[x] If `flutter_map`: add dependencies (`flutter_map`, `latlong2`, optional `flutter_map_cancellable_tile_provider`, `cached_network_image`).  
+[x] Abstract map service behind interface so future switch is low impact.
 
 ---
 
@@ -110,15 +116,15 @@ Deliverable: ADR (Architecture Decision Record) `docs/adr/ADR-map-library.md`.
 [ ] Implement `PositionsRepository` to mediate caching (in‑memory + optional local DB).
 
 ### Local Cache / Persistence
-[ ] Flesh out `positions_dao.dart`:
-   - Schema: positions(id PK, deviceId, lat, lon, speed, course, altitude, accuracy, fixTime(ms), serverTime(ms), attrs(json))
-   - Indices: deviceId + fixTime DESC
-[ ] Choose storage: start with `sqflite` (fastest path) → later Drift migration.
-[ ] Methods:
+[x] Implement `positions_dao.dart` with ObjectBox:
+   - Schema: deviceId (unique), lat, lon, speed, course, deviceTime(ms), serverTime(ms), attrs(json); optional fields reserved for future (altitude, accuracy, id).
+   - Indices: unique on deviceId; future index on (deviceId, deviceTime DESC) for history.
+[x] Choose storage: ObjectBox (replacing initial Hive). One-time migration from Hive on first run.
+[x] Methods:
    - upsertBatch(List<Position>)
    - latestByDevice(int deviceId)
-   - history(int deviceId, DateTime from, DateTime to)
-   - prune(olderThan)
+   - loadAll() for prefill
+   - migrateFromHiveIfPresent() one-time
 
 ---
 
@@ -176,7 +182,7 @@ Deliverable: ADR (Architecture Decision Record) `docs/adr/ADR-map-library.md`.
 Phase 1:
 [ ] Date range picker (Today, 24h, Custom).
 [ ] Fetch history → draw polyline (color by speed segments).
-Last Updated: 2025-10-08
+Last Updated: 2025-10-10
 [ ] Playback controller (play/pause, slider, 1x / 2x / 4x).
 [ ] Moving marker along polyline.
 [ ] Progress caching to avoid refetch on scrub.

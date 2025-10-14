@@ -1,0 +1,381 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:3580486239665309210",
+      "lastPropertyId": "9:3471416172285800264",
+      "name": "PositionEntity",
+      "properties": [
+        {
+          "id": "1:2477797265281735117",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4368633855335898086",
+          "name": "deviceId",
+          "indexId": "1:2808201492593804960",
+          "type": 6,
+          "flags": 40
+        },
+        {
+          "id": "3:1196285317830377965",
+          "name": "latitude",
+          "type": 8
+        },
+        {
+          "id": "4:2080466610406752301",
+          "name": "longitude",
+          "type": 8
+        },
+        {
+          "id": "5:5141311765732234119",
+          "name": "speed",
+          "type": 8
+        },
+        {
+          "id": "6:7287437044094316109",
+          "name": "course",
+          "type": 8
+        },
+        {
+          "id": "7:4070575796948143811",
+          "name": "deviceTimeMs",
+          "indexId": "2:9166215683513049680",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "8:562907879458722528",
+          "name": "serverTimeMs",
+          "indexId": "3:5961962860539236311",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "9:3471416172285800264",
+          "name": "attributesJson",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:4746095552785336131",
+      "lastPropertyId": "12:3187010347379492643",
+      "name": "DeviceEntity",
+      "properties": [
+        {
+          "id": "1:4851061330909611773",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7874883271407844000",
+          "name": "deviceId",
+          "indexId": "4:1194088338224820085",
+          "type": 6,
+          "flags": 40
+        },
+        {
+          "id": "3:1527673692473283446",
+          "name": "name",
+          "type": 9
+        },
+        {
+          "id": "4:403872275113286543",
+          "name": "uniqueId",
+          "indexId": "5:8403228740964980523",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:92344503905043476",
+          "name": "status",
+          "indexId": "6:829231779337832996",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:4667963359953391809",
+          "name": "category",
+          "type": 9
+        },
+        {
+          "id": "7:8132319441236589204",
+          "name": "model",
+          "type": 9
+        },
+        {
+          "id": "8:7372227358109595465",
+          "name": "contact",
+          "type": 9
+        },
+        {
+          "id": "9:8561027871876401735",
+          "name": "phone",
+          "type": 9
+        },
+        {
+          "id": "10:6840723624202206321",
+          "name": "lastUpdate",
+          "indexId": "7:2927376608420614933",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "11:2689985825232400216",
+          "name": "disabled",
+          "type": 1
+        },
+        {
+          "id": "12:3187010347379492643",
+          "name": "attributesJson",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "3:1766022952411284427",
+      "lastPropertyId": "12:692536996037118197",
+      "name": "EventEntity",
+      "properties": [
+        {
+          "id": "1:4293328404958414096",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1739519015453176036",
+          "name": "eventId",
+          "indexId": "8:8053533354354178125",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:4616585622987562326",
+          "name": "deviceId",
+          "indexId": "9:6788774021421809897",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "4:8761054539484453682",
+          "name": "eventType",
+          "indexId": "10:8917369485027577058",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:8260781812284403331",
+          "name": "eventTimeMs",
+          "indexId": "11:7910519331595047805",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "6:2680924740599564635",
+          "name": "positionId",
+          "type": 6
+        },
+        {
+          "id": "7:7694948683392261667",
+          "name": "geofenceId",
+          "indexId": "12:4180946556039400235",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "8:1690356246973187702",
+          "name": "maintenanceId",
+          "type": 6
+        },
+        {
+          "id": "9:5809667587057990851",
+          "name": "priority",
+          "type": 9
+        },
+        {
+          "id": "10:5369046918501336948",
+          "name": "severity",
+          "type": 9
+        },
+        {
+          "id": "11:5300923312817909188",
+          "name": "message",
+          "type": 9
+        },
+        {
+          "id": "12:692536996037118197",
+          "name": "attributesJson",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:1919489703936589427",
+      "lastPropertyId": "7:8813531479527285981",
+      "name": "GeofenceEntity",
+      "properties": [
+        {
+          "id": "1:935081348278957156",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:163980728153221894",
+          "name": "geofenceId",
+          "indexId": "13:5235621092072228042",
+          "type": 6,
+          "flags": 40
+        },
+        {
+          "id": "3:4250473868654459943",
+          "name": "name",
+          "indexId": "14:5006105215937429371",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:5982026515438236234",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "5:3014777621224449537",
+          "name": "area",
+          "indexId": "15:2349472746929882658",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:1043205549663435460",
+          "name": "calendarId",
+          "type": 6
+        },
+        {
+          "id": "7:8813531479527285981",
+          "name": "attributesJson",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "5:7368267337847358361",
+      "lastPropertyId": "16:67794839549307910",
+      "name": "TripEntity",
+      "properties": [
+        {
+          "id": "1:8311135312760188962",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2726391856074650225",
+          "name": "tripId",
+          "indexId": "16:4901253822743627874",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:2308682951914581953",
+          "name": "deviceId",
+          "indexId": "17:9040573290865994386",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "4:358884129300861673",
+          "name": "startTimeMs",
+          "indexId": "18:5701522439519372562",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "5:1433554490480616591",
+          "name": "endTimeMs",
+          "indexId": "19:8642255856666822365",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "6:8129469584098395652",
+          "name": "distanceKm",
+          "type": 8
+        },
+        {
+          "id": "7:2256157532529661509",
+          "name": "driverName",
+          "type": 9
+        },
+        {
+          "id": "8:2218933981787791096",
+          "name": "driverUniqueId",
+          "type": 9
+        },
+        {
+          "id": "9:147716749986475198",
+          "name": "maxSpeed",
+          "type": 8
+        },
+        {
+          "id": "10:5137128105121801520",
+          "name": "averageSpeed",
+          "type": 8
+        },
+        {
+          "id": "11:8117092640137495956",
+          "name": "startOdometer",
+          "type": 8
+        },
+        {
+          "id": "12:5481167895151198405",
+          "name": "endOdometer",
+          "type": 8
+        },
+        {
+          "id": "13:860453836545096794",
+          "name": "startPositionId",
+          "type": 6
+        },
+        {
+          "id": "14:110639296476795273",
+          "name": "endPositionId",
+          "type": 6
+        },
+        {
+          "id": "15:1043508337225427508",
+          "name": "spentFuel",
+          "type": 8
+        },
+        {
+          "id": "16:67794839549307910",
+          "name": "attributesJson",
+          "type": 9
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "5:7368267337847358361",
+  "lastIndexId": "19:8642255856666822365",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}

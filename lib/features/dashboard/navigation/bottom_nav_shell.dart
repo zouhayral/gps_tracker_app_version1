@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../app.dart/app_router.dart';
+import 'package:my_app_gps/app/app_router.dart';
 
 class BottomNavShell extends StatefulWidget {
-  const BottomNavShell({super.key, required this.child});
+  const BottomNavShell({required this.child, super.key});
   final Widget child;
   @override
   State<BottomNavShell> createState() => _BottomNavShellState();
@@ -13,10 +13,14 @@ class _BottomNavShellState extends State<BottomNavShell> {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
-    int currentIndex = 0;
-    if (location.startsWith(AppRoutes.trips)) currentIndex = 1;
-    else if (location.startsWith(AppRoutes.alerts)) currentIndex = 2;
-    else if (location.startsWith(AppRoutes.settings)) currentIndex = 3;
+    var currentIndex = 0;
+    if (location.startsWith(AppRoutes.trips)) {
+      currentIndex = 1;
+    } else if (location.startsWith(AppRoutes.alerts)) {
+      currentIndex = 2;
+    } else if (location.startsWith(AppRoutes.settings)) {
+      currentIndex = 3;
+    }
     return Scaffold(
       body: widget.child,
       bottomNavigationBar: Container(
@@ -32,10 +36,14 @@ class _BottomNavShellState extends State<BottomNavShell> {
           ],
           onDestinationSelected: (i) {
             switch (i) {
-              case 0: context.go(AppRoutes.map); break;
-              case 1: context.go(AppRoutes.trips); break;
-              case 2: context.go(AppRoutes.alerts); break;
-              case 3: context.go(AppRoutes.settings); break;
+              case 0:
+                context.go(AppRoutes.map);
+              case 1:
+                context.go(AppRoutes.trips);
+              case 2:
+                context.go(AppRoutes.alerts);
+              case 3:
+                context.go(AppRoutes.settings);
             }
           },
         ),

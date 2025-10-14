@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../lib/services/auth_service.dart';
-import '../lib/services/positions_service.dart';
+import 'package:my_app_gps/services/auth_service.dart';
+import 'package:my_app_gps/services/positions_service.dart';
 
 // Simple standalone runner to probe history batch size.
 // Usage (PowerShell example):
@@ -12,7 +12,9 @@ import '../lib/services/positions_service.dart';
 
 Future<void> main(List<String> args) async {
   if (args.length < 3) {
-    stderr.writeln('Usage: dart run bin/probe_history.dart <email> <password> <deviceId>');
+    stderr.writeln(
+      'Usage: dart run bin/probe_history.dart <email> <password> <deviceId>',
+    );
     exit(64);
   }
   final email = args[0];
@@ -46,6 +48,8 @@ Future<void> main(List<String> args) async {
   for (final s in steps) {
     stdout.writeln(s.toString());
   }
-  stdout.writeln('Done. Interpret results and update docs/map_to_do.md Validation 0.2 section.');
+  stdout.writeln(
+    'Done. Interpret results and update docs/map_to_do.md Validation 0.2 section.',
+  );
   container.dispose();
 }

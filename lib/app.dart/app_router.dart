@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../features/auth/controller/auth_notifier.dart';
-import '../features/auth/controller/auth_state.dart';
-import '../features/auth/presentation/login_page.dart';
-import '../features/map/view/map_page.dart';
-import '../features/trips/view/trips_page.dart';
-import '../features/notifications/view/notifications_page.dart';
-import '../features/settings/view/settings_page.dart';
-import '../features/dashboard/navigation/bottom_nav_shell.dart';
+import 'package:go_router/go_router.dart';
+import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
+import 'package:my_app_gps/features/auth/controller/auth_state.dart';
+import 'package:my_app_gps/features/auth/presentation/login_page.dart';
+import 'package:my_app_gps/features/dashboard/navigation/bottom_nav_shell.dart';
+import 'package:my_app_gps/features/map/view/map_page.dart';
+import 'package:my_app_gps/features/notifications/view/notifications_page.dart';
+import 'package:my_app_gps/features/settings/view/settings_page.dart';
+import 'package:my_app_gps/features/trips/view/trips_page.dart';
 
 // Route names / paths constants
 class AppRoutes {
@@ -26,7 +25,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     initialLocation: AppRoutes.map,
-    debugLogDiagnostics: false,
     redirect: (context, state) {
        final isLoggedIn = auth is AuthAuthenticated;
        final loggingIn = state.fullPath == AppRoutes.login;

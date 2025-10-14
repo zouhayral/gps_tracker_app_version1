@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'auth_service.dart';
-import '../features/map/data/position_model.dart';
-import 'dart:async';
+import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/services/auth_service.dart';
 
 /// Provider for positions service (raw access + probing utilities).
 final positionsServiceProvider = Provider<PositionsService>((ref) {
@@ -25,11 +26,15 @@ class PositionsService {
 
   void _pruneCache({Duration maxAge = const Duration(hours: 24)}) {
     final now = DateTime.now().toUtc();
-    if (now.difference(_lastPrune) < const Duration(minutes: 10)) return; // throttle pruning
+    if (now.difference(_lastPrune) < const Duration(minutes: 10)) {
+      return; // throttle pruning
+    }
     _lastPrune = now;
     final toRemove = <int>[];
     _latestCacheTime.forEach((id, ts) {
-      if (now.difference(ts) > maxAge) toRemove.add(id);
+      if (now.difference(ts) > maxAge) {
+        toRemove.add(id);
+      }
     });
     for (final id in toRemove) {
       _latestCache.remove(id);
@@ -47,7 +52,7 @@ class PositionsService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final resp = await _dio.get(
+    final resp = await _dio.get<List<dynamic>>(
       '/api/positions',
       queryParameters: {
         'deviceId': deviceId,
@@ -75,44 +80,56 @@ class PositionsService {
     for (var i = 0; i < maxIterations; i++) {
       final from = now.subtract(Duration(hours: hours));
       try {
-        final list = await fetchHistoryRaw(deviceId: deviceId, from: from, to: now);
-        int bytes = 0;
-        try { bytes = utf8.encode(jsonEncode(list)).length; } catch (_) {}
+        final list = await fetchHistoryRaw(
+          deviceId: deviceId,
+          from: from,
+          to: now,
+        );
+        var bytes = 0;
+        try {
+          bytes = utf8.encode(jsonEncode(list)).length;
+        } catch (_) {}
         final step = HistoryProbeStep(
           windowHours: hours,
           from: from,
           to: now,
           count: list.length,
-            payloadBytes: bytes,
+          payloadBytes: bytes,
         );
         steps.add(step);
         if (kDebugMode) {
           // ignore: avoid_print
-          print('[historyProbe] hours=$hours count=${step.count} bytes=${step.payloadBytes}');
+          print(
+            '[historyProbe] hours=$hours count=${step.count} bytes=${step.payloadBytes}',
+          );
         }
         if (list.length >= targetCount) {
           break;
         }
         hours *= 2;
       } on DioException catch (e) {
-        steps.add(HistoryProbeStep(
-          windowHours: hours,
-          from: from,
-          to: now,
-          count: -1,
-          payloadBytes: 0,
-          error: '${e.response?.statusCode}:${e.type.name}',
-        ));
+        steps.add(
+          HistoryProbeStep(
+            windowHours: hours,
+            from: from,
+            to: now,
+            count: -1,
+            payloadBytes: 0,
+            error: '${e.response?.statusCode}:${e.type.name}',
+          ),
+        );
         break;
       } catch (e) {
-        steps.add(HistoryProbeStep(
-          windowHours: hours,
-          from: from,
-          to: now,
-          count: -1,
-          payloadBytes: 0,
-          error: e.toString(),
-        ));
+        steps.add(
+          HistoryProbeStep(
+            windowHours: hours,
+            from: from,
+            to: now,
+            count: -1,
+            payloadBytes: 0,
+            error: e.toString(),
+          ),
+        );
         break;
       }
     }
@@ -129,14 +146,17 @@ class PositionsService {
   }) async {
     // First try aggregated latest endpoint variant
     try {
-      final resp = await _dio.get(
+      final resp = await _dio.get<List<dynamic>>(
         '/api/positions',
         queryParameters: const {'latest': 'true'},
         options: Options(headers: const {'Accept': 'application/json'}),
       );
       final data = resp.data;
       if (data is List) {
-        final list = data.whereType<Map>().map((e) => Position.fromJson(Map<String, dynamic>.from(e))).toList();
+        final list = data
+            .whereType<Map<String, dynamic>>()
+            .map(Position.fromJson)
+            .toList();
         final nowTs = DateTime.now().toUtc();
         for (final p in list) {
           _latestCache[p.deviceId] = p;
@@ -145,7 +165,9 @@ class PositionsService {
         _pruneCache();
         if (kDebugMode) {
           // ignore: avoid_print
-          print('[positionsLatest] aggregated latest=true path size=${list.length}');
+          print(
+            '[positionsLatest] aggregated latest=true path size=${list.length}',
+          );
         }
         return list;
       }
@@ -168,7 +190,9 @@ class PositionsService {
           _cacheHits++;
           if (kDebugMode) {
             // ignore: avoid_print
-            print('[positionsCache] hit device=$id (hits=$_cacheHits misses=$_cacheMisses)');
+            print(
+              '[positionsCache] hit device=$id (hits=$_cacheHits misses=$_cacheMisses)',
+            );
           }
           return; // skip network fetch
         }
@@ -178,38 +202,112 @@ class PositionsService {
         final raw = await fetchHistoryRaw(deviceId: id, from: from, to: now);
         if (raw.isEmpty) return;
         Map<String, dynamic>? newest;
-        DateTime newestT = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+        var newestT = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
         for (final item in raw) {
-          if (item is Map) {
+          if (item is Map<String, dynamic>) {
             final m = Map<String, dynamic>.from(item);
-            final dtDevice = DateTime.tryParse(m['deviceTime']?.toString() ?? '')?.toUtc();
-            final dtServer = DateTime.tryParse(m['serverTime']?.toString() ?? '')?.toUtc();
+            final dtDevice = DateTime.tryParse(
+              m['deviceTime']?.toString() ?? '',
+            )?.toUtc();
+            final dtServer = DateTime.tryParse(
+              m['serverTime']?.toString() ?? '',
+            )?.toUtc();
             final t = dtDevice ?? dtServer ?? newestT;
-            if (t.isAfter(newestT)) { newestT = t; newest = m; }
+            if (t.isAfter(newestT)) {
+              newestT = t;
+              newest = m;
+            }
           }
         }
         if (newest != null) {
           final pos = Position.fromJson(newest);
-            results.add(pos);
-            _latestCache[id] = pos;
-            _latestCacheTime[id] = DateTime.now().toUtc();
+          results.add(pos);
+          _latestCache[id] = pos;
+          _latestCacheTime[id] = DateTime.now().toUtc();
         }
-      } catch (_) {/* ignore individual errors */}
+      } catch (_) {
+        /* ignore individual errors */
+      }
     }
 
     // Chunk device IDs to limit concurrent requests
     for (var i = 0; i < deviceIds.length; i += maxConcurrent) {
-      final slice = deviceIds.sublist(i, (i + maxConcurrent).clamp(0, deviceIds.length));
+      final slice = deviceIds.sublist(
+        i,
+        (i + maxConcurrent).clamp(0, deviceIds.length),
+      );
       await Future.wait(slice.map(fetchOne));
     }
 
     _pruneCache();
     if (kDebugMode) {
       // ignore: avoid_print
-      print('[positionsLatest] fallback path fetched=${results.length} hits=$_cacheHits misses=$_cacheMisses cacheSize=${_latestCache.length}');
+      print(
+        '[positionsLatest] fallback path fetched=${results.length} hits=$_cacheHits misses=$_cacheMisses cacheSize=${_latestCache.length}',
+      );
     }
 
     return results;
+  }
+
+  /// Fetch a single Position by Traccar position id.
+  Future<Position?> latestByPositionId(int id) async {
+    try {
+      final resp = await _dio.get<Map<String, dynamic>>('/api/positions/$id');
+      final data = resp.data;
+      if (data == null) return null;
+      return Position.fromJson(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Resolve deviceId -> Position using device.positionId for a set of devices.
+  /// Fallback: For devices without positionId, fetch last 30min history.
+  Future<Map<int, Position>> latestForDevices(List<Map<String, dynamic>> devices) async {
+    final out = <int, Position>{};
+    final tasks = <Future<void>>[];
+    final devicesWithoutPosId = <int>[];
+
+    for (final d in devices) {
+      final devId = d['id'];
+      final posId = d['positionId'];
+      if (devId is int && posId is int) {
+        tasks.add(() async {
+          final p = await latestByPositionId(posId);
+          if (p != null) out[devId] = p;
+        }());
+      } else if (devId is int) {
+        // Track devices without positionId for fallback fetch
+        devicesWithoutPosId.add(devId);
+      }
+    }
+    await Future.wait(tasks);
+
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print(
+        '[positionsService] ✅ Fetched ${out.length} via positionId, ${devicesWithoutPosId.length} without positionId',
+      );
+    }
+
+    // Fallback: Fetch last positions for devices without positionId
+    if (devicesWithoutPosId.isNotEmpty) {
+      final fallbackPositions = await fetchLatestPositions(
+        deviceIds: devicesWithoutPosId,
+      );
+      for (final p in fallbackPositions) {
+        out[p.deviceId] = p;
+      }
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print(
+          '[positionsService] 🔄 Fallback fetch: ${fallbackPositions.length} positions for devices without positionId',
+        );
+      }
+    }
+
+    return out;
   }
 }
 

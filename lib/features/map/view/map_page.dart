@@ -7,15 +7,54 @@
 //  - Deep link preselection focus (preselectedIds)
 //  - Single, duplicate‑free implementation (previous corruption removed)
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:my_app_gps/core/utils/timing.dart';
+import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
+import 'package:my_app_gps/features/map/core/map_adapter.dart';
+import 'package:my_app_gps/features/map/data/granular_providers.dart';
+import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart';
+import 'package:my_app_gps/features/map/data/positions_live_provider.dart';
+import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
+import 'package:my_app_gps/services/traccar_connection_provider.dart';
 
-import '../../dashboard/controller/devices_notifier.dart';
-import '../data/positions_live_provider.dart';
-import '../data/position_model.dart';
-import '../core/map_adapter.dart';
-import 'flutter_map_adapter.dart';
+/// Debug toggles for map page (safe defaults: all off)
+class MapDebugFlags {
+  static bool showRebuildOverlay = false; // enable to show rebuild counters overlay
+}
+
+// Simple rebuild badge for profiling; increments an internal counter each build.
+class _RebuildBadge extends StatefulWidget {
+  const _RebuildBadge({required this.label});
+  final String label;
+  @override
+  State<_RebuildBadge> createState() => _RebuildBadgeState();
+}
+
+class _RebuildBadgeState extends State<_RebuildBadge> {
+  int _count = 0;
+  @override
+  Widget build(BuildContext context) {
+    _count++;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          '${widget.label}: $_count',
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
+      ),
+    );
+  }
+}
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key, this.preselectedIds});
@@ -34,31 +73,52 @@ class _MapPageState extends ConsumerState<MapPage> {
   String _query = '';
   bool _editing = false; // when true TextField accepts input
   bool _showSuggestions = false;
+  final _searchDebouncer = Debouncer(const Duration(milliseconds: 250));
 
   // Map
   final _mapKey = GlobalKey<FlutterMapAdapterState>();
   bool _didAutoFocus = false;
+  Timer? _preselectSnackTimer;
+  // Throttle camera fit operations to avoid rapid repeated moves (only for bounds fitting).
+  final _fitThrottler = Throttler(const Duration(milliseconds: 300));
+  // Track last selected device to detect changes
+  int? _lastSelectedSingleDevice;
 
   // Bottom panel snaps
-  final List<double> _panelStops = [0.05, 0.30, 0.50, 0.80];
+  final List<double> _panelStops = const [0.05, 0.30, 0.50, 0.80];
   int _panelIndex = 1; // start at 30%
 
   @override
   void initState() {
     super.initState();
     _focusNode.addListener(() => setState(() {}));
+
+    // Eagerly initialize position providers to ensure WebSocket connects
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Initialize both providers (starts WebSocket + fetches from API)
+      ref
+        ..read(positionsLiveProvider)
+        ..read(positionsLastKnownProvider);
+    });
+
     if (widget.preselectedIds != null && widget.preselectedIds!.isNotEmpty) {
       _selectedIds.addAll(widget.preselectedIds!);
       // Snackbar reminder if not focused after delay
-      Future.delayed(const Duration(seconds: 6), () {
+      _preselectSnackTimer = Timer(const Duration(seconds: 6), () {
         if (!mounted) return;
         if (!_didAutoFocus && widget.preselectedIds!.isNotEmpty) {
           final ids = widget.preselectedIds!;
-            final sample = ids.take(5).join(', ');
+          final sample = ids.take(5).join(', ');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Devices not located yet: ' + sample + (ids.length > 5 ? ' +${ids.length - 5}' : '')),
-              action: SnackBarAction(label: 'Retry', onPressed: () => setState(() {})),
+              content: Text(
+                'Devices not located yet: $sample${ids.length > 5 ? ' +${ids.length - 5}' : ''}',
+              ),
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () => setState(() {}),
+              ),
             ),
           );
         }
@@ -68,6 +128,8 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   void dispose() {
+    _preselectSnackTimer?.cancel();
+    _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -83,22 +145,40 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   bool _valid(double? lat, double? lon) =>
-      lat != null && lon != null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+      lat != null &&
+      lon != null &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lon >= -180 &&
+      lon <= 180;
 
   void _onMarkerTap(String id) {
     final n = int.tryParse(id);
     if (n == null) return;
+
+    // Optimized: Get position data BEFORE setState to trigger immediate camera move
+    final position = ref.read(positionByDeviceProvider(n));
+    final hasValidPos = position != null &&
+        _valid(position.latitude, position.longitude);
+
     setState(() {
       if (_selectedIds.contains(n)) {
         _selectedIds.remove(n);
       } else {
         _selectedIds.add(n);
+        // Trigger immediate camera move if this is now the only selected device
+        if (_selectedIds.length == 1 && hasValidPos) {
+          // Move camera synchronously, no delays
+          _mapKey.currentState?.moveTo(
+            LatLng(position.latitude, position.longitude),
+          );
+        }
       }
     });
   }
 
   void _onMapTap() {
-    bool changed = false;
+    var changed = false;
     if (_selectedIds.isNotEmpty) {
       _selectedIds.clear();
       changed = true;
@@ -110,7 +190,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (changed) setState(() {});
   }
 
-  void _focusSelected() => setState(() {}); // triggers rebuild to adjust camera fit
+  void _focusSelected() =>
+      setState(() {}); // triggers rebuild to adjust camera fit
 
   String _deviceStatus(Map<String, dynamic>? device, Position? pos) {
     final raw = device?['status']?.toString().toLowerCase();
@@ -154,88 +235,189 @@ class _MapPageState extends ConsumerState<MapPage> {
   // ---------- Build ----------
   @override
   Widget build(BuildContext context) {
+    // Watch entire devices list only once; consider splitting into smaller providers later
     final devicesAsync = ref.watch(devicesNotifierProvider);
-    final positionsAsync = ref.watch(positionsLiveProvider);
+    // Only watch the latest positions map value from AsyncValue to avoid rebuilds on intermediate states
+    final positionsMap = ref.watch(
+      positionsLiveProvider.select((async) => async.asData?.value),
+    );
+    // Also watch last-known fallback to render markers when live map is empty
+    final lastKnownMap = ref.watch(
+      positionsLastKnownProvider.select((async) => async.asData?.value),
+    );
     return Scaffold(
       body: SafeArea(
         child: devicesAsync.when(
           data: (devices) {
-            final positions = positionsAsync.asData?.value ?? const <int, Position>{};
+      final positions = (positionsMap != null && positionsMap.isNotEmpty)
+        ? positionsMap
+        : (lastKnownMap ?? const <int, Position>{});
             final q = _query.trim().toLowerCase();
             final markers = <MapMarkerData>[];
+            final processedIds = <int>{};
 
-            // Build markers, preferring live positions
-            if (positions.isNotEmpty) {
-              for (final p in positions.values) {
-                Map<String, dynamic>? dev;
-                for (final d in devices) {
-                  if (d['id'] == p.deviceId) {
-                    dev = d;
-                    break;
-                  }
+            // Build markers - MERGE positions and device data
+            // 1. First add all devices with positions (live or last-known)
+            for (final p in positions.values) {
+              Map<String, dynamic>? dev;
+              dev = ref.read(deviceByIdProvider(p.deviceId));
+              final name = dev?['name']?.toString() ?? '';
+              if (q.isNotEmpty &&
+                  !name.toLowerCase().contains(q) &&
+                  !_selectedIds.contains(p.deviceId)) {
+                continue;
+              }
+              if (_valid(p.latitude, p.longitude)) {
+                markers.add(
+                  MapMarkerData(
+                    id: '${p.deviceId}',
+                    position: LatLng(p.latitude, p.longitude),
+                    isSelected: _selectedIds.contains(p.deviceId),
+                    meta: {
+                      'name': name,
+                      'speed': p.speed,
+                      'course': p.course,
+                    },
+                  ),
+                );
+                processedIds.add(p.deviceId);
+              }
+            }
+
+            // 2. Add devices from device list that don't have positions yet
+            //    This ensures selected devices are always visible if they have lat/lon
+            for (final d in devices) {
+              final deviceId = d['id'] as int?;
+              if (deviceId == null || processedIds.contains(deviceId)) {
+                continue; // Already added from positions
+              }
+
+              final name = d['name']?.toString() ?? '';
+              if (q.isNotEmpty &&
+                  !name.toLowerCase().contains(q) &&
+                  !_selectedIds.contains(deviceId)) {
+                continue;
+              }
+
+              final lat = _asDouble(d['latitude']);
+              final lon = _asDouble(d['longitude']);
+              if (_valid(lat, lon)) {
+                markers.add(
+                  MapMarkerData(
+                    id: '$deviceId',
+                    position: LatLng(lat!, lon!),
+                    isSelected: _selectedIds.contains(deviceId),
+                    meta: {'name': name},
+                  ),
+                );
+              }
+            }
+
+            // If exactly one device is selected, center to its position IMMEDIATELY
+            if (_selectedIds.length == 1) {
+              final sid = _selectedIds.first;
+
+              // Try to get position from provider (live or last-known)
+              final merged = ref.watch(positionByDeviceProvider(sid));
+              double? targetLat;
+              double? targetLon;
+
+              if (merged != null && _valid(merged.latitude, merged.longitude)) {
+                targetLat = merged.latitude;
+                targetLon = merged.longitude;
+              } else {
+                // Fallback to device's stored lat/lon if no position data
+                final device = ref.read(deviceByIdProvider(sid));
+                final lat = _asDouble(device?['latitude']);
+                final lon = _asDouble(device?['longitude']);
+                if (_valid(lat, lon)) {
+                  targetLat = lat;
+                  targetLon = lon;
                 }
-                final name = dev?['name']?.toString() ?? '';
-                if (q.isNotEmpty && !name.toLowerCase().contains(q) && !_selectedIds.contains(p.deviceId)) continue;
-                if (_valid(p.latitude, p.longitude)) {
-                  markers.add(
-                    MapMarkerData(
-                      id: '${p.deviceId}',
-                      position: LatLng(p.latitude, p.longitude),
-                      isSelected: _selectedIds.contains(p.deviceId),
-                      meta: {
-                        'name': name,
-                        'speed': p.speed,
-                        'course': p.course,
-                      },
-                    ),
-                  );
+              }
+
+              // Center camera if we have valid coordinates
+              if (targetLat != null && targetLon != null) {
+                final selectionChanged = _lastSelectedSingleDevice != sid;
+                if (selectionChanged) {
+                  _lastSelectedSingleDevice = sid;
+                  // Immediate move without throttling
+                  // This ensures <100ms response time
+                  final lat = targetLat;
+                  final lon = targetLon;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _mapKey.currentState?.moveTo(
+                      LatLng(lat, lon),
+                    );
+                  });
+                }
+              } else {
+                // Device has no location data - show a message
+                final selectionChanged = _lastSelectedSingleDevice != sid;
+                if (selectionChanged) {
+                  _lastSelectedSingleDevice = sid;
+                  // Show snackbar to inform user
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    final device = ref.read(deviceByIdProvider(sid));
+                    final deviceName = device?['name'] ?? 'Device $sid';
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '$deviceName has no location data yet',
+                        ),
+                        duration: const Duration(seconds: 3),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  });
                 }
               }
             } else {
-              for (final d in devices) {
-                final name = d['name']?.toString() ?? '';
-                if (q.isNotEmpty && !name.toLowerCase().contains(q) && !_selectedIds.contains(d['id'])) continue;
-                final lat = _asDouble(d['latitude']);
-                final lon = _asDouble(d['longitude']);
-                if (_valid(lat, lon)) {
-                  markers.add(
-                    MapMarkerData(
-                      id: '${d['id']}',
-                      position: LatLng(lat!, lon!),
-                      isSelected: _selectedIds.contains(d['id']),
-                      meta: {'name': name},
-                    ),
-                  );
-                }
-              }
+              _lastSelectedSingleDevice = null;
             }
 
             // Camera fit
             MapCameraFit fit;
             final selectedMarkers = _selectedIds.isEmpty
                 ? <MapMarkerData>[]
-                : markers.where((m) => _selectedIds.contains(int.tryParse(m.id) ?? -1)).toList();
-            final target = selectedMarkers.isNotEmpty ? selectedMarkers : markers;
+                : markers
+                      .where(
+                        (m) => _selectedIds.contains(int.tryParse(m.id) ?? -1),
+                      )
+                      .toList();
+            final target = selectedMarkers.isNotEmpty
+                ? selectedMarkers
+                : markers;
             if (target.isEmpty) {
               fit = const MapCameraFit(center: LatLng(0, 0));
             } else if (target.length == 1) {
               fit = MapCameraFit(center: target.first.position);
             } else {
-              fit = MapCameraFit(boundsPoints: [for (final m in target) m.position]);
+              fit = MapCameraFit(
+                boundsPoints: [for (final m in target) m.position],
+              );
             }
 
             // Deep link autofocus one-time
-            if (!_didAutoFocus && widget.preselectedIds != null && widget.preselectedIds!.isNotEmpty) {
-              final hasAny = markers.any((m) => widget.preselectedIds!.contains(int.tryParse(m.id) ?? -1));
+            if (!_didAutoFocus &&
+                widget.preselectedIds != null &&
+                widget.preselectedIds!.isNotEmpty) {
+              final hasAny = markers.any(
+                (m) =>
+                    widget.preselectedIds!.contains(int.tryParse(m.id) ?? -1),
+              );
               if (hasAny) {
                 _didAutoFocus = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (target.isEmpty) return;
-                  if (target.length == 1) {
-                    _mapKey.currentState?.moveTo(target.first.position);
-                  } else {
-                    setState(() {}); // trigger rebuild for bounds fit
-                  }
+                  _fitThrottler.run(() {
+                    if (target.length == 1) {
+                      _mapKey.currentState?.moveTo(target.first.position);
+                    } else {
+                      setState(() {}); // trigger rebuild for bounds fit
+                    }
+                  });
                 });
               }
             }
@@ -248,19 +430,27 @@ class _MapPageState extends ConsumerState<MapPage> {
                     ...devices.where((d) {
                       final n = d['name']?.toString().toLowerCase() ?? '';
                       return _query.isEmpty || n.contains(q);
-                    })
+                    }),
                   ]
                 : const <Map<String, dynamic>>[];
 
             return Stack(
               children: [
-                FlutterMapAdapter(
-                  key: _mapKey,
-                  markers: markers,
-                  cameraFit: fit,
-                  onMarkerTap: _onMarkerTap,
-                  onMapTap: _onMapTap,
+                RepaintBoundary(
+                  child: FlutterMapAdapter(
+                    key: _mapKey,
+                    markers: markers,
+                    cameraFit: fit,
+                    onMarkerTap: _onMarkerTap,
+                    onMapTap: _onMapTap,
+                  ),
                 ),
+                if (MapDebugFlags.showRebuildOverlay)
+                  const Positioned(
+                    top: 56,
+                    left: 16,
+                    child: _RebuildBadge(label: 'MapPage'),
+                  ),
                 // Search + suggestions
                 Positioned(
                   top: 12,
@@ -274,10 +464,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                         focusNode: _focusNode,
                         editing: _editing,
                         suggestionsVisible: _showSuggestions,
-                        onChanged: (v) => setState(() => _query = v),
+                        onChanged: (v) => _searchDebouncer.run(
+                          () => setState(() => _query = v),
+                        ),
                         onClear: () {
                           _searchCtrl.clear();
-                          setState(() => _query = '');
+                          _searchDebouncer.run(() => setState(() => _query = ''));
                         },
                         onRequestEdit: () {
                           setState(() {
@@ -304,105 +496,128 @@ class _MapPageState extends ConsumerState<MapPage> {
                             FocusScope.of(context).requestFocus(_focusNode);
                           }
                         },
-                        onToggleSuggestions: () => setState(() => _showSuggestions = !_showSuggestions),
-                      ),
-                      if (suggestions.isNotEmpty) const SizedBox(height: 5),
-                      if (suggestions.isNotEmpty)
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: const BorderRadius.vertical(
-                              bottom: Radius.circular(22),
-                            ),
-                            border: Border.all(color: Colors.black12, width: 1),
-                          ),
-                          constraints: const BoxConstraints(maxHeight: 260),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: suggestions.length,
-                            itemBuilder: (ctx, i) {
-                              final d = suggestions[i];
-                              if (d['__all__'] == true) {
-                                final total = devices.length;
-                                final allSelected = _selectedIds.length == total && total > 0;
-                                final someSelected = _selectedIds.isNotEmpty && !allSelected;
-                                return CheckboxListTile(
-                                  dense: true,
-                                  tristate: true,
-                                  controlAffinity: ListTileControlAffinity.leading,
-                                  title: Text('All devices ($total)'),
-                                  value: allSelected
-                                      ? true
-                                      : (someSelected ? null : false),
-                                  onChanged: (_) {
-                                    setState(() {
-                                      if (allSelected) {
-                                        _selectedIds.clear();
-                                      } else {
-                                        _selectedIds
-                                          ..clear()
-                                          ..addAll(
-                                            devices
-                                                .map((e) => e['id'])
-                                                .whereType<int>(),
-                                          );
-                                      }
-                                    });
-                                  },
-                                );
-                              }
-                              final name = d['name']?.toString() ?? 'Device';
-                              final idRaw = d['id'];
-                              final id = (idRaw is int)
-                                  ? idRaw
-                                  : int.tryParse(idRaw?.toString() ?? '');
-                              final pos = id == null ? null : positions[id];
-                              final lat = pos?.latitude ?? _asDouble(d['latitude']);
-                              final lon = pos?.longitude ?? _asDouble(d['longitude']);
-                              final hasCoords = _valid(lat, lon);
-                              final selected = id != null && _selectedIds.contains(id);
-                              DateTime? last;
-                              final devLast = d['lastUpdateDt'];
-                              if (devLast is DateTime) last = devLast.toLocal();
-                              final posTime = pos?.deviceTime.toLocal();
-                              if (posTime != null && (last == null || posTime.isAfter(last))) {
-                                last = posTime;
-                              }
-                              final subtitle = last == null
-                                  ? 'No update yet'
-                                  : 'Updated ${_formatRelativeAge(last)}';
-                              return CheckboxListTile(
-                                dense: true,
-                                controlAffinity: ListTileControlAffinity.leading,
-                                value: selected,
-                                title: Text(
-                                  name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Text(subtitle),
-                                onChanged: id == null
-                                    ? null
-                                    : (val) {
-                                        setState(() {
-                                          if (val == true) {
-                                            _selectedIds.add(id);
-                                          } else {
-                                            _selectedIds.remove(id);
-                                          }
-                                        });
-                                        if (hasCoords && val == true) {
-                                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                                            _mapKey.currentState?.moveTo(
-                                              LatLng(lat!, lon!),
-                                            );
-                                          });
-                                        }
-                                      },
-                              );
-                            },
-                          ),
+                        onToggleSuggestions: () => setState(
+                          () => _showSuggestions = !_showSuggestions,
                         ),
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: suggestions.isNotEmpty
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const SizedBox(height: 5),
+                                  RepaintBoundary(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                          bottom: Radius.circular(22),
+                                        ),
+                                        border:
+                                            Border.all(color: Colors.black12),
+                                      ),
+                                      constraints: const BoxConstraints(
+                                        maxHeight: 260,
+                                      ),
+                                      child: ListView.builder(
+                                        shrinkWrap: true,
+                                        itemCount: suggestions.length,
+                                        itemBuilder: (ctx, i) {
+                                          final d = suggestions[i];
+                                          if (d['__all__'] == true) {
+                                            final total = devices.length;
+                                            final allSelected = _selectedIds.length == total && total > 0;
+                                            final someSelected = _selectedIds.isNotEmpty && !allSelected;
+                                            return CheckboxListTile(
+                                              key: const ValueKey('__all__'),
+                                              dense: true,
+                                              tristate: true,
+                                              controlAffinity:
+                                                  ListTileControlAffinity
+                                                      .leading,
+                                              title: Text('All devices ($total)'),
+                                              value: allSelected
+                                                  ? true
+                                                  : (someSelected ? null : false),
+                                              onChanged: (_) {
+                                                setState(() {
+                                                  if (allSelected) {
+                                                    _selectedIds.clear();
+                                                  } else {
+                                                    _selectedIds
+                                                      ..clear()
+                                                      ..addAll(
+                                                        devices
+                                                            .map((e) => e['id'])
+                                                            .whereType<int>(),
+                                                      );
+                                                  }
+                                                });
+                                              },
+                                            );
+                                          }
+                      final name = d['name']?.toString() ?? 'Device';
+                                          final idRaw = d['id'];
+                                          final id = (idRaw is int)
+                                              ? idRaw
+                                              : int.tryParse(idRaw?.toString() ?? '');
+                                          final pos = id == null ? null : positions[id];
+                                          final lat = pos?.latitude ?? _asDouble(d['latitude']);
+                                          final lon = pos?.longitude ?? _asDouble(d['longitude']);
+                                          final hasCoords = _valid(lat, lon);
+                                          final selected = id != null && _selectedIds.contains(id);
+                                          DateTime? last;
+                                          final devLast = d['lastUpdateDt'];
+                                          if (devLast is DateTime) last = devLast.toLocal();
+                                          final posTime = pos?.deviceTime.toLocal();
+                                          if (posTime != null && (last == null || posTime.isAfter(last))) {
+                                            last = posTime;
+                                          }
+                                          final subtitle = last == null
+                                              ? 'No update yet'
+                                              : 'Updated ${_formatRelativeAge(last)}';
+                                          return CheckboxListTile(
+                                            key: ValueKey('sugg_${id ?? name}'),
+                                            dense: true,
+                                            controlAffinity:
+                                                ListTileControlAffinity.leading,
+                                            value: selected,
+                                            title: Text(
+                                              name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            subtitle: Text(subtitle),
+                                            onChanged: id == null
+                                                ? null
+                                                : (val) {
+                                                    setState(() {
+                                                      if (val ?? false) {
+                                                        _selectedIds.add(id);
+                                                      } else {
+                                                        _selectedIds.remove(id);
+                                                      }
+                                                    });
+                                                    // Immediately center on selected device
+                                                    if (hasCoords && (val ?? false)) {
+                                                      // Direct synchronous update for instant response
+                                                      _mapKey.currentState?.moveTo(
+                                                        LatLng(lat!, lon!),
+                                                      );
+                                                    }
+                                                  },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
                     ],
                   ),
                 ),
@@ -412,13 +627,21 @@ class _MapPageState extends ConsumerState<MapPage> {
                   right: 16,
                   child: Column(
                     children: [
+                      // Connection status indicator
+                      _ConnectionStatusBadge(
+                        connectionStatus: ref.watch(traccarConnectionStatusProvider),
+                        positionsCount: positions.length,
+                      ),
+                      const SizedBox(height: 10),
                       _ActionButton(
                         icon: Icons.refresh,
                         tooltip: 'Refresh data',
                         onTap: () async {
                           // 1) Refresh static data from Traccar (devices list)
                           try {
-                            await ref.read(devicesNotifierProvider.notifier).refresh();
+                            await ref
+                                .read(devicesNotifierProvider.notifier)
+                                .refresh();
                           } catch (_) {
                             // ignore device refresh errors here; UI will show via provider state
                           }
@@ -450,24 +673,40 @@ class _MapPageState extends ConsumerState<MapPage> {
                         : LayoutBuilder(
                             key: ValueKey(_selectedIds.hashCode ^ _panelIndex),
                             builder: (ctx, _) {
-                              final screenH = MediaQuery.of(context).size.height;
-                              final height = (screenH * _panelStops[_panelIndex])
-                                  .clamp(90.0, screenH * 0.9);
+                              final screenH = MediaQuery.of(
+                                context,
+                              ).size.height;
+                              final height =
+                                  (screenH * _panelStops[_panelIndex]).clamp(
+                                    90.0,
+                                    screenH * 0.9,
+                                  );
                               return GestureDetector(
                                 onVerticalDragEnd: (details) {
                                   final v = details.primaryVelocity ?? 0;
                                   if (v > 250) {
-                                    setState(() => _panelIndex = (_panelIndex - 1).clamp(0, _panelStops.length - 1));
+                                    setState(
+                                      () => _panelIndex = (_panelIndex - 1)
+                                          .clamp(0, _panelStops.length - 1),
+                                    );
                                   } else if (v < -250) {
-                                    setState(() => _panelIndex = (_panelIndex + 1).clamp(0, _panelStops.length - 1));
+                                    setState(
+                                      () => _panelIndex = (_panelIndex + 1)
+                                          .clamp(0, _panelStops.length - 1),
+                                    );
                                   }
                                 },
                                 child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 180),
+                                  duration: const Duration(milliseconds: 200),
                                   curve: Curves.easeOut,
                                   height: height,
                                   width: double.infinity,
-                                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    10,
+                                    16,
+                                    16,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: const BorderRadius.vertical(
@@ -481,16 +720,24 @@ class _MapPageState extends ConsumerState<MapPage> {
                                   child: Column(
                                     children: [
                                       InkWell(
-                                        onTap: () => setState(() => _panelIndex = (_panelIndex + 1) % _panelStops.length),
+                                        onTap: () => setState(
+                                          () => _panelIndex =
+                                              (_panelIndex + 1) %
+                                              _panelStops.length,
+                                        ),
                                         borderRadius: BorderRadius.circular(40),
                                         child: Padding(
-                                          padding: const EdgeInsets.only(top: 4, bottom: 8),
+                                          padding: const EdgeInsets.only(
+                                            top: 4,
+                                            bottom: 8,
+                                          ),
                                           child: Container(
                                             width: 56,
                                             height: 6,
                                             decoration: BoxDecoration(
                                               color: Colors.grey[400],
-                                              borderRadius: BorderRadius.circular(40),
+                                              borderRadius:
+                                                  BorderRadius.circular(40),
                                             ),
                                           ),
                                         ),
@@ -499,37 +746,76 @@ class _MapPageState extends ConsumerState<MapPage> {
                                         child: ClipRect(
                                           child: SingleChildScrollView(
                                             padding: EdgeInsets.zero,
-                                            physics: const BouncingScrollPhysics(),
-                                            child: _selectedIds.length == 1
-                                                ? _InfoBox(
-                                                    key: const ValueKey('single-info'),
-                                                    deviceId: _selectedIds.first,
+                                            physics:
+                                                const BouncingScrollPhysics(),
+                                            child: RepaintBoundary(
+                                              child: AnimatedSwitcher(
+                                                duration: const Duration(milliseconds: 220),
+                                                switchInCurve: Curves.easeInOut,
+                                                switchOutCurve: Curves.easeInOut,
+                                                transitionBuilder: (child, animation) {
+                                                  final slide = Tween<Offset>(
+                                                    begin: const Offset(0, 0.02),
+                                                    end: Offset.zero,
+                                                  ).animate(animation);
+                                                  return FadeTransition(
+                                                    opacity: animation,
+                                                    child: SlideTransition(position: slide, child: child),
+                                                  );
+                                                },
+                                                child: _selectedIds.length == 1
+                                                  ? _InfoBox(
+                                                    key: const ValueKey(
+                                                      'single-info',
+                                                    ),
+                                                    deviceId:
+                                                        _selectedIds.first,
                                                     devices: devices,
-                                                    position: positions[_selectedIds.first],
-                                                    statusResolver: _deviceStatus,
-                                                    statusColorBuilder: _statusColor,
-                                                    onClose: () => setState(() => _selectedIds.clear()),
+                                                    position: ref.watch(
+                                                      positionByDeviceProvider(
+                                                        _selectedIds.first,
+                                                      ),
+                                                    ),
+                                                    statusResolver:
+                                                        _deviceStatus,
+                                                    statusColorBuilder:
+                                                        _statusColor,
+                                                    onClose: () => setState(
+                                                      _selectedIds.clear,
+                                                    ),
                                                     onFocus: _focusSelected,
                                                   )
-                                                : _MultiSelectionInfoBox(
-                                                    key: const ValueKey('multi-info'),
+                                                  : _MultiSelectionInfoBox(
+                                                    key: const ValueKey(
+                                                      'multi-info',
+                                                    ),
                                                     selectedIds: _selectedIds,
                                                     devices: devices,
                                                     positions: positions,
-                                                    statusResolver: _deviceStatus,
-                                                    statusColorBuilder: _statusColor,
-                                                    onClear: () => setState(() => _selectedIds.clear()),
+                                                    statusResolver:
+                                                        _deviceStatus,
+                                                    statusColorBuilder:
+                                                        _statusColor,
+                                                    onClear: () => setState(
+                                                      _selectedIds.clear,
+                                                    ),
                                                     onFocus: _focusSelected,
                                                   ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
                                       if (_panelIndex == 0)
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 6),
+                                          padding: const EdgeInsets.only(
+                                            top: 6,
+                                          ),
                                           child: Text(
                                             'Tap or swipe up for more',
-                                            style: Theme.of(context).textTheme.labelSmall,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.labelSmall,
                                           ),
                                         ),
                                     ],
@@ -676,7 +962,7 @@ class _ActionButton extends StatelessWidget {
   final bool disabled;
   @override
   Widget build(BuildContext context) {
-    final bg = disabled ? Colors.white.withOpacity(.6) : Colors.white;
+  final bg = disabled ? Colors.white.withValues(alpha: 0.6) : Colors.white;
     final fg = disabled ? Colors.black26 : Colors.black87;
     return Material(
       color: bg,
@@ -688,7 +974,7 @@ class _ActionButton extends StatelessWidget {
         child: Tooltip(
           message: tooltip,
           child: Padding(
-            padding: const EdgeInsets.all(10.0),
+            padding: const EdgeInsets.all(10),
             child: Icon(icon, size: 22, color: fg),
           ),
         ),
@@ -699,17 +985,17 @@ class _ActionButton extends StatelessWidget {
 
 class _InfoBox extends StatelessWidget {
   const _InfoBox({
-    super.key,
     required this.deviceId,
     required this.devices,
     required this.position,
     required this.statusResolver,
     required this.statusColorBuilder,
     required this.onClose,
+    super.key,
     this.onFocus,
   });
   final int deviceId;
-  final List devices;
+  final List<Map<String, dynamic>> devices;
   final Position? position;
   final String Function(Map<String, dynamic>?, Position?) statusResolver;
   final Color Function(String) statusColorBuilder;
@@ -717,7 +1003,11 @@ class _InfoBox extends StatelessWidget {
   final VoidCallback? onFocus;
   @override
   Widget build(BuildContext context) {
-    String _relativeAge(DateTime? dt) {
+    assert(
+      debugCheckHasDirectionality(context),
+      '_InfoBox requires Directionality above in the tree',
+    );
+    String relativeAge(DateTime? dt) {
       if (dt == null) return 'n/a';
       final diff = DateTime.now().difference(dt);
       if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
@@ -727,22 +1017,29 @@ class _InfoBox extends StatelessWidget {
       if (d < 7) return '${d}d ago';
       return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
     }
-    String name = 'Device $deviceId';
+
+    var name = 'Device $deviceId';
     for (final d in devices) {
-      if (d is Map && d['id'] == deviceId) {
+      if (d['id'] == deviceId) {
         name = d['name']?.toString() ?? name;
         break;
       }
     }
-    final deviceMap = devices
-        .whereType<Map<String, dynamic>>()
-        .firstWhere((d) => d['id'] == deviceId, orElse: () => {});
+    var deviceMap = const <String, dynamic>{};
+    for (final d in devices) {
+      if (d['id'] == deviceId) {
+        deviceMap = d;
+        break;
+      }
+    }
     final status = statusResolver(deviceMap, position);
     final statusColor = statusColorBuilder(status);
     final engineAttr = position?.attributes['ignition'];
     final engine = engineAttr is bool ? (engineAttr ? 'on' : 'off') : '_';
     final speed = position?.speed.toStringAsFixed(0) ?? '--';
-    final distanceAttr = position?.attributes['distance'] ?? position?.attributes['totalDistance'];
+    final distanceAttr =
+        position?.attributes['distance'] ??
+        position?.attributes['totalDistance'];
     String distance;
     if (distanceAttr is num) {
       final km = distanceAttr / 1000;
@@ -750,17 +1047,32 @@ class _InfoBox extends StatelessWidget {
     } else {
       distance = '--';
     }
-  final lastLocation = position?.address ??
-    (position != null
-      ? '${position!.latitude.toStringAsFixed(5)}, ${position!.longitude.toStringAsFixed(5)}'
-      : '--');
+    // Try to get coordinates from position, then fallback to device data
+    final String lastLocation;
+    final pos = position;
+    if (pos != null) {
+      final posAddress = pos.address;
+      if (posAddress != null && posAddress.isNotEmpty) {
+        lastLocation = posAddress;
+      } else {
+        lastLocation = '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
+      }
+    } else {
+      // Fallback to device's stored lat/lon if no position
+      final devLat = deviceMap['latitude'];
+      final devLon = deviceMap['longitude'];
+      if (devLat != null && devLon != null) {
+        lastLocation = '$devLat, $devLon (stored)';
+      } else {
+        lastLocation = 'No location data available';
+      }
+    }
     final deviceTime = position?.deviceTime.toLocal();
-  final DateTime? lastUpdateDt = (deviceMap['lastUpdateDt'] is DateTime)
-    ? (deviceMap['lastUpdateDt'] as DateTime).toLocal()
-    : deviceTime;
-  final lastAge = _relativeAge(lastUpdateDt);
+    final lastUpdateDt = (deviceMap['lastUpdateDt'] is DateTime)
+        ? (deviceMap['lastUpdateDt'] as DateTime).toLocal()
+        : deviceTime;
+    final lastAge = relativeAge(lastUpdateDt);
     return Material(
-      elevation: 0,
       borderRadius: BorderRadius.circular(16),
       color: Colors.white,
       child: Container(
@@ -779,18 +1091,18 @@ class _InfoBox extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(color: statusColor, fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Engine & Movement',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: .3),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .3,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   _InfoLine(
@@ -812,16 +1124,19 @@ class _InfoBox extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     'Last Location',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: .3),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .3,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   _InfoLine(
                     icon: Icons.place_outlined,
                     label: 'Coordinates',
                     value: lastLocation,
+                    valueColor: lastLocation == 'No location data available'
+                        ? Colors.orange
+                        : null,
                   ),
                   _InfoLine(
                     icon: Icons.update,
@@ -840,17 +1155,17 @@ class _InfoBox extends StatelessWidget {
 
 class _MultiSelectionInfoBox extends StatelessWidget {
   const _MultiSelectionInfoBox({
-    super.key,
     required this.selectedIds,
     required this.devices,
     required this.positions,
     required this.statusResolver,
     required this.statusColorBuilder,
     required this.onClear,
+    super.key,
     this.onFocus,
   });
   final Set<int> selectedIds;
-  final List devices;
+  final List<Map<String, dynamic>> devices;
   final Map<int, Position> positions;
   final String Function(Map<String, dynamic>?, Position?) statusResolver;
   final Color Function(String) statusColorBuilder;
@@ -858,20 +1173,24 @@ class _MultiSelectionInfoBox extends StatelessWidget {
   final VoidCallback? onFocus;
   @override
   Widget build(BuildContext context) {
+    assert(
+      debugCheckHasDirectionality(context),
+      '_MultiSelectionInfoBox requires Directionality above in the tree',
+    );
     final selectedDevices = devices
         .whereType<Map<String, dynamic>>()
         .where((d) => selectedIds.contains(d['id']))
         .toList();
-    int online = 0, offline = 0, unknown = 0;
+    var online = 0;
+    var offline = 0;
+    var unknown = 0;
     for (final d in selectedDevices) {
       final s = statusResolver(d, positions[d['id']]);
       switch (s) {
         case 'online':
           online++;
-          break;
         case 'offline':
           offline++;
-          break;
         default:
           unknown++;
       }
@@ -879,7 +1198,6 @@ class _MultiSelectionInfoBox extends StatelessWidget {
     final total = selectedDevices.length;
     final onlinePct = total == 0 ? 0 : (online / total * 100).round();
     return Material(
-      elevation: 0,
       borderRadius: BorderRadius.circular(16),
       color: Colors.white,
       child: Container(
@@ -896,10 +1214,9 @@ class _MultiSelectionInfoBox extends StatelessWidget {
               children: [
                 Text(
                   '$total devices selected',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -923,8 +1240,10 @@ class _MultiSelectionInfoBox extends StatelessWidget {
                   count: unknown,
                   color: statusColorBuilder('unknown'),
                 ),
-                Text('Online: $onlinePct%',
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  'Online: $onlinePct%',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -969,8 +1288,10 @@ class _InfoLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context).textTheme.bodySmall;
-    final styleLabel =
-        base?.copyWith(fontWeight: FontWeight.w500, color: Colors.grey[800]);
+    final styleLabel = base?.copyWith(
+      fontWeight: FontWeight.w500,
+      color: Colors.grey[800],
+    );
     final styleValue = base?.copyWith(
       fontWeight: FontWeight.w700,
       color: valueColor ?? Colors.black87,
@@ -1012,18 +1333,77 @@ class _StatusStat extends StatelessWidget {
   final Color color;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withOpacity(.12),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          '$label: $count',
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: color, fontWeight: FontWeight.w600),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      '$label: $count',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: color,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
 }
 
+class _ConnectionStatusBadge extends StatelessWidget {
+  const _ConnectionStatusBadge({
+    required this.connectionStatus,
+    required this.positionsCount,
+  });
+  final ConnectionStatus connectionStatus;
+  final int positionsCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color;
+    final IconData icon;
+    final String tooltip;
+
+    switch (connectionStatus) {
+      case ConnectionStatus.connected:
+        color = const Color(0xFFA6CD27); // Green
+        icon = Icons.wifi;
+        tooltip = 'Connected • $positionsCount positions';
+      case ConnectionStatus.connecting:
+        color = Colors.orange;
+        icon = Icons.wifi_find;
+        tooltip = 'Connecting...';
+      case ConnectionStatus.retrying:
+        color = Colors.orange;
+        icon = Icons.wifi_off;
+        tooltip = 'Reconnecting...';
+    }
+
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      elevation: 4,
+      child: Tooltip(
+        message: tooltip,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              if (positionsCount > 0 && connectionStatus == ConnectionStatus.connected) ...[
+                const SizedBox(width: 4),
+                Text(
+                  '$positionsCount',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

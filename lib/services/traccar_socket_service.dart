@@ -4,14 +4,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
-import 'ws_connect_stub.dart'
-  if (dart.library.io) 'ws_connect_io.dart'
-  if (dart.library.html) 'ws_connect_web.dart';
+import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/services/auth_service.dart';
+import 'package:my_app_gps/services/ws_connect_stub.dart'
+    if (dart.library.io) 'package:my_app_gps/services/ws_connect_io.dart'
+    if (dart.library.html) 'package:my_app_gps/services/ws_connect_web.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
-
-import 'auth_service.dart';
-import '../features/map/data/position_model.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Provides a singleton TraccarSocketService.
 final traccarSocketServiceProvider = Provider<TraccarSocketService>((ref) {
@@ -34,29 +33,80 @@ class TraccarSocketService {
 
   Stream<TraccarSocketMessage> connect() {
     _manuallyClosed = false;
-    _controller ??= StreamController<TraccarSocketMessage>.broadcast(onListen: _ensureConnected);
+    _controller ??= StreamController<TraccarSocketMessage>.broadcast(
+      onListen: _ensureConnected,
+    );
     _ensureConnected();
     return _controller!.stream;
   }
 
-  void _ensureConnected() async {
+  Future<void> _ensureConnected() async {
     if (_channel != null) return;
     final cookie = await auth.getStoredJSessionId();
     final wsUrl = _toWsUrl(baseUrl);
     final uri = Uri.parse(wsUrl);
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('[SOCKET] ═══════════════════════════════════════');
+      print('[SOCKET] Attempting WebSocket connection...');
+      print('[SOCKET] URL: $wsUrl');
+      print('[SOCKET] Host: ${uri.host}');
+      print('[SOCKET] Port: ${uri.port}');
+      print('[SOCKET] Scheme: ${uri.scheme}');
+      print('[SOCKET] Cookie: ${cookie != null ? 'present (${cookie.substring(0, 10)}...)' : 'MISSING'}');
+      print('[SOCKET] ═══════════════════════════════════════');
+    }
     try {
       final headers = <String, dynamic>{};
       if (cookie != null) headers['Cookie'] = 'JSESSIONID=$cookie';
+
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[SOCKET] Creating WebSocket channel...');
+      }
+
       _channel = connectWebSocket(uri, headers);
       _reconnectAttempts = 0;
+
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[SOCKET] ✅ WebSocket channel created');
+        print('[SOCKET] Waiting for connection confirmation...');
+      }
+
       _controller?.add(TraccarSocketMessage.connected());
+
       _channel!.stream.listen(
-        (data) => _onData(data),
-        onError: (e, st) => _onError(e),
-        onDone: _onDone,
+        _onData,
+        onError: (Object e, StackTrace st) {
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('[SOCKET] ❌ Stream error: $e');
+            print('[SOCKET] StackTrace: $st');
+          }
+          _onError(e);
+        },
+        onDone: () {
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('[SOCKET] ⚠️ Stream closed (onDone)');
+          }
+          _onDone();
+        },
         cancelOnError: true,
       );
-    } catch (e) {
+
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[SOCKET] ✅ WebSocket stream listener attached');
+      }
+    } catch (e, st) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[SOCKET] ❌ Connection exception: $e');
+        print('[SOCKET] Exception type: ${e.runtimeType}');
+        print('[SOCKET] StackTrace: $st');
+      }
       _scheduleReconnect('connect-failed: $e');
     }
   }
@@ -68,23 +118,39 @@ class TraccarSocketService {
       if (jsonObj is Map<String, dynamic>) {
         // positions
         if (jsonObj.containsKey('positions')) {
-          final list = (jsonObj['positions'] as List?)?.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() ?? const [];
-          final positions = [for (final m in list) Position.fromJson(m)];
+          final list =
+              (jsonObj['positions'] as List<dynamic>?)
+                  ?.whereType<Map<String, dynamic>>()
+                  .toList() ??
+              const <Map<String, dynamic>>[];
+          final positions = list.map(Position.fromJson).toList();
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('[SOCKET] 📍 Received ${positions.length} positions from WebSocket');
+          }
           _controller?.add(TraccarSocketMessage.positions(positions));
         }
         // events (opaque here)
         if (jsonObj.containsKey('events')) {
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('[SOCKET] 🔔 Received events from WebSocket');
+          }
           _controller?.add(TraccarSocketMessage.events(jsonObj['events']));
         }
         // devices updates (optional)
         if (jsonObj.containsKey('devices')) {
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('[SOCKET] 📱 Received device updates from WebSocket');
+          }
           _controller?.add(TraccarSocketMessage.devices(jsonObj['devices']));
         }
       }
     } catch (e) {
       if (kDebugMode) {
         // ignore: avoid_print
-        print('[traccar-socket] parse error: $e');
+        print('[SOCKET] ❌ Parse error: $e');
       }
     }
   }
@@ -110,7 +176,9 @@ class TraccarSocketService {
     _reconnectAttempts = nextAttempt;
     if (kDebugMode) {
       // ignore: avoid_print
-      print('[SOCKET][RETRY] attempt #$nextAttempt in ${baseSeconds}s (reason=$reason)');
+      print(
+        '[SOCKET][RETRY] attempt #$nextAttempt in ${baseSeconds}s (reason=$reason)',
+      );
     }
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(Duration(seconds: baseSeconds), _ensureConnected);
@@ -132,7 +200,12 @@ class TraccarSocketService {
     // http(s)://host[:port]/... -> ws(s)://host[:port]/api/socket
     final u = Uri.parse(base);
     final scheme = u.scheme == 'https' ? 'wss' : 'ws';
-    return Uri(scheme: scheme, host: u.host, port: u.hasPort ? u.port : null, path: '/api/socket').toString();
+    return Uri(
+      scheme: scheme,
+      host: u.host,
+      port: u.hasPort ? u.port : null,
+      path: '/api/socket',
+    ).toString();
   }
 }
 
@@ -142,9 +215,14 @@ class TraccarSocketMessage {
   final List<Position>? positions;
   final dynamic payload;
   const TraccarSocketMessage._(this.type, {this.positions, this.payload});
-  factory TraccarSocketMessage.connected() => const TraccarSocketMessage._('connected');
-  factory TraccarSocketMessage.positions(List<Position> p) => TraccarSocketMessage._('positions', positions: p);
-  factory TraccarSocketMessage.events(dynamic events) => TraccarSocketMessage._('events', payload: events);
-  factory TraccarSocketMessage.devices(dynamic devices) => TraccarSocketMessage._('devices', payload: devices);
-  factory TraccarSocketMessage.error(String error) => TraccarSocketMessage._('error', payload: error);
+  factory TraccarSocketMessage.connected() =>
+      const TraccarSocketMessage._('connected');
+  factory TraccarSocketMessage.positions(List<Position> p) =>
+      TraccarSocketMessage._('positions', positions: p);
+  factory TraccarSocketMessage.events(dynamic events) =>
+      TraccarSocketMessage._('events', payload: events);
+  factory TraccarSocketMessage.devices(dynamic devices) =>
+      TraccarSocketMessage._('devices', payload: devices);
+  factory TraccarSocketMessage.error(String error) =>
+      TraccarSocketMessage._('error', payload: error);
 }

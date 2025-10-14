@@ -1,191 +1,133 @@
-# 🧠 Flutter App Optimization Micro Tasks
-
-This document breaks down the optimization plan into small, actionable tasks suitable for tracking in GitHub Projects, ClickUp, or AI agents.
+# 🧭 Project Optimization Roadmap
+*A detailed task list with goals and explanations for each optimization.*
 
 ---
 
-## 🚀 Top Quick Wins
+## 🚀 Networking & Live Updates
 
-### ✅ Networking & Live Updates
-- [x] Replace REST polling with WebSocket for live Traccar events.
-- [x] Implement exponential backoff + jitter on reconnect.
-- [x] Add HTTP caching (ETag / If-Modified-Since) for static endpoints.
-- [ ] Tune Dio timeouts: connect = 2s, receive = 10s.
-- [ ] Enable gzip compression (`Accept-Encoding: gzip`).
+- [x] Replace REST polling with WebSocket for live Traccar events — **Goal:** Real-time updates instead of periodic refreshes.
+- [x] Implement exponential backoff + jitter on reconnect — **Goal:** Prevent reconnect overloads under poor networks.
+- [x] Add HTTP caching (ETag / If-Modified-Since) — **Goal:** Reduce redundant network requests for static endpoints.
+- [x] Tune Dio timeouts (connect = 2s, receive = 10s) — **Goal:** Fail fast and maintain responsive UX.
+- [ ] Enable gzip compression (`Accept-Encoding: gzip`) — **Goal:** Reduce payload size and improve data efficiency.
+- [x] Surface connection status provider and guard UI updates — **Goal:** Avoid UI flicker when offline.
 
-### ✅ Map Caching & Assets
-- [ ] Cache map tiles using `flutter_map_tile_caching` or `cached_network_image`.
-- [ ] Reuse prebuilt marker icons (avoid repeated decode of `Image.asset`).
-- [ ] Add vector icons (SVG or IconData) for device statuses.
-- [ ] Limit image cache size (PaintingBinding.instance.imageCache.maximumSizeBytes).
-- [ ] Precache images on startup for commonly used markers.
+---
 
-### ✅ UI Rebuilds
-- [ ] Use `Riverpod.select()` to limit widget rebuilds.
-- [ ] Split device provider and position provider.
-- [ ] Use `ProviderScope.keepAlive` with cacheTime on heavy providers.
-- [ ] Replace unnecessary rebuilds with `AnimatedSize` or `AnimatedSwitcher`.
+## 🗺️ FMTC Init & Map Tile Reliability
+
+- [x] Initialize FMTC before runApp — **Goal:** Prevent FMTC root unavailability errors.
+- [x] Create tile store `main` on startup — **Goal:** Ensure persistent caching for map tiles.
+- [x] Use HTTPS OSM tiles and proper user agent — **Goal:** Maintain security and API compliance.
+- [x] Fallback to `NetworkTileProvider` when FMTC fails — **Goal:** Guarantee map always renders.
+- [x] Add Cache Debug Page — **Goal:** Allow clearing caches for debugging and offline testing.
+
+---
+
+## 🗺️ Map Caching & Assets
+
+- [x] Cache map tiles using `flutter_map_tile_caching` — **Goal:** Offline-ready map experience.
+ - [x] Reuse prebuilt marker icons — **Goal:** Reduce redundant asset decoding for performance.
+ - [x] Add vector icons for device statuses — **Goal:** Use scalable icons for better visuals.
+ - [x] Limit image cache size — **Goal:** Prevent memory overuse on low-end devices.
+ - [x] Precache common marker images — **Goal:** Reduce frame stutter when scrolling map.
+
+---
+
+## 🎯 UI Rebuild Optimization
+
+- [x] Use `Riverpod.select()` — **Goal:** Minimize rebuilds by observing only changed fields.
+- [x] Split device and position providers — **Goal:** Isolate updates and reduce UI work.
+- [x] Smart cache via `ref.keepAlive()` — **Goal:** Persist data for smoother UX.
+ - [x] Replace heavy rebuilds with `AnimatedSize` or `AnimatedSwitcher` — **Goal:** Improve visual transitions.
 
 ---
 
 ## 🗺️ Map Performance
 
-### ✅ Markers
-- [ ] Switch to `FastMarkerLayer` or marker clustering for 100+ markers.
-- [ ] Precreate marker widgets with `const` constructors.
-- [ ] Wrap only info panel in `RepaintBoundary`.
-
-### ✅ Camera & Bounds
-- [ ] Throttle `fitToBounds` to max 1 call per 300ms.
-- [ ] Avoid redundant fit calls during marker selection.
-- [ ] Keep consistent padding constants for viewport fitting.
-
-### ✅ Tiles
-- [ ] Enable disk tile cache with expiry.
-- [ ] Preload surrounding tiles (radius: 1–2 zoom levels).
-- [ ] Limit `minZoom`/`maxZoom` to realistic levels for your map source.
-
-### ✅ Gestures
-- [ ] Debounce search input (200–300ms).
-- [ ] Precompute lowercase names for device search.
-- [ ] Prevent map panning from rebuilding the info panel.
+- [x] Isolate per-marker rebuilds using granular providers — **Goal:** Optimize rendering for many markers.
+- [x] Switch to FastMarkerLayer or clustering — **Goal:** Scale efficiently for large fleets.
+- [x] Optimize device selection camera centering (<100ms) — **Goal:** Immediate map response to user selection.
+- [x] Add enhanced marker visual feedback (scale, glow, color) — **Goal:** Clear visual indication of selected devices.
 
 ---
 
 ## 🧩 State Management (Riverpod)
 
-- [ ] Convert global providers to finer-grained ones (`deviceListProvider`, `positionsProvider`).
-- [ ] Use `AsyncValue.guard` for safe async handling.
-- [ ] Keep previous data during refresh (no flicker).
-- [ ] Mark frequently accessed providers as `keepAlive`.
-- [ ] Debounce frequent triggers (like search, pan, or zoom).
+- [ ] Convert global providers to finer-grained ones — **Goal:** Reduce coupling and rebuild scope.
+- [ ] Use `AsyncValue.guard` — **Goal:** Simplify async error handling.
+- [x] Keep previous data during refresh — **Goal:** Prevent flicker on updates.
+- [x] Mark key providers as `keepAlive` — **Goal:** Maintain stability across tab switches.
+- [x] Debounce search and zoom triggers — **Goal:** Prevent redundant computations.
 
 ---
 
 ## 🌐 Networking & Traccar Integration
 
-- [x] Move from polling `/api/positions` → WebSocket subscription.
-- [x] Add reconnect policy with capped exponential backoff.
-- [ ] Normalize timestamps to local once (avoid `.toLocal()` loops).
-- [ ] Compress payloads where supported.
-- [ ] Add versioned header: `X-Client-Version: x.y.z`.
+- [x] Move from polling `/api/positions` → WebSocket — **Goal:** Real-time data streaming.
+- [x] Add reconnect policy (backoff + jitter) — **Goal:** Smooth recovery from disconnects.
+- [x] Add forced local TTL cache — **Goal:** Resilient API fallback when offline.
+- [ ] Normalize timestamps to local — **Goal:** Prevent repeated conversions.
+- [ ] Compress payloads where supported — **Goal:** Improve API efficiency.
+- [ ] Add `X-Client-Version` header — **Goal:** Identify client versions in backend logs.
 
 ---
 
-## 🗃️ Database (Drift) & Caching
+## 🗃️ Database (Drift/ObjectBox)
 
-- [ ] Add index: `positions(deviceId, deviceTime DESC)`.
-- [ ] Add index: `trips(deviceId, startTime)`.
-- [ ] Enable WAL journal mode for faster concurrent writes.
-- [ ] Batch inserts for live streams (`batch()`).
-- [ ] Add TTL cleanup for old positions (e.g., keep last 7 days).
-- [ ] Add in-memory LRU cache for last position per device.
-
----
-
-## 🔍 Search & List Rendering
-
-- [ ] Implement search debounce (250ms).
-- [ ] Precompute and cache `searchKey = name.toLowerCase()`.
-- [ ] Use `ListView.builder` with fixed `itemExtent`.
-- [ ] Avoid unnecessary `RichText` if no highlights are needed.
-
----
-
-## 📊 Info Panel (Bottom Sheet)
-
-- [ ] Render content lazily based on snap height.
-- [ ] Replace full rebuilds with `AnimatedSize`.
-- [ ] Disable unnecessary shadows and gradients.
-- [ ] Use const constructors and static styles for repeated widgets.
-
----
-
-## 🧱 Widget Build Hygiene
-
-- [ ] Add `const` to all constructors possible.
-- [ ] Hoist shared `TextStyle` / `BoxDecoration` to static finals.
-- [ ] Assign `keys` to list items and animated children.
-- [ ] Coalesce rapid state updates via `postFrameCallback`.
-
----
-
-## 🖼️ Image & Asset Optimization
-
-- [ ] Convert static icons to SVGs or IconFonts.
-- [ ] Use precache for marker icons.
-- [ ] Set global image cache size limit.
-- [ ] Enable lazy loading where possible.
+- [ ] Add indexes for faster lookups — **Goal:** Optimize queries.
+- [ ] Enable WAL journal mode — **Goal:** Improve concurrency and write performance.
+- [ ] Batch inserts for live streams — **Goal:** Reduce DB I/O cost.
+- [ ] Add TTL cleanup for old positions — **Goal:** Keep DB size manageable.
 
 ---
 
 ## ⚙️ App Startup & Build Size
 
-- [ ] Defer heavy initializations until after first frame.
-- [ ] Enable R8 + resource shrinking.
-- [ ] Split Android build by ABI.
-- [ ] Remove unused fonts and locales.
-- [ ] Subset fonts to reduce asset size.
+- [ ] Defer heavy initializations — **Goal:** Improve app startup speed.
+- [ ] Enable R8 and resource shrinking — **Goal:** Minimize release APK size.
+- [ ] Split Android build by ABI — **Goal:** Reduce install size.
+- [ ] Remove unused fonts/locales — **Goal:** Optimize asset footprint.
 
 ---
 
 ## ⚠️ Error Handling & UX
 
-- [ ] Add unified offline banner (already partially present).
-- [ ] Differentiate between “no data” vs “offline”.
-- [ ] Cache last good fix for better user experience.
-- [ ] Throttle snackbars or toasts to avoid spam.
+- [x] Cache last good fix — **Goal:** Display position even when offline.
+- [ ] Add unified offline banner — **Goal:** Improve feedback during connectivity loss.
+- [ ] Throttle snackbars — **Goal:** Prevent UI spam during frequent errors.
 
 ---
 
 ## 🧪 CI, Profiling & Linting
 
-- [ ] Add `analysis_options.yaml` with strong lints (use `very_good_analysis`).
-- [ ] Set up GitHub Actions to run `dart analyze` and `flutter test`.
-- [ ] Profile frame time during live map panning.
-- [ ] Track memory over 5 min continuous updates.
-- [ ] Measure CPU usage spikes during bursts of position updates.
+- [x] Add strong analysis options — **Goal:** Maintain high code quality.
+- [x] Centralize test configuration — **Goal:** Improve test stability.
+- [ ] Set up GitHub Actions CI — **Goal:** Automate tests and lint checks.
+- [ ] Profile frame time during map panning — **Goal:** Detect jank sources.
 
 ---
 
 ## 🔒 Security & Configuration
 
-- [ ] Move API URLs and keys to `.env` or `env.dart`.
-- [ ] Add build flavors: `dev`, `staging`, `prod`.
-- [ ] Validate HTTPS and optionally enable SSL pinning.
-- [ ] Exclude sensitive config from version control.
+- [ ] Move API keys to `.env` — **Goal:** Protect secrets from version control.
+- [ ] Add build flavors (dev/staging/prod) — **Goal:** Support multi-environment builds.
+- [ ] Enable SSL pinning — **Goal:** Strengthen network security.
 
 ---
 
 ## 🧭 Router & Navigation
 
-- [ ] Refactor dashboard to use a `ShellRoute` or persistent `BottomNavShell`.
-- [ ] Prevent full rebuild on tab switch (IndexedStack).
-- [ ] Add route guards for authenticated sessions.
+- [x] Refactor dashboard to use ShellRoute — **Goal:** Keep tab state persistent.
+- [ ] Prevent full rebuild on tab switch — **Goal:** Optimize navigation performance.
+- [ ] Add route guards for authentication — **Goal:** Secure access to private routes.
 
 ---
 
-## 🧰 Concrete Implementation Tasks
-
-- [ ] Add tile caching + FastMarkerLayer.
-- [ ] Implement WebSocket event streaming.
-- [ ] Add Drift migration scripts for indexes.
-- [ ] Refactor Riverpod providers (map, device list, positions).
-- [ ] Integrate BottomNavShell + persistent tab state.
-- [ ] Add `probe_history.dart` CLI to measure batch sizes.
-- [ ] Add profiling entrypoint in debug builds.
-
----
-
-## 📋 Validation Steps (Post-Implementation)
+## 📋 Validation Steps
 
 - [ ] Verify tile cache works offline.
-- [ ] Confirm WebSocket reconnects gracefully.
-- [ ] Check map rebuild frequency via Flutter DevTools.
+- [ ] Confirm WebSocket reconnect stability.
+- [ ] Check rebuild frequency via DevTools.
 - [ ] Validate DB indexes via Drift Inspector.
-- [ ] Measure memory/CPU after 10 minutes of tracking.
-- [ ] Confirm no layout jank > 16ms per frame.
-
----
-
-_Last updated: 2025-10-09_
+- [ ] Confirm no frame jank >16ms under load.

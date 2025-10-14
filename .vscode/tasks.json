@@ -1,0 +1,146 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "pub get + analyze + test",
+			"type": "shell",
+			"command": "flutter pub get ; flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$flutter-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build_runner + analyze + test",
+			"type": "shell",
+			"command": "flutter pub get ; dart run build_runner build --delete-conflicting-outputs ; flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$flutter-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build_runner + analyze + test",
+			"type": "shell",
+			"command": "flutter pub get ; dart run build_runner build --delete-conflicting-outputs ; flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "analyze + test",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "analyze + test (2)",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "analyze + test (3)",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "pub get + analyze + test (svg)",
+			"type": "shell",
+			"command": "flutter pub get ; flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "analyze + test (svg markers finalized)",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "flutter analyze + test (svg markers finalized)",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "analyze + test (disconnected marker)",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "analyze + test (import fix)",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "analyze + test (final import fix)",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		},
+		{
+			"label": "analyze + test (timestamp normalization)",
+			"type": "shell",
+			"command": "flutter analyze ; flutter test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart-errors",
+				"$dart-test"
+			],
+			"group": "build"
+		}
+	]
+}

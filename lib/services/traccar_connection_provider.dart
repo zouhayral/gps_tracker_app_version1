@@ -2,19 +2,20 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'traccar_socket_service.dart';
+import 'package:my_app_gps/services/traccar_socket_service.dart';
 
 enum ConnectionStatus { connecting, connected, retrying }
 
 /// Exposes current WebSocket connection status for UI (badges, banners) and guards.
-final traccarConnectionStatusProvider = AutoDisposeNotifierProvider<
-    TraccarConnectionStatusNotifier, ConnectionStatus>(
-  TraccarConnectionStatusNotifier.new,
-);
+final traccarConnectionStatusProvider =
+    AutoDisposeNotifierProvider<
+      TraccarConnectionStatusNotifier,
+      ConnectionStatus
+    >(TraccarConnectionStatusNotifier.new);
 
 class TraccarConnectionStatusNotifier
     extends AutoDisposeNotifier<ConnectionStatus> {
-  StreamSubscription? _sub;
+  StreamSubscription<TraccarSocketMessage>? _sub;
 
   @override
   ConnectionStatus build() {
@@ -30,11 +31,9 @@ class TraccarConnectionStatusNotifier
       switch (msg.type) {
         case 'connected':
           state = ConnectionStatus.connected;
-          break;
         case 'error':
           // Service will schedule reconnect; reflect as retrying until we get connected again
           state = ConnectionStatus.retrying;
-          break;
         default:
           // no-op for data messages
           break;

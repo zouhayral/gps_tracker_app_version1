@@ -4,8 +4,8 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../lib/services/auth_service.dart';
-import '../lib/services/positions_service.dart';
+import 'package:my_app_gps/services/auth_service.dart';
+import 'package:my_app_gps/services/positions_service.dart';
 
 /*
  * Probe Traccar API polling behavior.
@@ -16,7 +16,9 @@ import '../lib/services/positions_service.dart';
 
 Future<void> main(List<String> args) async {
   if (args.length < 2) {
-    stderr.writeln('Usage: dart run bin/probe_rate_limits.dart <email> <password> [deviceId]');
+    stderr.writeln(
+      'Usage: dart run bin/probe_rate_limits.dart <email> <password> [deviceId]',
+    );
     exit(64);
   }
   final email = args[0];
@@ -39,10 +41,15 @@ Future<void> main(List<String> args) async {
 
   final probeStart = DateTime.now().toUtc();
   // Fetch devices
-  List<dynamic> devices;
+  List<Map<String, dynamic>> devices;
   try {
-    final r = await dio.get('/api/devices');
-    devices = (r.data as List).toList();
+    final r = await dio.get<List<dynamic>>('/api/devices');
+    final data = r.data;
+    if (data == null) {
+      stderr.writeln('Empty devices response');
+      exit(1);
+    }
+    devices = data.cast<Map<String, dynamic>>().toList();
   } catch (e) {
     stderr.writeln('Failed to fetch devices: $e');
     exit(1);
@@ -54,7 +61,8 @@ Future<void> main(List<String> args) async {
   }
   final deviceId = explicitDeviceId ?? (devices.first['id'] as int);
 
-  final frequencies = <_FreqTest>[ // requests per second targets
+  final frequencies = <_FreqTest>[
+    // requests per second targets
     _FreqTest(label: '1_rps', delayMs: 1000),
     _FreqTest(label: '2_rps', delayMs: 500),
     _FreqTest(label: '4_rps', delayMs: 250),
@@ -62,7 +70,7 @@ Future<void> main(List<String> args) async {
     _FreqTest(label: '10_rps', delayMs: 100),
   ];
 
-  final perFreqRequests = 8; // keep runtime modest
+  const perFreqRequests = 8; // keep runtime modest
 
   final results = <Map<String, dynamic>>[];
 
@@ -71,10 +79,10 @@ Future<void> main(List<String> args) async {
       final start = DateTime.now();
       final sw = Stopwatch()..start();
       int? status;
-      int bytes = 0;
+      var bytes = 0;
       String? error;
       try {
-        final r = await dio.get('/api/devices');
+        final r = await dio.get<List<dynamic>>('/api/devices');
         status = r.statusCode;
         bytes = utf8.encode(jsonEncode(r.data)).length;
       } catch (e) {
@@ -94,11 +102,17 @@ Future<void> main(List<String> args) async {
       // Also small positions fetch (last 5 minutes) to include variety
       final posStart = DateTime.now();
       final posSw = Stopwatch()..start();
-      status = null; bytes = 0; error = null;
+      status = null;
+      bytes = 0;
+      error = null;
       try {
         final to = DateTime.now().toUtc();
         final from = to.subtract(const Duration(minutes: 5));
-        final list = await positionsSvc.fetchHistoryRaw(deviceId: deviceId, from: from, to: to);
+        final list = await positionsSvc.fetchHistoryRaw(
+          deviceId: deviceId,
+          from: from,
+          to: to,
+        );
         status = 200; // fetchHistoryRaw throws if not 200 List
         bytes = utf8.encode(jsonEncode(list)).length;
       } catch (e) {
@@ -115,7 +129,7 @@ Future<void> main(List<String> args) async {
         'bytes': bytes,
         if (error != null) 'error': error,
       });
-      await Future.delayed(Duration(milliseconds: f.delayMs));
+      await Future<void>.delayed(Duration(milliseconds: f.delayMs));
     }
   }
 
@@ -148,9 +162,14 @@ Future<void> main(List<String> args) async {
         'latencyMs': {
           'min': latencies.first,
           'p50': latencies[(latencies.length * 0.5).floor()],
-          'p90': latencies[(latencies.length * 0.9).floor().clamp(0, latencies.length - 1)],
+          'p90':
+              latencies[(latencies.length * 0.9).floor().clamp(
+                0,
+                latencies.length - 1,
+              )],
           'max': latencies.last,
-          'avg': (latencies.reduce((a, b) => a + b) / latencies.length).toStringAsFixed(1),
+          'avg': (latencies.reduce((a, b) => a + b) / latencies.length)
+              .toStringAsFixed(1),
         },
         'errors': list.where((e) => e.containsKey('error')).length,
       };
@@ -162,14 +181,19 @@ Future<void> main(List<String> args) async {
   String recommendation;
   final oneRps = aggregates['1_rps'];
   if (oneRps != null) {
-    final devicesP90 = int.tryParse(((oneRps['devices'] as Map)['latencyMs'] as Map)['p90'].toString());
+    final devicesP90 = int.tryParse(
+      ((oneRps['devices'] as Map)['latencyMs'] as Map)['p90'].toString(),
+    );
     if (devicesP90 != null && devicesP90 < 300) {
-      recommendation = 'Use WebSocket for sub-second real-time; fallback polling every 5–10s (1 rps sustainable but unnecessary). Background: 60s.';
+      recommendation =
+          'Use WebSocket for sub-second real-time; fallback polling every 5–10s (1 rps sustainable but unnecessary). Background: 60s.';
     } else {
-      recommendation = 'Latency elevated even at 1 rps; start with 15s polling; strongly prefer WebSocket.';
+      recommendation =
+          'Latency elevated even at 1 rps; start with 15s polling; strongly prefer WebSocket.';
     }
   } else {
-    recommendation = 'Insufficient data; default to 10s polling + WebSocket when available.';
+    recommendation =
+        'Insufficient data; default to 10s polling + WebSocket when available.';
   }
 
   final output = {

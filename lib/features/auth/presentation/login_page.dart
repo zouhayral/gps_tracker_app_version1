@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../auth/controller/auth_notifier.dart';
-import '../../auth/controller/auth_state.dart';
+import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
+import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -25,20 +25,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authNotifierProvider);
-    // Autofill remembered email once
-    if (authState is AuthInitial && authState.lastEmail != null && _emailController.text.isEmpty) {
-      _emailController.text = authState.lastEmail!;
-    } else if (authState is AuthUnauthenticated && authState.lastEmail != null && _emailController.text.isEmpty) {
-      _emailController.text = authState.lastEmail!;
+    // Use Riverpod.select() to watch just the specific fields we need
+    final lastEmail = ref.watch(
+      authNotifierProvider.select((state) {
+        // Only extract the remembered email from relevant states
+        if (state is AuthInitial) return state.lastEmail;
+        if (state is AuthUnauthenticated) return state.lastEmail;
+        return null;
+      }),
+    );
+    final isLoading = ref.watch(
+      // Only rebuild when loading state toggles
+      authNotifierProvider.select((state) => state is AuthAuthenticating),
+    );
+
+    // Autofill remembered email once without rebuilding on unrelated state changes
+    if (lastEmail != null && _emailController.text.isEmpty) {
+      _emailController.text = lastEmail;
     }
-    final isLoading = authState is AuthAuthenticating;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -62,7 +72,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
               ),
               const SizedBox(height: 32),
-              
+
               // Form inside a container/box
               Container(
                 padding: const EdgeInsets.all(24),
@@ -90,16 +100,24 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         child: TextFormField(
                           controller: _emailController,
                           decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.email_outlined, color: Colors.grey),
+                            prefixIcon: Icon(
+                              Icons.email_outlined,
+                              color: Colors.grey,
+                            ),
                             hintText: 'Email or Username',
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
                           ),
-                          validator: (v) => v == null || v.isEmpty ? 'Enter email or username' : null,
+                          validator: (v) => v == null || v.isEmpty
+                              ? 'Enter email or username'
+                              : null,
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Password field with icon
                       Container(
                         decoration: BoxDecoration(
@@ -110,10 +128,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
+                            prefixIcon: const Icon(
+                              Icons.lock_outline,
+                              color: Colors.grey,
+                            ),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                _obscurePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
                                 color: Colors.grey,
                               ),
                               onPressed: () {
@@ -124,13 +147,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             ),
                             hintText: 'Password',
                             border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
                           ),
-                          validator: (v) => v == null || v.isEmpty ? 'Enter password' : null,
+                          validator: (v) =>
+                              v == null || v.isEmpty ? 'Enter password' : null,
                         ),
                       ),
                       const SizedBox(height: 32),
-                      
+
                       // Login button with modern design
                       SizedBox(
                         width: double.infinity,
@@ -140,14 +167,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               ? null
                               : () async {
                                   if (_formKey.currentState!.validate()) {
-                                    await ref.read(authNotifierProvider.notifier).login(
+                                    await ref
+                                        .read(authNotifierProvider.notifier)
+                                        .login(
                                           _emailController.text.trim(),
                                           _passwordController.text,
                                         );
                                   }
                                 },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF8BC34A), // Green color like in image
+                            backgroundColor: const Color(
+                              0xFF8BC34A,
+                            ), // Green color like in image
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -155,12 +186,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           ),
                           child: isLoading
                               ? const SizedBox(
-                                  height: 20, 
-                                  width: 20, 
+                                  height: 20,
+                                  width: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     color: Colors.white,
-                                  )
+                                  ),
                                 )
                               : const Text(
                                   'login',
@@ -176,9 +207,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 32),
-              
+
               // Illustration - clean without border
               Center(
                 child: Container(
@@ -220,28 +251,47 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 24),
-              
-              // Error message
-              if (authState is AuthUnauthenticated && authState.message != null)
+
+              // Error message - select only the message to avoid rebuilds on unrelated auth state changes
+              if (ref.watch(
+                    authNotifierProvider.select(
+                      (s) => s is AuthUnauthenticated ? s.message : null,
+                    ),
+                  ) !=
+                  null)
                 Container(
                   margin: const EdgeInsets.only(top: 16),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const Icon(
+                        Icons.error_outline,
+                        color: Colors.red,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          authState.message!,
-                          style: const TextStyle(color: Colors.red, fontSize: 13, height: 1.2),
+                          ref.watch(
+                            authNotifierProvider.select(
+                              (s) => s is AuthUnauthenticated ? s.message! : '',
+                            ),
+                          ),
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 13,
+                            height: 1.2,
+                          ),
                         ),
                       ),
                     ],

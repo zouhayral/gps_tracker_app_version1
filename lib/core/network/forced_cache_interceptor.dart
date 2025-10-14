@@ -14,10 +14,10 @@ import 'package:flutter/foundation.dart';
 /// Behavior
 /// - On GET to whitelisted paths:
 ///   - If a non-expired cache entry exists → return it immediately (short-circuit
-///     network). Logs [FORCED-CACHE][HIT].
+///     network). Logs FORCED-CACHE HIT.
 ///   - If expired or missing → pass-through; on 200, store response with TTL.
 ///   - On network error and a stale entry exists → serve stale as fallback if
-///     [serveStaleOnError] is true. Logs [FORCED-CACHE][STALE-FALLBACK].
+///     serveStaleOnError is true. Logs FORCED-CACHE STALE-FALLBACK.
 ///
 /// Notes
 /// - Works on Android, iOS, Web (pure Dart, in-memory only).
@@ -28,12 +28,12 @@ class ForcedLocalCacheInterceptor extends Interceptor {
     Map<String, Duration>? ttlOverrides,
     this.serveStaleOnError = true,
   }) : _ttlMap = {
-          // Sensible defaults; tune as needed
-          '/api/devices': const Duration(minutes: 5),
-          '/api/geofences': const Duration(minutes: 10),
-          '/api/users': const Duration(minutes: 10),
-          if (ttlOverrides != null) ...ttlOverrides,
-        };
+         // Sensible defaults; tune as needed
+         '/api/devices': const Duration(minutes: 5),
+         '/api/geofences': const Duration(minutes: 10),
+         '/api/users': const Duration(minutes: 10),
+         if (ttlOverrides != null) ...ttlOverrides,
+       };
 
   final Map<String, Duration> _ttlMap;
   final bool serveStaleOnError;
@@ -53,7 +53,8 @@ class ForcedLocalCacheInterceptor extends Interceptor {
     return _allowedPaths.contains(path);
   }
 
-  Duration _ttlForPath(String path) => _ttlMap[path] ?? const Duration(minutes: 5);
+  Duration _ttlForPath(String path) =>
+      _ttlMap[path] ?? const Duration(minutes: 5);
 
   String _key(RequestOptions options) => options.uri.toString();
 
@@ -69,19 +70,25 @@ class ForcedLocalCacheInterceptor extends Interceptor {
         if (!expired) {
           if (kDebugMode) {
             // ignore: avoid_print
-            print('[FORCED-CACHE][HIT] ${options.uri} (age: ${now.difference(entry.storedAt).inSeconds}s)');
+            print(
+              '[FORCED-CACHE][HIT] ${options.uri} (age: ${now.difference(entry.storedAt).inSeconds}s)',
+            );
           }
-          handler.resolve(Response(
-            requestOptions: options,
-            statusCode: 200,
-            data: _deepClone(entry.data),
-            headers: entry.headers,
-          ));
+          handler.resolve(
+            Response<dynamic>(
+              requestOptions: options,
+              statusCode: 200,
+              data: _deepClone(entry.data),
+              headers: entry.headers,
+            ),
+          );
           return;
         } else {
           if (kDebugMode) {
             // ignore: avoid_print
-            print('[FORCED-CACHE][EXPIRED] ${options.uri} (age: ${now.difference(entry.storedAt).inSeconds}s)');
+            print(
+              '[FORCED-CACHE][EXPIRED] ${options.uri} (age: ${now.difference(entry.storedAt).inSeconds}s)',
+            );
           }
         }
       } else {
@@ -95,7 +102,10 @@ class ForcedLocalCacheInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
     final options = response.requestOptions;
     if (_shouldHandle(options) && (response.statusCode ?? 0) == 200) {
       final key = _key(options);
@@ -122,14 +132,18 @@ class ForcedLocalCacheInterceptor extends Interceptor {
       if (entry != null && serveStaleOnError) {
         if (kDebugMode) {
           // ignore: avoid_print
-          print('[FORCED-CACHE][STALE-FALLBACK] ${options.uri} due to ${err.type.name}');
+          print(
+            '[FORCED-CACHE][STALE-FALLBACK] ${options.uri} due to ${err.type.name}',
+          );
         }
-        handler.resolve(Response(
-          requestOptions: options,
-          statusCode: 200,
-          data: _deepClone(entry.data),
-          headers: entry.headers,
-        ));
+        handler.resolve(
+          Response<dynamic>(
+            requestOptions: options,
+            statusCode: 200,
+            data: _deepClone(entry.data),
+            headers: entry.headers,
+          ),
+        );
         return;
       }
     }
@@ -165,13 +179,15 @@ class ForcedLocalCacheInterceptor extends Interceptor {
   static List<Map<String, dynamic>> snapshot() {
     final now = DateTime.now();
     return _cache.entries
-        .map((e) => {
-              'url': e.key,
-              'path': e.value.path,
-              'ageSec': now.difference(e.value.storedAt).inSeconds,
-              'storedAt': e.value.storedAt.toIso8601String(),
-              'size': _estimateSize(e.value.data),
-            })
+        .map(
+          (e) => {
+            'url': e.key,
+            'path': e.value.path,
+            'ageSec': now.difference(e.value.storedAt).inSeconds,
+            'storedAt': e.value.storedAt.toIso8601String(),
+            'size': _estimateSize(e.value.data),
+          },
+        )
         .toList();
   }
 

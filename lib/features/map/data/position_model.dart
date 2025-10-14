@@ -30,23 +30,28 @@ class Position {
   });
 
   factory Position.fromJson(Map<String, dynamic> json) {
-    double _d(String k) => (json[k] as num?)?.toDouble() ?? 0.0;
-    DateTime _dt(String k) => DateTime.tryParse(json[k]?.toString() ?? '')?.toUtc() ?? DateTime.now().toUtc();
+    double d(String k) => (json[k] as num?)?.toDouble() ?? 0.0;
+    DateTime dt(String k) =>
+        DateTime.tryParse(json[k]?.toString() ?? '')?.toUtc() ??
+        DateTime.now().toUtc();
     return Position(
       id: json['id'] as int?,
       deviceId: json['deviceId'] as int? ?? json['device_id'] as int? ?? 0,
-      latitude: _d('latitude'),
-      longitude: _d('longitude'),
-      speed: _d('speed'),
-      course: _d('course'),
+      latitude: d('latitude'),
+      longitude: d('longitude'),
+      speed: d('speed'),
+      course: d('course'),
       altitude: (json['altitude'] as num?)?.toDouble(),
       accuracy: (json['accuracy'] as num?)?.toDouble(),
       valid: json['valid'] as bool?,
       address: json['address'] as String?,
-      deviceTime: _dt('deviceTime'),
-      serverTime: _dt('serverTime'),
-      attributes: (json['attributes'] is Map<String, dynamic>) ? (json['attributes'] as Map<String, dynamic>) : <String, dynamic>{},
+      deviceTime: dt('deviceTime'),
+      serverTime: dt('serverTime'),
+      attributes: (json['attributes'] is Map<String, dynamic>)
+          ? (json['attributes'] as Map<String, dynamic>)
+          : <String, dynamic>{},
     );
   }
 }
+
 // (Freezed-based version removed for simplicity while bootstrapping.)

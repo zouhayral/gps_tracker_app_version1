@@ -66,7 +66,10 @@ class HttpCacheInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
     final options = response.requestOptions;
     final isHandled = _shouldHandle(options);
     final status = response.statusCode ?? 0;
@@ -80,7 +83,7 @@ class HttpCacheInterceptor extends Interceptor {
           // ignore: avoid_print
           print('[HTTP-CACHE] 304 for ${options.uri} → serving cached body');
         }
-        final cached = Response(
+        final cached = Response<dynamic>(
           requestOptions: options,
           statusCode: 200,
           data: hit.data,
@@ -95,7 +98,8 @@ class HttpCacheInterceptor extends Interceptor {
       // Cache fresh response
       final headers = response.headers;
       final eTag = headers.value('etag') ?? headers.value('ETag');
-      final lastModified = headers.value('last-modified') ?? headers.value('Last-Modified');
+      final lastModified =
+          headers.value('last-modified') ?? headers.value('Last-Modified');
       final key = _key(options);
       final dataClone = _deepClone(response.data);
       _cache[key] = _CacheEntry(
@@ -106,7 +110,9 @@ class HttpCacheInterceptor extends Interceptor {
       );
       if (kDebugMode) {
         // ignore: avoid_print
-        print('[HTTP-CACHE] cached ${options.uri} (ETag=$eTag, Last-Modified=$lastModified)');
+        print(
+          '[HTTP-CACHE] cached ${options.uri} (ETag=$eTag, Last-Modified=$lastModified)',
+        );
       }
     }
 
@@ -124,14 +130,18 @@ class HttpCacheInterceptor extends Interceptor {
       if (hit != null) {
         if (kDebugMode) {
           // ignore: avoid_print
-          print('[HTTP-CACHE] 304(error) for ${options.uri} → serving cached body');
+          print(
+            '[HTTP-CACHE] 304(error) for ${options.uri} → serving cached body',
+          );
         }
-        handler.resolve(Response(
-          requestOptions: options,
-          statusCode: 200,
-          data: hit.data,
-          headers: hit.headers,
-        ));
+        handler.resolve(
+          Response<dynamic>(
+            requestOptions: options,
+            statusCode: 200,
+            data: hit.data,
+            headers: hit.headers,
+          ),
+        );
         return;
       }
     }
@@ -148,6 +158,34 @@ class HttpCacheInterceptor extends Interceptor {
     } catch (_) {}
     // Fallback: return as-is (caller should treat as read-only)
     return data;
+  }
+
+  // ---------- Debug utilities ----------
+
+  /// Clears all cached responses (or by URL prefix if provided) and logs action.
+  static void clear({String? urlStartsWith}) {
+    if (urlStartsWith == null) {
+      _cache.clear();
+    } else {
+      _cache.removeWhere((key, value) => key.startsWith(urlStartsWith));
+    }
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('[CACHE][CLEAR] http-cache urlPrefix=${urlStartsWith ?? '*'}');
+    }
+  }
+
+  /// Snapshot of cached entries for debug pages.
+  static List<Map<String, dynamic>> snapshot() {
+    return _cache.entries
+        .map(
+          (e) => {
+            'url': e.key,
+            'hasEtag': (e.value.eTag ?? '').isNotEmpty,
+            'hasLastMod': (e.value.lastModified ?? '').isNotEmpty,
+          },
+        )
+        .toList();
   }
 }
 

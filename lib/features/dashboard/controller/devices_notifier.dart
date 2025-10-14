@@ -1,12 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../services/device_service.dart';
+import 'package:my_app_gps/services/device_service.dart';
 
-final devicesNotifierProvider = StateNotifierProvider<DevicesNotifier, AsyncValue<List<Map<String, dynamic>>>>((ref) {
-  final service = ref.watch(deviceServiceProvider);
-  return DevicesNotifier(service); // Remove auto-load, will be triggered by auth state changes
-});
+// Keep devices in memory across tab switches (no autoDispose)
+final devicesNotifierProvider =
+    StateNotifierProvider<
+      DevicesNotifier,
+      AsyncValue<List<Map<String, dynamic>>>
+    >((ref) {
+      final service = ref.watch(deviceServiceProvider);
+      return DevicesNotifier(
+        service,
+      ); // Remove auto-load, will be triggered by auth state changes
+    });
 
-class DevicesNotifier extends StateNotifier<AsyncValue<List<Map<String, dynamic>>>> {
+class DevicesNotifier
+    extends StateNotifier<AsyncValue<List<Map<String, dynamic>>>> {
   DevicesNotifier(this._service) : super(const AsyncValue.loading());
   final DeviceService _service;
 

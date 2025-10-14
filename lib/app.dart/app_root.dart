@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../theme/app_theme.dart';
-import 'app_router.dart';
+import 'package:my_app_gps/app.dart/app_router.dart';
+import 'package:my_app_gps/theme/app_theme.dart';
 
 class AppRoot extends ConsumerWidget {
   const AppRoot({super.key});
