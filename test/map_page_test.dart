@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,7 @@ import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart'
 import 'package:my_app_gps/features/map/data/positions_live_provider.dart';
 import 'package:my_app_gps/features/map/view/map_page.dart';
 import 'package:my_app_gps/services/device_service.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
 
 import 'test_utils/test_config.dart';
 
@@ -35,10 +38,14 @@ void main() {
     ];
 
     final container = ProviderContainer(overrides: [
+      webSocketProvider.overrideWith(() {
+        WebSocketManager.testMode = true;
+        return WebSocketManager();
+      }),
       // Devices list
       devicesNotifierProvider.overrideWith((ref) => _DevicesNotifierFixed(devices)),
       // Live positions empty
-      positionsLiveProvider.overrideWith(PositionsLiveNotifierEmpty.new),
+  positionsLiveProvider.overrideWith((ref) => const Stream<Map<int, Position>>.empty()),
       // Last-known provider returns given map directly
       positionsLastKnownProvider.overrideWith(() => PositionsLastKnownNotifierFixed(lastKnown)),
       // DAO provider not used in this widget test
@@ -89,7 +96,4 @@ class PositionsLastKnownNotifierFixed extends PositionsLastKnownNotifier {
   Future<Map<int, Position>> build() async => map;
 }
 
-class PositionsLiveNotifierEmpty extends PositionsLiveNotifier {
-  @override
-  Future<Map<int, Position>> build() async => {};
-}
+// ...existing code...

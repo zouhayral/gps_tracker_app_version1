@@ -15,7 +15,10 @@ class FlutterMapAdapter extends StatefulWidget implements MapAdapter {
     super.key,
     this.onMarkerTap,
     this.onMapTap,
+    this.tileProvider,
   });
+
+  final TileProvider? tileProvider;
 
   final List<MapMarkerData> markers;
   final MapCameraFit cameraFit;
@@ -113,22 +116,25 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
     // The actual move is synchronous and fast.
   }
 
+  bool _validLatLng(LatLng? point) {
+    if (point == null) return false;
+    if (point.latitude.isNaN || point.longitude.isNaN) return false;
+    return point.latitude.abs() <= 90 && point.longitude.abs() <= 180;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Choose tile provider (only if tiles enabled)
     TileProvider? tileProvider;
-    if (!kDisableTilesForTests) {
+    if (widget.tileProvider != null) {
+      tileProvider = widget.tileProvider;
+    } else if (!kDisableTilesForTests) {
       if (kForceDisableFMTC) {
-        // FMTC disabled for troubleshooting: use network provider without logging repeatedly
         tileProvider = NetworkTileProvider();
       } else {
         try {
-          // Create an FMTC tile provider that uses the already-initialized 'main' store.
-          // The FMTC store itself is initialized once in main.dart; constructing the
-          // provider here reuses that store and should be lightweight.
           tileProvider = FMTCTileProvider(stores: const {'main': null});
         } catch (e) {
-          // Fall back to network provider if FMTC isn't available at runtime.
           tileProvider = NetworkTileProvider();
         }
       }
@@ -150,12 +156,22 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
             // Requirement: TileLayer uses FMTC provider by default
             tileProvider: tileProvider,
           ),
-        MarkerClusterLayerWidget(
-          options: MarkerClusterLayerOptions(
-            maxClusterRadius: 45,
-            size: const Size(36, 36),
-            markers: [
-                for (final m in widget.markers)
+        // Defensive: only build cluster layer when we have valid markers
+        Builder(builder: (ctx) {
+          final validMarkers = widget.markers
+              .where((m) => _validLatLng(m.position))
+              .toList(growable: false);
+          if (validMarkers.isEmpty) {
+            // Avoid MarkerCluster null-crash when there are no valid points yet
+            debugPrint('[MAP] Skipping cluster render – no valid markers yet');
+            return const SizedBox.shrink();
+          }
+          return MarkerClusterLayerWidget(
+            options: MarkerClusterLayerOptions(
+              maxClusterRadius: 45,
+              size: const Size(36, 36),
+              markers: [
+                for (final m in validMarkers)
                   Marker(
                     key: ValueKey(m.id),
                     point: m.position,
@@ -175,22 +191,23 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
                       },
                     ),
                   ),
-            ],
-            builder: (context, markers) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.8),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  markers.length.toString(),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-              );
-            },
-          ),
-        ),
+              ],
+              builder: (context, markers) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.8),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    markers.length.toString(),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                );
+              },
+            ),
+          );
+        }),
         Positioned(
           right: 8,
           bottom: 8,

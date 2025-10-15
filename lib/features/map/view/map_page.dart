@@ -1,3 +1,24 @@
+
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:my_app_gps/core/utils/timing.dart';
+import 'package:flutter/foundation.dart';
+import 'package:my_app_gps/services/fmtc_initializer.dart';
+import 'package:my_app_gps/core/map/fps_monitor.dart';
+import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:my_app_gps/core/map/marker_cache.dart';
+import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
+import 'package:my_app_gps/features/map/core/map_adapter.dart';
+import 'package:my_app_gps/features/map/data/granular_providers.dart';
+import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart';
+import 'package:my_app_gps/features/map/data/positions_live_provider.dart';
+import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
+
 // Clean rebuilt MapPage implementation
 // Features:
 //  - Gated search bar (single tap show suggestions, double tap or keyboard icon to edit)
@@ -6,21 +27,31 @@
 //  - Multi‑snap bottom panel (stops: 5%, 30%, 50%, 80%) with drag velocity ±250
 //  - Deep link preselection focus (preselectedIds)
 //  - Single, duplicate‑free implementation (previous corruption removed)
+// FMTC tile provider singleton via Riverpod
 
-import 'dart:async';
+final _tileProviderProvider = Provider<TileProvider>((ref) {
+  // Only create once per app session. The FMTC store should be warmed up
+  // by `FMTCInitializer.warmup()` called from the MapPage lifecycle before
+  // this provider is read to avoid synchronous initialization during build.
+  return FMTCTileProvider(stores: const {'main': null});
+});
 
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:my_app_gps/core/utils/timing.dart';
-import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
-import 'package:my_app_gps/features/map/core/map_adapter.dart';
-import 'package:my_app_gps/features/map/data/granular_providers.dart';
-import 'package:my_app_gps/features/map/data/position_model.dart';
-import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart';
-import 'package:my_app_gps/features/map/data/positions_live_provider.dart';
-import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
-import 'package:my_app_gps/services/traccar_connection_provider.dart';
+// Marker cache provider
+final markerCacheProvider = Provider<MarkerCache>((ref) => MarkerCache());
+
+// Debounced positions helper
+Map<int, Position> useDebouncedPositions(AsyncValue<Map<int, Position>> positionsAsync, Duration debounce) {
+  // Simple debounce: returns latest positions after delay
+  var latest = <int, Position>{};
+  positionsAsync.when(
+    data: (map) {
+      Future.delayed(debounce, () => latest = Map<int, Position>.unmodifiable(map));
+    },
+    loading: () {},
+    error: (_, __) {},
+  );
+  return latest;
+}
 
 /// Debug toggles for map page (safe defaults: all off)
 class MapDebugFlags {
@@ -79,6 +110,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   final _mapKey = GlobalKey<FlutterMapAdapterState>();
   bool _didAutoFocus = false;
   Timer? _preselectSnackTimer;
+  // Debounce helper for live positions
+  Timer? _positionsDebounceTimer;
+  Map<int, Position> _debouncedPositions = const <int, Position>{};
   // Throttle camera fit operations to avoid rapid repeated moves (only for bounds fitting).
   final _fitThrottler = Throttler(const Duration(milliseconds: 300));
   // Track last selected device to detect changes
@@ -100,6 +134,31 @@ class _MapPageState extends ConsumerState<MapPage> {
       ref
         ..read(positionsLiveProvider)
         ..read(positionsLastKnownProvider);
+    });
+
+    // Warm up FMTC asynchronously - do not await here to avoid blocking initState
+    FMTCInitializer.warmup().then((_) {
+      debugPrint('[FMTC] warmup finished');
+    }).catchError((Object e, StackTrace? st) {
+      debugPrint('[FMTC] warmup error: $e');
+    });
+
+    // Debounced positions: listen to the live stream and update a cached map
+    // on a timer to avoid rebuilding the entire map on every socket tick.
+    _positionsDebounceTimer = null;
+    _debouncedPositions = const <int, Position>{};
+    ref.listen<AsyncValue<Map<int, Position>>>(positionsLiveProvider, (prev, next) {
+      final data = next.asData?.value;
+      _positionsDebounceTimer?.cancel();
+      if (data == null) {
+        // Keep previous debounced positions if stream yields null/loading
+        return;
+      }
+      _positionsDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+        setState(() {
+          _debouncedPositions = Map<int, Position>.unmodifiable(data);
+        });
+      });
     });
 
     if (widget.preselectedIds != null && widget.preselectedIds!.isNotEmpty) {
@@ -130,6 +189,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   void dispose() {
     _preselectSnackTimer?.cancel();
     _searchDebouncer.cancel();
+    _positionsDebounceTimer?.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -237,81 +297,31 @@ class _MapPageState extends ConsumerState<MapPage> {
   Widget build(BuildContext context) {
     // Watch entire devices list only once; consider splitting into smaller providers later
     final devicesAsync = ref.watch(devicesNotifierProvider);
-    // Only watch the latest positions map value from AsyncValue to avoid rebuilds on intermediate states
-    final positionsMap = ref.watch(
-      positionsLiveProvider.select((async) => async.asData?.value),
-    );
+  // Only watch the latest positions map value via ref.listen in initState to avoid rebuilds
+  ref.watch(positionsLiveProvider); // ensure provider is active
     // Also watch last-known fallback to render markers when live map is empty
     final lastKnownMap = ref.watch(
       positionsLastKnownProvider.select((async) => async.asData?.value),
     );
+  // Use marker cache and debounced positions (debounced map updated via ref.listen)
+  final markerCache = ref.watch(markerCacheProvider);
+  final debouncedPositions = _debouncedPositions;
     return Scaffold(
       body: SafeArea(
         child: devicesAsync.when(
           data: (devices) {
-      final positions = (positionsMap != null && positionsMap.isNotEmpty)
-        ? positionsMap
-        : (lastKnownMap ?? const <int, Position>{});
+            // Use debounced positions for smoother updates
+            final positions = debouncedPositions.isNotEmpty
+                ? debouncedPositions
+                : (lastKnownMap ?? const <int, Position>{});
             final q = _query.trim().toLowerCase();
-            final markers = <MapMarkerData>[];
-            final processedIds = <int>{};
-
-            // Build markers - MERGE positions and device data
-            // 1. First add all devices with positions (live or last-known)
-            for (final p in positions.values) {
-              Map<String, dynamic>? dev;
-              dev = ref.read(deviceByIdProvider(p.deviceId));
-              final name = dev?['name']?.toString() ?? '';
-              if (q.isNotEmpty &&
-                  !name.toLowerCase().contains(q) &&
-                  !_selectedIds.contains(p.deviceId)) {
-                continue;
-              }
-              if (_valid(p.latitude, p.longitude)) {
-                markers.add(
-                  MapMarkerData(
-                    id: '${p.deviceId}',
-                    position: LatLng(p.latitude, p.longitude),
-                    isSelected: _selectedIds.contains(p.deviceId),
-                    meta: {
-                      'name': name,
-                      'speed': p.speed,
-                      'course': p.course,
-                    },
-                  ),
-                );
-                processedIds.add(p.deviceId);
-              }
-            }
-
-            // 2. Add devices from device list that don't have positions yet
-            //    This ensures selected devices are always visible if they have lat/lon
-            for (final d in devices) {
-              final deviceId = d['id'] as int?;
-              if (deviceId == null || processedIds.contains(deviceId)) {
-                continue; // Already added from positions
-              }
-
-              final name = d['name']?.toString() ?? '';
-              if (q.isNotEmpty &&
-                  !name.toLowerCase().contains(q) &&
-                  !_selectedIds.contains(deviceId)) {
-                continue;
-              }
-
-              final lat = _asDouble(d['latitude']);
-              final lon = _asDouble(d['longitude']);
-              if (_valid(lat, lon)) {
-                markers.add(
-                  MapMarkerData(
-                    id: '$deviceId',
-                    position: LatLng(lat!, lon!),
-                    isSelected: _selectedIds.contains(deviceId),
-                    meta: {'name': name},
-                  ),
-                );
-              }
-            }
+            // Use marker cache to memoize marker creation
+            final markers = markerCache.getMarkers(
+              positions,
+              devices,
+              _selectedIds,
+              q,
+            );
 
             // If exactly one device is selected, center to its position IMMEDIATELY
             if (_selectedIds.length == 1) {
@@ -437,12 +447,18 @@ class _MapPageState extends ConsumerState<MapPage> {
             return Stack(
               children: [
                 RepaintBoundary(
-                  child: FlutterMapAdapter(
-                    key: _mapKey,
-                    markers: markers,
-                    cameraFit: fit,
-                    onMarkerTap: _onMarkerTap,
-                    onMapTap: _onMapTap,
+                  child: Stack(
+                    children: [
+                      FlutterMapAdapter(
+                        key: _mapKey,
+                        markers: markers,
+                        cameraFit: fit,
+                        onMarkerTap: _onMarkerTap,
+                        onMapTap: _onMapTap,
+                        tileProvider: ref.watch(_tileProviderProvider),
+                      ),
+                      if (kDebugMode) const FpsMonitor(),
+                    ],
                   ),
                 ),
                 if (MapDebugFlags.showRebuildOverlay)
@@ -629,7 +645,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                     children: [
                       // Connection status indicator
                       _ConnectionStatusBadge(
-                        connectionStatus: ref.watch(traccarConnectionStatusProvider),
+                        connectionStatus: ref.watch(webSocketProvider.select((s) => s.status)),
                         positionsCount: positions.length,
                       ),
                       const SizedBox(height: 10),
@@ -1353,28 +1369,31 @@ class _ConnectionStatusBadge extends StatelessWidget {
     required this.connectionStatus,
     required this.positionsCount,
   });
-  final ConnectionStatus connectionStatus;
+  final WebSocketStatus connectionStatus;
   final int positionsCount;
 
   @override
   Widget build(BuildContext context) {
-    final Color color;
-    final IconData icon;
-    final String tooltip;
-
+    Color color = Colors.grey;
+    var icon = Icons.wifi_off;
+    var tooltip = 'Disconnected';
     switch (connectionStatus) {
-      case ConnectionStatus.connected:
+      case WebSocketStatus.connected:
         color = const Color(0xFFA6CD27); // Green
         icon = Icons.wifi;
         tooltip = 'Connected • $positionsCount positions';
-      case ConnectionStatus.connecting:
+      case WebSocketStatus.connecting:
         color = Colors.orange;
         icon = Icons.wifi_find;
         tooltip = 'Connecting...';
-      case ConnectionStatus.retrying:
+      case WebSocketStatus.retrying:
         color = Colors.orange;
         icon = Icons.wifi_off;
         tooltip = 'Reconnecting...';
+      case WebSocketStatus.disconnected:
+        color = Colors.grey;
+        icon = Icons.wifi_off;
+        tooltip = 'Disconnected';
     }
 
     return Material(
@@ -1389,7 +1408,7 @@ class _ConnectionStatusBadge extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 18, color: color),
-              if (positionsCount > 0 && connectionStatus == ConnectionStatus.connected) ...[
+              if (positionsCount > 0 && connectionStatus == WebSocketStatus.connected) ...[
                 const SizedBox(width: 4),
                 Text(
                   '$positionsCount',
