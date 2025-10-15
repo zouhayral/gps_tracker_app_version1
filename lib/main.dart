@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -7,6 +8,11 @@ import 'package:my_app_gps/app/app_root.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (kDebugMode || kProfileMode) {
+    debugPrint('[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}');
+  }
+
   // Limit global image cache to reduce memory pressure on low-end devices.
   try {
     PaintingBinding.instance.imageCache.maximumSizeBytes = 50 << 20; // ~50MB

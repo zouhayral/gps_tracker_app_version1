@@ -7,6 +7,7 @@ import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:flutter/foundation.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/core/map/fps_monitor.dart';
+import 'package:my_app_gps/core/map/rebuild_profiler.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:my_app_gps/core/map/marker_cache.dart';
@@ -122,6 +123,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   final List<double> _panelStops = const [0.05, 0.30, 0.50, 0.80];
   int _panelIndex = 1; // start at 30%
 
+  late ProviderSubscription<AsyncValue<Map<int, Position>>> _posSub;
+
   @override
   void initState() {
     super.initState();
@@ -147,19 +150,22 @@ class _MapPageState extends ConsumerState<MapPage> {
     // on a timer to avoid rebuilding the entire map on every socket tick.
     _positionsDebounceTimer = null;
     _debouncedPositions = const <int, Position>{};
-    ref.listen<AsyncValue<Map<int, Position>>>(positionsLiveProvider, (prev, next) {
-      final data = next.asData?.value;
-      _positionsDebounceTimer?.cancel();
-      if (data == null) {
-        // Keep previous debounced positions if stream yields null/loading
-        return;
-      }
-      _positionsDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-        setState(() {
-          _debouncedPositions = Map<int, Position>.unmodifiable(data);
+    _posSub = ref.listenManual<AsyncValue<Map<int, Position>>>(
+      positionsLiveProvider,
+      (prev, next) {
+        final data = next.asData?.value;
+        _positionsDebounceTimer?.cancel();
+        if (data == null) {
+          // Keep previous debounced positions if stream yields null/loading
+          return;
+        }
+        _positionsDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+          setState(() {
+            _debouncedPositions = Map<int, Position>.unmodifiable(data);
+          });
         });
-      });
-    });
+      },
+    );
 
     if (widget.preselectedIds != null && widget.preselectedIds!.isNotEmpty) {
       _selectedIds.addAll(widget.preselectedIds!);
@@ -187,6 +193,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   void dispose() {
+    _posSub.close();
     _preselectSnackTimer?.cancel();
     _searchDebouncer.cancel();
     _positionsDebounceTimer?.cancel();
@@ -295,6 +302,22 @@ class _MapPageState extends ConsumerState<MapPage> {
   // ---------- Build ----------
   @override
   Widget build(BuildContext context) {
+    Widget content = _buildMapContent();
+    
+    // Add performance profiling in debug/profile mode
+    if (kDebugMode || kProfileMode) {
+      content = RebuildProfilerOverlay(
+        child: RebuildCounter(
+          name: 'FlutterMap',
+          child: content,
+        ),
+      );
+    }
+    
+    return content;
+  }
+
+  Widget _buildMapContent() {
     // Watch entire devices list only once; consider splitting into smaller providers later
     final devicesAsync = ref.watch(devicesNotifierProvider);
   // Only watch the latest positions map value via ref.listen in initState to avoid rebuilds
