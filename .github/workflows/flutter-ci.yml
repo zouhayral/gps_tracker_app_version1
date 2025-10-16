@@ -14,18 +14,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # ✅ Manually install Flutter 3.27.0-dev.1.0 (includes Dart 3.9.2)
-      - name: Install Flutter 3.27.0-dev.1.0
+      # ✅ Manually install Flutter 3.27.0-0.2.pre (Dart 3.9.2)
+      - name: Install Flutter 3.27.0-dev
         run: |
           git clone https://github.com/flutter/flutter.git --branch 3.27.0-0.2.pre --depth 1
-          echo "$PWD/flutter/bin" >> $GITHUB_PATH
+          export PATH="$PATH:`pwd`/flutter/bin"
+          flutter doctor
           flutter --version
 
       - name: Install dependencies
-        run: flutter pub get
+        run: |
+          export PATH="$PATH:`pwd`/flutter/bin"
+          flutter pub get
 
       - name: Analyze project source
-        run: flutter analyze
+        run: |
+          export PATH="$PATH:`pwd`/flutter/bin"
+          flutter analyze
 
       - name: Run tests
-        run: flutter test
+        run: |
+          export PATH="$PATH:`pwd`/flutter/bin"
+          flutter test
