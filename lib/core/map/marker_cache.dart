@@ -20,7 +20,7 @@ class MarkerCache {
       final deviceId = p.deviceId;
       final name = devices.firstWhere(
         (d) => d['id'] == deviceId,
-        orElse: () => {'name': ''},
+        orElse: () => <String, Object>{'name': ''},
       )['name']?.toString() ?? '';
       if (q.isNotEmpty &&
           !name.toLowerCase().contains(q) &&

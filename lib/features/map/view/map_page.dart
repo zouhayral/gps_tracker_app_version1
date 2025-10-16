@@ -11,14 +11,18 @@ import 'package:my_app_gps/core/map/rebuild_profiler.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:my_app_gps/core/map/marker_cache.dart';
+import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/providers/vehicle_providers.dart';
+import 'package:my_app_gps/core/providers/connectivity_providers.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/data/granular_providers.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
-import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart';
-import 'package:my_app_gps/features/map/data/positions_live_provider.dart';
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
+import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
+import 'package:my_app_gps/core/diagnostics/performance_overlay.dart';
+import 'package:my_app_gps/core/diagnostics/performance_metrics_service.dart';
 
 // Clean rebuilt MapPage implementation
 // Features:
@@ -111,32 +115,54 @@ class _MapPageState extends ConsumerState<MapPage> {
   final _mapKey = GlobalKey<FlutterMapAdapterState>();
   bool _didAutoFocus = false;
   Timer? _preselectSnackTimer;
-  // Debounce helper for live positions
-  Timer? _positionsDebounceTimer;
-  Map<int, Position> _debouncedPositions = const <int, Position>{};
+  // MIGRATION NOTE: Removed _debouncedPositions - repository provides debouncing
   // Throttle camera fit operations to avoid rapid repeated moves (only for bounds fitting).
   final _fitThrottler = Throttler(const Duration(milliseconds: 300));
   // Track last selected device to detect changes
   int? _lastSelectedSingleDevice;
 
+  // OPTIMIZATION: ValueNotifier for marker updates (keeps FlutterMap static)
+  final _markersNotifier = ValueNotifier<List<MapMarkerData>>(const []);
+
   // Bottom panel snaps
   final List<double> _panelStops = const [0.05, 0.30, 0.50, 0.80];
   int _panelIndex = 1; // start at 30%
 
-  late ProviderSubscription<AsyncValue<Map<int, Position>>> _posSub;
+  // MIGRATION NOTE: Removed _posSub - VehicleDataRepository manages subscriptions
 
   @override
   void initState() {
     super.initState();
     _focusNode.addListener(() => setState(() {}));
 
-    // Eagerly initialize position providers to ensure WebSocket connects
+    // MIGRATION: Initialize VehicleDataRepository for cache-first startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // Initialize both providers (starts WebSocket + fetches from API)
-      ref
-        ..read(positionsLiveProvider)
-        ..read(positionsLastKnownProvider);
+      
+      // Get repository instance (starts WebSocket + REST fallback)
+      final repo = ref.read(vehicleDataRepositoryProvider);
+      
+      // Get device IDs to initialize
+      final devicesAsync = ref.read(devicesNotifierProvider);
+      final devices = devicesAsync.asData?.value ?? [];
+      final deviceIds = devices
+          .map((d) => d['id'] as int?)
+          .whereType<int>()
+          .toList();
+      
+      if (deviceIds.isNotEmpty) {
+        // Fetch from cache (instant) and trigger REST fetch (background)
+        repo.fetchMultipleDevices(deviceIds);
+        if (kDebugMode) {
+          debugPrint('[MapPage] Initialized repository with ${deviceIds.length} devices');
+        }
+      }
+      
+      // Register marker count supplier for performance overlay
+      final perfSvc = ref.read(performanceMetricsServiceProvider);
+      perfSvc.setMarkerCountSupplier(() => _markersNotifier.value.length);
+      // Start metrics service in debug mode
+      if (kDebugMode) perfSvc.start();
     });
 
     // Warm up FMTC asynchronously - do not await here to avoid blocking initState
@@ -146,26 +172,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       debugPrint('[FMTC] warmup error: $e');
     });
 
-    // Debounced positions: listen to the live stream and update a cached map
-    // on a timer to avoid rebuilding the entire map on every socket tick.
-    _positionsDebounceTimer = null;
-    _debouncedPositions = const <int, Position>{};
-    _posSub = ref.listenManual<AsyncValue<Map<int, Position>>>(
-      positionsLiveProvider,
-      (prev, next) {
-        final data = next.asData?.value;
-        _positionsDebounceTimer?.cancel();
-        if (data == null) {
-          // Keep previous debounced positions if stream yields null/loading
-          return;
-        }
-        _positionsDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-          setState(() {
-            _debouncedPositions = Map<int, Position>.unmodifiable(data);
-          });
-        });
-      },
-    );
+    // MIGRATION NOTE: Removed old positionsLiveProvider listening
+    // VehicleDataRepository handles WebSocket → Cache → Notifiers internally
 
     if (widget.preselectedIds != null && widget.preselectedIds!.isNotEmpty) {
       _selectedIds.addAll(widget.preselectedIds!);
@@ -193,12 +201,12 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   void dispose() {
-    _posSub.close();
+    // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
     _searchDebouncer.cancel();
-    _positionsDebounceTimer?.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
+    _markersNotifier.dispose(); // OPTIMIZATION: Clean up marker notifier
     super.dispose();
   }
 
@@ -318,25 +326,37 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Widget _buildMapContent() {
+    // PERFORMANCE: Track rebuilds for validation
+    if (kDebugMode) {
+      RebuildTracker.instance.trackRebuild('MapPage');
+    }
+    
     // Watch entire devices list only once; consider splitting into smaller providers later
     final devicesAsync = ref.watch(devicesNotifierProvider);
-  // Only watch the latest positions map value via ref.listen in initState to avoid rebuilds
-  ref.watch(positionsLiveProvider); // ensure provider is active
-    // Also watch last-known fallback to render markers when live map is empty
-    final lastKnownMap = ref.watch(
-      positionsLastKnownProvider.select((async) => async.asData?.value),
-    );
-  // Use marker cache and debounced positions (debounced map updated via ref.listen)
-  final markerCache = ref.watch(markerCacheProvider);
-  final debouncedPositions = _debouncedPositions;
+    
+    // MIGRATION: Repository-backed position watching (replaces positionsLiveProvider + positionsLastKnownProvider)
+    // Build positions map from per-device snapshots (cache-first, WebSocket updates)
+    final devices = devicesAsync.asData?.value ?? [];
+    final positions = <int, Position>{};
+    for (final device in devices) {
+      final deviceId = device['id'] as int?;
+      if (deviceId == null) continue;
+      
+      // Watch per-device position (cache-first, triggers on WebSocket updates)
+      final position = ref.watch(vehiclePositionProvider(deviceId));
+      if (position != null) {
+        positions[deviceId] = position;
+      }
+    }
+    
+    // Use marker cache to memoize marker creation
+    final markerCache = ref.watch(markerCacheProvider);
+    
     return Scaffold(
       body: SafeArea(
         child: devicesAsync.when(
           data: (devices) {
-            // Use debounced positions for smoother updates
-            final positions = debouncedPositions.isNotEmpty
-                ? debouncedPositions
-                : (lastKnownMap ?? const <int, Position>{});
+            // Use positions from repository snapshots (already built above)
             final q = _query.trim().toLowerCase();
             // Use marker cache to memoize marker creation
             final markers = markerCache.getMarkers(
@@ -345,6 +365,12 @@ class _MapPageState extends ConsumerState<MapPage> {
               _selectedIds,
               q,
             );
+
+            // OPTIMIZATION: Update ValueNotifier instead of setState for markers
+            // This keeps FlutterMap static and only rebuilds marker layer
+            if (_markersNotifier.value != markers) {
+              _markersNotifier.value = markers;
+            }
 
             // If exactly one device is selected, center to its position IMMEDIATELY
             if (_selectedIds.length == 1) {
@@ -479,7 +505,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                         onMarkerTap: _onMarkerTap,
                         onMapTap: _onMapTap,
                         tileProvider: ref.watch(_tileProviderProvider),
+                        markersNotifier: _markersNotifier, // OPTIMIZATION: Use ValueNotifier
                       ),
+                      // Performance overlay (debug only)
+                      const PerformanceOverlayWidget(),
                       if (kDebugMode) const FpsMonitor(),
                     ],
                   ),
@@ -684,8 +713,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                           } catch (_) {
                             // ignore device refresh errors here; UI will show via provider state
                           }
-                          // 2) Restart positions stream (re-subscribe to socket)
-                          ref.invalidate(positionsLiveProvider);
+                          // 2) Refresh repository (re-fetch positions from REST + reconnect WebSocket)
+                          final repo = ref.read(vehicleDataRepositoryProvider);
+                          final devices = ref.read(devicesNotifierProvider).asData?.value ?? [];
+                          final deviceIds = devices
+                              .map((d) => d['id'] as int?)
+                              .whereType<int>()
+                              .toList();
+                          if (deviceIds.isNotEmpty) {
+                            repo.fetchMultipleDevices(deviceIds);
+                          }
                         },
                       ),
                       const SizedBox(height: 10),
@@ -698,6 +735,16 @@ class _MapPageState extends ConsumerState<MapPage> {
                         disabled: _selectedIds.isEmpty,
                       ),
                     ],
+                  ),
+                ),
+                // Offline network banner (appears at top when network is offline)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: _OfflineBanner(
+                    networkState: ref.watch(networkStateProvider),
+                    connectionStatus: ref.watch(connectionStatusProvider),
                   ),
                 ),
                 // Bottom multi-snap panel
@@ -1444,6 +1491,79 @@ class _ConnectionStatusBadge extends StatelessWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Offline banner widget that appears when network is unavailable
+/// Shows connection status (offline/reconnecting/unstable)
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner({
+    required this.networkState,
+    required this.connectionStatus,
+  });
+
+  final NetworkState networkState;
+  final ConnectionStatus connectionStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    // Determine what to show based on network and connection status
+    final isOffline = networkState == NetworkState.offline;
+    final isReconnecting = connectionStatus == ConnectionStatus.reconnecting;
+    final isUnstable = connectionStatus == ConnectionStatus.unstable;
+
+    // Only show banner if offline, reconnecting, or unstable
+    if (!isOffline && !isReconnecting && !isUnstable) {
+      return const SizedBox.shrink();
+    }
+
+    // Determine banner properties
+    Color bgColor;
+    IconData icon;
+    String message;
+
+    if (isOffline) {
+      bgColor = Colors.red.shade700;
+      icon = Icons.cloud_off;
+      message = 'No network connection - Showing cached data';
+    } else if (isUnstable) {
+      bgColor = Colors.orange.shade700;
+      icon = Icons.warning;
+      message = 'Unstable connection - Reconnecting frequently';
+    } else {
+      // reconnecting
+      bgColor = Colors.orange;
+      icon = Icons.sync;
+      message = 'Reconnecting to server...';
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      color: bgColor,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
         ),
       ),
     );

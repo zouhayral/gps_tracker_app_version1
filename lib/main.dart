@@ -4,13 +4,27 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app_gps/app/app_root.dart';
+import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (kDebugMode || kProfileMode) {
     debugPrint('[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}');
+  }
+
+  // Initialize SharedPreferences for vehicle data cache
+  late final SharedPreferences prefs;
+  try {
+    prefs = await SharedPreferences.getInstance();
+    // ignore: avoid_print
+    print('[CACHE] SharedPreferences initialized');
+  } catch (e) {
+    // ignore: avoid_print
+    print('[CACHE][ERROR] Failed to init SharedPreferences: $e');
+    rethrow;
   }
 
   // Limit global image cache to reduce memory pressure on low-end devices.
@@ -81,9 +95,14 @@ Future<void> main() async {
       ),
     );
   };
+  
   runApp(
-    const ProviderScope(
-      child: MaterialApp(home: AppRoot(), debugShowCheckedModeBanner: false),
+    ProviderScope(
+      overrides: [
+        // Override SharedPreferences provider with initialized instance
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const MaterialApp(home: AppRoot(), debugShowCheckedModeBanner: false),
     ),
   );
 }

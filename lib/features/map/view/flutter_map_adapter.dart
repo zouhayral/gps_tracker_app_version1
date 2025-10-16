@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
@@ -7,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/view/map_marker.dart';
+import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 
 class FlutterMapAdapter extends StatefulWidget implements MapAdapter {
   const FlutterMapAdapter({
@@ -16,6 +18,7 @@ class FlutterMapAdapter extends StatefulWidget implements MapAdapter {
     this.onMarkerTap,
     this.onMapTap,
     this.tileProvider,
+    this.markersNotifier, // OPTIMIZATION: Use ValueNotifier for efficient marker updates
   });
 
   final TileProvider? tileProvider;
@@ -24,6 +27,10 @@ class FlutterMapAdapter extends StatefulWidget implements MapAdapter {
   final MapCameraFit cameraFit;
   final void Function(String markerId)? onMarkerTap;
   final VoidCallback? onMapTap;
+  
+  // OPTIMIZATION: When provided, use ValueListenableBuilder for marker layer
+  // This keeps FlutterMap itself static and only rebuilds markers
+  final ValueNotifier<List<MapMarkerData>>? markersNotifier;
 
   @override
   State<FlutterMapAdapter> createState() => FlutterMapAdapterState();
@@ -122,8 +129,63 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
     return point.latitude.abs() <= 90 && point.longitude.abs() <= 180;
   }
 
+  // Helper to build marker cluster layer - extracted for reuse
+  Widget _buildMarkerLayer(List<MapMarkerData> validMarkers) {
+    // PERFORMANCE: Track marker layer rebuilds (should be ONLY when positions change)
+    if (kDebugMode) {
+      RebuildTracker.instance.trackRebuild('MarkerLayer');
+    }
+    
+    return MarkerClusterLayerWidget(
+      options: MarkerClusterLayerOptions(
+        maxClusterRadius: 45,
+        size: const Size(36, 36),
+        markers: [
+          for (final m in validMarkers)
+            Marker(
+              key: ValueKey(m.id),
+              point: m.position,
+              width: 32,
+              height: 32,
+              child: Consumer(
+                builder: (context, ref, _) {
+                  return GestureDetector(
+                    key: ValueKey('mk_${m.id}'),
+                    onTap: () => widget.onMarkerTap?.call(m.id),
+                    child: MapMarkerWidget(
+                      deviceId: int.tryParse(m.id) ?? -1,
+                      isSelected: m.isSelected,
+                      key: ValueKey('marker_${m.id}_${m.isSelected}'),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+        builder: (context, markers) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.8),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              markers.length.toString(),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // PERFORMANCE: Track FlutterMap widget rebuilds (should be ZERO with ValueNotifier!)
+    if (kDebugMode) {
+      RebuildTracker.instance.trackRebuild('FlutterMapAdapter');
+    }
+    
     // Choose tile provider (only if tiles enabled)
     TileProvider? tileProvider;
     if (widget.tileProvider != null) {
@@ -157,57 +219,32 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
             tileProvider: tileProvider,
           ),
         // Defensive: only build cluster layer when we have valid markers
-        Builder(builder: (ctx) {
-          final validMarkers = widget.markers
-              .where((m) => _validLatLng(m.position))
-              .toList(growable: false);
-          if (validMarkers.isEmpty) {
-            // Avoid MarkerCluster null-crash when there are no valid points yet
-            debugPrint('[MAP] Skipping cluster render – no valid markers yet');
-            return const SizedBox.shrink();
-          }
-          return MarkerClusterLayerWidget(
-            options: MarkerClusterLayerOptions(
-              maxClusterRadius: 45,
-              size: const Size(36, 36),
-              markers: [
-                for (final m in validMarkers)
-                  Marker(
-                    key: ValueKey(m.id),
-                    point: m.position,
-                    width: 32,
-                    height: 32,
-                    child: Consumer(
-                      builder: (context, ref, _) {
-                        return GestureDetector(
-                          key: ValueKey('mk_${m.id}'),
-                          onTap: () => widget.onMarkerTap?.call(m.id),
-                          child: MapMarkerWidget(
-                            deviceId: int.tryParse(m.id) ?? -1,
-                            isSelected: m.isSelected,
-                            key: ValueKey('marker_${m.id}_${m.isSelected}'),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-              ],
-              builder: (context, markers) {
-                return Container(
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.8),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    markers.length.toString(),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                );
-              },
-            ),
-          );
-        }),
+        // OPTIMIZATION: Use ValueListenableBuilder to rebuild only markers, not entire map
+        if (widget.markersNotifier != null)
+          ValueListenableBuilder<List<MapMarkerData>>(
+            valueListenable: widget.markersNotifier!,
+            builder: (ctx, markers, _) {
+              final validMarkers = markers
+                  .where((m) => _validLatLng(m.position))
+                  .toList(growable: false);
+              if (validMarkers.isEmpty) {
+                debugPrint('[MAP] Skipping cluster render – no valid markers yet');
+                return const SizedBox.shrink();
+              }
+              return _buildMarkerLayer(validMarkers);
+            },
+          )
+        else
+          Builder(builder: (ctx) {
+            final validMarkers = widget.markers
+                .where((m) => _validLatLng(m.position))
+                .toList(growable: false);
+            if (validMarkers.isEmpty) {
+              debugPrint('[MAP] Skipping cluster render – no valid markers yet');
+              return const SizedBox.shrink();
+            }
+            return _buildMarkerLayer(validMarkers);
+          }),
         Positioned(
           right: 8,
           bottom: 8,

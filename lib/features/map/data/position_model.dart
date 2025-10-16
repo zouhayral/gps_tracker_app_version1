@@ -52,6 +52,24 @@ class Position {
           : <String, dynamic>{},
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'deviceId': deviceId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'speed': speed,
+      'course': course,
+      'altitude': altitude,
+      'accuracy': accuracy,
+      'valid': valid,
+      'address': address,
+      'deviceTime': deviceTime.toIso8601String(),
+      'serverTime': serverTime.toIso8601String(),
+      'attributes': attributes,
+    };
+  }
 }
 
 // (Freezed-based version removed for simplicity while bootstrapping.)
