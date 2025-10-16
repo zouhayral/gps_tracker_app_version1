@@ -1,10 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
-import 'package:my_app_gps/core/sync/adaptive_sync_manager.dart';
 import 'package:my_app_gps/core/services/background_sync_service.dart';
+import 'package:my_app_gps/core/sync/adaptive_sync_manager.dart';
 import 'package:my_app_gps/core/utils/motion_aware_helper.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 

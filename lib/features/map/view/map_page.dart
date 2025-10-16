@@ -1,28 +1,29 @@
 
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:my_app_gps/core/utils/timing.dart';
-import 'package:flutter/foundation.dart';
-import 'package:my_app_gps/services/fmtc_initializer.dart';
-import 'package:my_app_gps/core/map/fps_monitor.dart';
-import 'package:my_app_gps/core/map/rebuild_profiler.dart';
-import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:my_app_gps/core/map/marker_cache.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
-import 'package:my_app_gps/core/providers/vehicle_providers.dart';
+import 'package:my_app_gps/core/diagnostics/performance_metrics_service.dart';
+import 'package:my_app_gps/core/diagnostics/performance_overlay.dart';
+import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
+import 'package:my_app_gps/core/map/fps_monitor.dart';
+import 'package:my_app_gps/core/map/marker_cache.dart';
+import 'package:my_app_gps/core/map/rebuild_profiler.dart';
 import 'package:my_app_gps/core/providers/connectivity_providers.dart';
+import 'package:my_app_gps/core/providers/vehicle_providers.dart';
+import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/data/granular_providers.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
+import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
-import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
-import 'package:my_app_gps/core/diagnostics/performance_overlay.dart';
-import 'package:my_app_gps/core/diagnostics/performance_metrics_service.dart';
 
 // Clean rebuilt MapPage implementation
 // Features:

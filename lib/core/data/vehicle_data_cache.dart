@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Two-tier cache for vehicle data:
 /// - Hot cache (in-memory Map): Instant access

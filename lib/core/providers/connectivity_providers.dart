@@ -13,8 +13,7 @@
 //   // Watch network connectivity
 //   final networkState = ref.watch(networkStateProvider);
 
-export 'package:my_app_gps/core/services/reconnection_manager.dart' 
-    show reconnectionManagerProvider, connectionStatusProvider, ConnectionStatus;
-
 export 'package:my_app_gps/core/services/network_connectivity_monitor.dart'
     show networkConnectivityProvider, networkStateProvider, NetworkState;
+export 'package:my_app_gps/core/services/reconnection_manager.dart' 
+    show reconnectionManagerProvider, connectionStatusProvider, ConnectionStatus;

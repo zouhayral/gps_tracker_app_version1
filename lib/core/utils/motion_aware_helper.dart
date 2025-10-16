@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:my_app_gps/core/sync/adaptive_sync_manager.dart';
 import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
+import 'package:my_app_gps/core/sync/adaptive_sync_manager.dart';
 
 /// Helper class for motion-aware sync interval adjustment
 /// 

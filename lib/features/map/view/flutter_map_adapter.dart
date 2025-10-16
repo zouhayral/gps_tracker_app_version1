@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/view/map_marker.dart';
-import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 
 class FlutterMapAdapter extends StatefulWidget implements MapAdapter {
   const FlutterMapAdapter({

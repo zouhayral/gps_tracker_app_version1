@@ -1,9 +1,10 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app_gps/core/data/vehicle_data_cache.dart';
 import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
