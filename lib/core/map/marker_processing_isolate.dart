@@ -104,12 +104,17 @@ class MarkerProcessingIsolate {
   }
   
   /// Isolate entry point
+  /// Use vm entry-point pragma so this function remains reachable by the VM
+  /// when tree-shaking/minification is used in AOT builds.
+  @pragma('vm:entry-point')
   static void _isolateEntry(SendPort mainSendPort) {
     final isolateReceivePort = ReceivePort();
     mainSendPort.send(isolateReceivePort.sendPort);
     
     isolateReceivePort.listen((message) {
       if (message is _MarkerProcessingRequest) {
+        // Perform heavy marker diffing, identity and hashing inside the isolate
+        // so the main thread only receives the final marker list.
         final markers = _processMarkersSync(
           message.positions,
           message.devices,

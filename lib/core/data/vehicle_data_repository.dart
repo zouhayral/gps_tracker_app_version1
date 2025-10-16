@@ -85,18 +85,22 @@ class VehicleDataRepository {
   static const _restFallbackInterval = Duration(seconds: 10);
 
   void _init() {
-    // Pre-warm cache: Load all cached snapshots into notifiers for instant startup
+    // Defer WebSocket connection to avoid reading uninitialized providers
+    // Pre-warm cache synchronously (safe - only reads SharedPreferences)
     _prewarmCache();
 
-    // Subscribe to WebSocket updates (connect returns a stream)
-    _socketSub = socketService.connect().listen(_handleSocketMessage);
+    // Defer WebSocket subscription to after provider initialization completes
+    Future.microtask(() {
+      // Subscribe to WebSocket updates (connect returns a stream)
+      _socketSub = socketService.connect().listen(_handleSocketMessage);
 
-    // Start REST fallback timer
-    _startFallbackPolling();
+      // Start REST fallback timer
+      _startFallbackPolling();
 
-    if (kDebugMode) {
-      debugPrint('[VehicleRepo] Initialized');
-    }
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] Initialized with deferred WebSocket connection');
+      }
+    });
   }
 
   /// Pre-warm cache by loading all cached snapshots into notifiers
@@ -131,14 +135,166 @@ class VehicleDataRepository {
   }
 
   /// Handle incoming WebSocket messages
-  void _handleSocketMessage(TraccarSocketMessage msg) {
+  Future<void> _handleSocketMessage(TraccarSocketMessage msg) async {
     if (msg.type == 'connected') {
       _isWebSocketConnected = true;
       if (kDebugMode) {
         debugPrint('[VehicleRepo] WebSocket connected');
       }
-    } else if (msg.type == 'positions' && msg.positions != null) {
+      return;
+    }
+
+    // Standard positions payload (fast path)
+    if (msg.type == 'positions' && msg.positions != null) {
       _handlePositionUpdates(msg.positions!);
+      return;
+    }
+
+    // Events payload: may include positionId or deviceId and attributes (e.g., ignition)
+    if (msg.type == 'events' && msg.payload != null) {
+      try {
+        if (kDebugMode) debugPrint('[VehicleRepo][WS] events payload: ${msg.payload}');
+        final payload = msg.payload;
+        final List events = payload is List ? payload : [payload];
+        for (final e in events) {
+          if (e is Map<String, dynamic>) {
+            final posId = e['positionId'] as int?;
+            final deviceId = e['deviceId'] as int?;
+            if (kDebugMode) debugPrint('[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId');
+            // If event contains a positionId, fetch that position (likely contains attributes)
+            if (posId != null) {
+              try {
+                final p = await positionsService.latestByPositionId(posId);
+                if (p != null) {
+                  if (kDebugMode) debugPrint('[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}');
+                  _handlePositionUpdates([p]);
+                }
+              } catch (e) {
+                if (kDebugMode) debugPrint('[VehicleRepo] Failed to fetch position for positionId=$posId: $e');
+              }
+            }
+
+            // Apply attribute-only updates (ignition/motion) immediately
+            if (deviceId != null) {
+              final attrs = e['attributes'];
+              if (attrs is Map<String, dynamic>) {
+                final ignition = attrs['ignition'];
+                EngineState? engineState;
+                if (ignition is bool) {
+                  engineState = ignition ? EngineState.on : EngineState.off;
+                } else if (attrs['motion'] is bool && attrs['motion'] == true) {
+                  engineState = EngineState.on;
+                }
+                if (engineState != null) {
+                  final rawTime = (e['eventTime'] ?? e['serverTime'] ?? e['deviceTime']) as String?;
+                  DateTime ts;
+                  try {
+                    ts = rawTime != null ? DateTime.parse(rawTime).toUtc() : DateTime.now().toUtc();
+                  } catch (_) {
+                    ts = DateTime.now().toUtc();
+                  }
+                  // Ensure newer than any cached snapshot
+                  ts = ts.add(const Duration(milliseconds: 1));
+                  final partial = VehicleDataSnapshot(
+                    deviceId: deviceId,
+                    timestamp: ts,
+                    position: null,
+                    engineState: engineState,
+                    speed: null,
+                    distance: null,
+                    lastUpdate: ts,
+                    batteryLevel: null,
+                    fuelLevel: null,
+                  );
+                  if (kDebugMode) {
+                    debugPrint('[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts');
+                  }
+                  _updateDeviceSnapshot(partial);
+                }
+              }
+
+              // Also refresh device data if no positionId to keep other fields fresh
+              if (posId == null) {
+                _lastFetchTime.remove(deviceId);
+                if (kDebugMode) debugPrint('[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)');
+                _fetchDeviceData(deviceId);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('[VehicleRepo] Event handling error: $e');
+      }
+      return;
+    }
+
+    // Devices payload: updated device metadata or positionId may be present
+    if (msg.type == 'devices' && msg.payload != null) {
+      try {
+        if (kDebugMode) debugPrint('[VehicleRepo][WS] devices payload: ${msg.payload}');
+        final payload = msg.payload;
+        final List devices = payload is List ? payload : [payload];
+        for (final d in devices) {
+          if (d is Map<String, dynamic>) {
+            final posId = d['positionId'] as int?;
+            final deviceId = d['id'] as int?;
+            if (kDebugMode) debugPrint('[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
+            if (posId != null) {
+              try {
+                final p = await positionsService.latestByPositionId(posId);
+                if (p != null) {
+                  if (kDebugMode) debugPrint('[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}');
+                  _handlePositionUpdates([p]);
+                }
+              } catch (e) {
+                if (kDebugMode) debugPrint('[VehicleRepo] Failed to fetch position for device update posId=$posId: $e');
+              }
+            }
+
+            if (deviceId != null) {
+              // Apply attribute-only ignition updates from device payload if present
+              final attrs = d['attributes'];
+              if (attrs is Map<String, dynamic>) {
+                final ignition = attrs['ignition'];
+                EngineState? engineState;
+                if (ignition is bool) {
+                  engineState = ignition ? EngineState.on : EngineState.off;
+                } else if (attrs['motion'] is bool && attrs['motion'] == true) {
+                  engineState = EngineState.on;
+                }
+                if (engineState != null) {
+                  final ts = DateTime.now().toUtc().add(const Duration(milliseconds: 1));
+                  final partial = VehicleDataSnapshot(
+                    deviceId: deviceId,
+                    timestamp: ts,
+                    position: null,
+                    engineState: engineState,
+                    speed: null,
+                    distance: null,
+                    lastUpdate: ts,
+                    batteryLevel: null,
+                    fuelLevel: null,
+                  );
+                  if (kDebugMode) {
+                    debugPrint('[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts');
+                  }
+                  _updateDeviceSnapshot(partial);
+                }
+              }
+
+              // Refresh device data if no positionId to keep other fields fresh
+              if (posId == null) {
+                if (kDebugMode) debugPrint('[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)');
+                _lastFetchTime.remove(deviceId);
+                _fetchDeviceData(deviceId);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('[VehicleRepo] Devices handling error: $e');
+      }
+      return;
     }
   }
 
@@ -163,14 +319,41 @@ class VehicleDataRepository {
 
   /// Update cache and notify listeners for a device
   void _updateDeviceSnapshot(VehicleDataSnapshot snapshot) {
+    if (kDebugMode) {
+      final existing = _notifiers[snapshot.deviceId]?.value;
+      debugPrint('[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}');
+      debugPrint('[VehicleRepo]   incoming: ${snapshot}');
+      debugPrint('[VehicleRepo]   existing: ${existing}');
+      
+      // Log engine state changes explicitly
+      if (snapshot.engineState != null && snapshot.engineState != existing?.engineState) {
+        debugPrint('[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}');
+      }
+    }
+
     // Update cache
     cache.put(snapshot);
 
-    // Notify listeners
+    // Get or create notifier
     final notifier = _notifiers[snapshot.deviceId];
     if (notifier != null) {
       final existing = notifier.value;
-      notifier.value = existing?.merge(snapshot) ?? snapshot;
+      final merged = existing?.merge(snapshot) ?? snapshot;
+      
+      // CRITICAL: Always create a new object reference to trigger ValueNotifier updates
+      // Even if values are the same, ValueNotifier needs a new reference to notify
+      notifier.value = merged;
+      
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo]   merged: ${merged}');
+        debugPrint('[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
+      }
+    } else {
+      // Create new notifier if it doesn't exist
+      _notifiers[snapshot.deviceId] = ValueNotifier<VehicleDataSnapshot?>(snapshot);
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}');
+      }
     }
   }
 
@@ -239,7 +422,35 @@ class VehicleDataRepository {
       }
 
       if (position != null) {
-        final snapshot = VehicleDataSnapshot.fromPosition(position);
+        var snapshot = VehicleDataSnapshot.fromPosition(position);
+        // Overlay engine state from device attributes if present
+        final devAttrs = (device['attributes'] is Map)
+            ? Map<String, dynamic>.from(device['attributes'])
+            : const <String, dynamic>{};
+        final ign = devAttrs['ignition'];
+        EngineState? engineState;
+        if (ign is bool) {
+          engineState = ign ? EngineState.on : EngineState.off;
+        } else if (devAttrs['motion'] is bool && devAttrs['motion'] == true) {
+          engineState = EngineState.on;
+        }
+        if (engineState != null && engineState != snapshot.engineState) {
+          // Bump timestamp slightly so merge prefers this snapshot
+          snapshot = VehicleDataSnapshot(
+            deviceId: snapshot.deviceId,
+            timestamp: snapshot.timestamp.add(const Duration(milliseconds: 1)),
+            position: snapshot.position,
+            engineState: engineState,
+            speed: snapshot.speed,
+            distance: snapshot.distance,
+            lastUpdate: snapshot.lastUpdate,
+            batteryLevel: snapshot.batteryLevel,
+            fuelLevel: snapshot.fuelLevel,
+          );
+          if (kDebugMode) {
+            debugPrint('[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState');
+          }
+        }
         _updateDeviceSnapshot(snapshot);
       }
     } catch (e) {

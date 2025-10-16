@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/diagnostics/frame_metrics_logger.dart';
+import 'package:my_app_gps/core/diagnostics/diagnostics_config.dart';
 
 /// Provider to toggle overlay visibility/logging
 final performanceOverlayEnabledProvider = StateProvider<bool>((ref) => true);
@@ -49,8 +50,23 @@ class PerformanceMetricsService {
     if (!inWidgetTest) {
       _sampleTimer = Timer.periodic(sampleInterval, (_) => _sample());
 
-      // CSV exporter
-      _csvTimer = Timer.periodic(csvInterval, (_) => _exportCsv());
+      // CSV exporter: only run on desktop platforms to avoid writing into
+      // mobile sandboxed file systems which may throw FileSystemException.
+      _csvTimer = Timer.periodic(csvInterval, (_) async {
+        try {
+          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+            await _exportCsv();
+          } else {
+              if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+                debugPrint('[PerfMetrics] Skipping CSV export on mobile (sandboxed FS)');
+              }
+          }
+        } catch (e) {
+            if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+              debugPrint('[PerfMetrics] CSV export skipped/error: $e');
+            }
+        }
+      });
     } else {
       // In tests, do a one-off sample so the UI can read something without scheduling timers
       _sample();
@@ -103,7 +119,9 @@ class PerformanceMetricsService {
       final snap = _collectSnapshot();
       latestMetrics.value = Map<String, dynamic>.from(snap);
     } catch (e, st) {
-      debugPrint('[PerfMetrics] sample error: $e');
+        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+          debugPrint('[PerfMetrics] sample error: $e');
+        }
       if (kDebugMode) debugPrintStack(stackTrace: st);
     }
   }
@@ -119,9 +137,13 @@ class PerformanceMetricsService {
         await file.writeAsString(_csvHeader() + '\n');
       }
       await file.writeAsString(csvLine + '\n', mode: FileMode.append);
-      debugPrint('[PerfMetrics] CSV row appended');
+        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+          debugPrint('[PerfMetrics] CSV row appended');
+        }
     } catch (e, st) {
-      debugPrint('[PerfMetrics] export error: $e');
+        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+          debugPrint('[PerfMetrics] export error: $e');
+        }
       if (kDebugMode) debugPrintStack(stackTrace: st);
     }
   }
@@ -182,7 +204,9 @@ class PerformanceMetricsService {
       await file.writeAsString(jsonEncode(snap));
       return file;
     } catch (e) {
-      debugPrint('[PerfMetrics] exportJson error: $e');
+        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+          debugPrint('[PerfMetrics] exportJson error: $e');
+        }
       return null;
     }
   }

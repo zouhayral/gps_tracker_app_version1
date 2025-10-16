@@ -102,7 +102,11 @@ Future<void> main() async {
         // Override SharedPreferences provider with initialized instance
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
-      child: const MaterialApp(home: AppRoot(), debugShowCheckedModeBanner: false),
+      // Ensure performance overlay is disabled unless explicitly enabled by the user
+      child: Builder(builder: (context) {
+        WidgetsApp.showPerformanceOverlayOverride = false;
+        return const MaterialApp(home: AppRoot(), debugShowCheckedModeBanner: false, showPerformanceOverlay: false);
+      }),
     ),
   );
 }

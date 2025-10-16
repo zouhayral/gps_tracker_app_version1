@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:my_app_gps/core/diagnostics/diagnostics_config.dart';
 
 /// Frame timing summarizer for identifying widget tree bottlenecks
 /// Collects frame timing data and reports slow frames
@@ -31,7 +32,7 @@ class FrameTimingSummarizer {
     // Start listening to frame timings
     SchedulerBinding.instance.addTimingsCallback(_onFrameTiming);
     
-    if (kDebugMode) {
+    if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
       debugPrint('[FrameTiming] Enabled - monitoring for slow frames');
     }
   }
@@ -43,7 +44,7 @@ class FrameTimingSummarizer {
     _isEnabled = false;
     SchedulerBinding.instance.removeTimingsCallback(_onFrameTiming);
     
-    if (kDebugMode) {
+    if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
       debugPrint('[FrameTiming] Disabled');
     }
   }
@@ -64,7 +65,7 @@ class FrameTimingSummarizer {
       if (totalDuration > _slowFrameThreshold) {
         _slowFrameCount++;
         
-        if (kDebugMode && totalDuration > _jankyFrameThreshold) {
+        if (kDebugMode && DiagnosticsConfig.enablePerfLogs && totalDuration > _jankyFrameThreshold) {
           debugPrint(
             '[FrameTiming] JANKY FRAME detected! '
             'Build: ${buildDuration.inMicroseconds / 1000}ms, '
@@ -78,6 +79,15 @@ class FrameTimingSummarizer {
       _recentFrames.add(timing);
       if (_recentFrames.length > _maxFrameHistory) {
         _recentFrames.removeAt(0);
+      }
+      // Log periodic summaries (every 120 frames) instead of printing per-frame
+      // to avoid console jank. 120 frames ≈ 2 seconds at 60fps.
+      if (_totalFrameCount % 120 == 0) {
+        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+          // Print a compact stats summary every 120 frames
+          debugPrint('[FrameTiming] Summary (every 120 frames):');
+          printStats();
+        }
       }
     }
   }
@@ -136,7 +146,7 @@ class FrameTimingSummarizer {
   /// Print current statistics
   void printStats() {
     final stats = getStats();
-    if (kDebugMode) {
+    if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
       debugPrint('''
 [FrameTiming] Statistics:
   Total Frames: ${stats.totalFrameCount}

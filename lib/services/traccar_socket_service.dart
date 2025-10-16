@@ -114,6 +114,13 @@ class TraccarSocketService {
   void _onData(dynamic data) {
     try {
       final text = data is String ? data : utf8.decode(data as List<int>);
+      
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[SOCKET] 📨 RAW WebSocket message received:');
+        print('[SOCKET] ${text.length > 500 ? '${text.substring(0, 500)}...' : text}');
+      }
+      
       final jsonObj = jsonDecode(text);
       if (jsonObj is Map<String, dynamic>) {
         // positions
@@ -127,6 +134,9 @@ class TraccarSocketService {
           if (kDebugMode) {
             // ignore: avoid_print
             print('[SOCKET] 📍 Received ${positions.length} positions from WebSocket');
+            for (final pos in positions) {
+              print('[SOCKET]   Device ${pos.deviceId}: ignition=${pos.attributes['ignition']}, speed=${pos.speed}');
+            }
           }
           _controller?.add(TraccarSocketMessage.positions(positions));
         }
@@ -135,6 +145,7 @@ class TraccarSocketService {
           if (kDebugMode) {
             // ignore: avoid_print
             print('[SOCKET] 🔔 Received events from WebSocket');
+            print('[SOCKET] Events payload: ${jsonObj['events']}');
           }
           _controller?.add(TraccarSocketMessage.events(jsonObj['events']));
         }
@@ -143,6 +154,7 @@ class TraccarSocketService {
           if (kDebugMode) {
             // ignore: avoid_print
             print('[SOCKET] 📱 Received device updates from WebSocket');
+            print('[SOCKET] Devices payload: ${jsonObj['devices']}');
           }
           _controller?.add(TraccarSocketMessage.devices(jsonObj['devices']));
         }

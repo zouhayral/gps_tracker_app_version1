@@ -21,5 +21,8 @@ final deviceByIdProvider = Provider.family<Map<String, dynamic>?, int>((
 // MIGRATION: Now uses vehiclePositionProvider from VehicleDataRepository
 // Provides cache-first, WebSocket-updated position for a single device
 final positionByDeviceProvider = Provider.family<Position?, int>((ref, id) {
-  return ref.watch(vehiclePositionProvider(id));
+  // vehiclePositionProvider is now a StreamProvider, so we get AsyncValue
+  final asyncPosition = ref.watch(vehiclePositionProvider(id));
+  // Extract value or return null if loading/error
+  return asyncPosition.valueOrNull;
 });

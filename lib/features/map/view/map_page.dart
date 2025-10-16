@@ -9,9 +9,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/diagnostics/frame_timing_summarizer.dart';
 import 'package:my_app_gps/core/diagnostics/performance_metrics_service.dart';
-import 'package:my_app_gps/core/diagnostics/performance_overlay.dart';
 import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
-import 'package:my_app_gps/core/map/fps_monitor.dart';
 import 'package:my_app_gps/core/map/marker_cache.dart';
 import 'package:my_app_gps/core/map/marker_processing_isolate.dart';
 import 'package:my_app_gps/core/map/rebuild_profiler.dart';
@@ -24,6 +22,7 @@ import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/data/granular_providers.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
+import 'package:my_app_gps/features/map/view/map_page_lifecycle_mixin.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
 
@@ -63,7 +62,12 @@ Map<int, Position> useDebouncedPositions(AsyncValue<Map<int, Position>> position
 
 /// Debug toggles for map page (safe defaults: all off)
 class MapDebugFlags {
-  static bool showRebuildOverlay = false; // enable to show rebuild counters overlay
+  // Toggle to show rebuild counters overlay (console + UI)
+  static const bool showRebuildOverlay = false;
+  // Toggle to enable frame timing summarizer logs
+  static const bool enableFrameTiming = false;
+  // Toggle to enable PerformanceMetricsService (FPS/Jank logs, CSV, etc.)
+  static const bool enablePerfMetrics = false;
 }
 
 // Simple rebuild badge for profiling; increments an internal counter each build.
@@ -102,9 +106,12 @@ class MapPage extends ConsumerStatefulWidget {
   ConsumerState<MapPage> createState() => _MapPageState();
 }
 
-class _MapPageState extends ConsumerState<MapPage> {
+class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, MapPageLifecycleMixin<MapPage> {
   // Selection
   final Set<int> _selectedIds = <int>{};
+  
+  @override
+  List<int> get activeDeviceIds => _selectedIds.toList();
 
   // Search / suggestions gating
   final _searchCtrl = TextEditingController();
@@ -131,16 +138,20 @@ class _MapPageState extends ConsumerState<MapPage> {
   final List<double> _panelStops = const [0.05, 0.30, 0.50, 0.80];
   int _panelIndex = 1; // start at 30%
 
+  // Refresh state
+  bool _isRefreshing = false;
+
   // MIGRATION NOTE: Removed _posSub - VehicleDataRepository manages subscriptions
 
   @override
   void initState() {
     super.initState();
     
-    // OPTIMIZATION: Initialize throttled marker notifier (50ms throttle)
+    // OPTIMIZATION: Initialize throttled marker notifier
+    // Raised throttle to 80ms to reduce UI thread load
     _markersNotifier = ThrottledValueNotifier<List<MapMarkerData>>(
       const [],
-      throttleDuration: const Duration(milliseconds: 50),
+      throttleDuration: const Duration(milliseconds: 80),
     );
     
     _focusNode.addListener(() => setState(() {}));
@@ -152,14 +163,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       // OPTIMIZATION: Initialize background marker processing isolate
       await MarkerProcessingIsolate.instance.initialize();
       
-      // OPTIMIZATION: Enable frame timing monitoring in debug/profile mode
-      if (kDebugMode || kProfileMode) {
+      // OPTIMIZATION: Frame timing monitoring (disabled by default)
+      if (MapDebugFlags.enableFrameTiming) {
         FrameTimingSummarizer.instance.enable();
-        // Print stats every 5 seconds
-        Timer.periodic(const Duration(seconds: 5), (_) {
-          if (!mounted) return;
-          FrameTimingSummarizer.instance.printStats();
-        });
       }
       
       // Get repository instance (starts WebSocket + REST fallback)
@@ -181,11 +187,12 @@ class _MapPageState extends ConsumerState<MapPage> {
         }
       }
       
-      // Register marker count supplier for performance overlay
-      final perfSvc = ref.read(performanceMetricsServiceProvider);
-      perfSvc.setMarkerCountSupplier(() => _markersNotifier.value.length);
-      // Start metrics service in debug mode
-      if (kDebugMode) perfSvc.start();
+      // Register marker count supplier for performance overlay (disabled by default)
+      if (MapDebugFlags.enablePerfMetrics) {
+        final perfSvc = ref.read(performanceMetricsServiceProvider);
+        perfSvc.setMarkerCountSupplier(() => _markersNotifier.value.length);
+        perfSvc.start();
+      }
     });
 
     // Warm up FMTC asynchronously - do not await here to avoid blocking initState
@@ -232,7 +239,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     _markersNotifier.dispose(); // OPTIMIZATION: Clean up throttled marker notifier
     
     // OPTIMIZATION: Cleanup frame timing and marker isolate
-    if (kDebugMode || kProfileMode) {
+    if (MapDebugFlags.enableFrameTiming) {
       FrameTimingSummarizer.instance.disable();
     }
     MarkerProcessingIsolate.instance.dispose();
@@ -251,6 +258,10 @@ class _MapPageState extends ConsumerState<MapPage> {
     String query,
   ) async {
     try {
+      if (kDebugMode) {
+        debugPrint('[MapPage] Processing ${positions.length} positions for markers...');
+      }
+      
       // Use background isolate for marker processing (200+ markers)
       final markers = await MarkerProcessingIsolate.instance.processMarkers(
         positions,
@@ -259,13 +270,19 @@ class _MapPageState extends ConsumerState<MapPage> {
         query,
       );
       
-      // Update throttled notifier (automatically throttles if updates <50ms apart)
+      // Update throttled notifier (automatically throttles if updates <80ms apart)
       if (_markersNotifier.value != markers) {
+        if (kDebugMode) {
+          debugPrint('[MapPage] ✅ Markers updated: ${markers.length} markers');
+          // Log first 3 marker IDs for debugging
+          final sampleIds = markers.take(3).map((m) => m.id).join(', ');
+          debugPrint('[MapPage] Sample marker IDs: $sampleIds');
+        }
         _markersNotifier.value = markers;
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[MapPage] Marker processing error: $e');
+        debugPrint('[MapPage] ❌ Marker processing error: $e');
       }
     }
   }
@@ -289,6 +306,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   void _onMarkerTap(String id) {
     final n = int.tryParse(id);
     if (n == null) return;
+
+    // Trigger fresh fetch for this device immediately
+    refreshDevice(n);
 
     // Optimized: Get position data BEFORE setState to trigger immediate camera move
     final position = ref.read(positionByDeviceProvider(n));
@@ -371,8 +391,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   Widget build(BuildContext context) {
     Widget content = _buildMapContent();
     
-    // Add performance profiling in debug/profile mode
-    if (kDebugMode || kProfileMode) {
+    // Add performance profiling overlay (disabled by default)
+    if (MapDebugFlags.showRebuildOverlay) {
       content = RebuildProfilerOverlay(
         child: RebuildCounter(
           name: 'FlutterMap',
@@ -385,8 +405,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Widget _buildMapContent() {
-    // PERFORMANCE: Track rebuilds for validation
-    if (kDebugMode) {
+    // PERFORMANCE: Track rebuilds for validation (disabled by default)
+    if (MapDebugFlags.showRebuildOverlay) {
       RebuildTracker.instance.trackRebuild('MapPage');
     }
     
@@ -402,7 +422,9 @@ class _MapPageState extends ConsumerState<MapPage> {
       if (deviceId == null) continue;
       
       // Watch per-device position (cache-first, triggers on WebSocket updates)
-      final position = ref.watch(vehiclePositionProvider(deviceId));
+      // vehiclePositionProvider is now StreamProvider, so get AsyncValue and extract value
+      final asyncPosition = ref.watch(vehiclePositionProvider(deviceId));
+      final position = asyncPosition.valueOrNull;
       if (position != null) {
         positions[deviceId] = position;
       }
@@ -558,9 +580,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                         tileProvider: ref.watch(_tileProviderProvider),
                         markersNotifier: _markersNotifier, // OPTIMIZATION: Use throttled ValueNotifier
                       ),
-                      // Performance overlay (debug only)
-                      const PerformanceOverlayWidget(),
-                      if (kDebugMode) const FpsMonitor(),
+                      // Performance overlay removed for production
                     ],
                   ),
                 ),
@@ -755,24 +775,54 @@ class _MapPageState extends ConsumerState<MapPage> {
                       _ActionButton(
                         icon: Icons.refresh,
                         tooltip: 'Refresh data',
+                        isLoading: _isRefreshing,
                         onTap: () async {
-                          // 1) Refresh static data from Traccar (devices list)
+                          if (_isRefreshing) return;
+                          
+                          setState(() => _isRefreshing = true);
+                          
                           try {
+                            // 1) Refresh static data from Traccar (devices list)
                             await ref
                                 .read(devicesNotifierProvider.notifier)
                                 .refresh();
-                          } catch (_) {
-                            // ignore device refresh errors here; UI will show via provider state
-                          }
-                          // 2) Refresh repository (re-fetch positions from REST + reconnect WebSocket)
-                          final repo = ref.read(vehicleDataRepositoryProvider);
-                          final devices = ref.read(devicesNotifierProvider).asData?.value ?? [];
-                          final deviceIds = devices
-                              .map((d) => d['id'] as int?)
-                              .whereType<int>()
-                              .toList();
-                          if (deviceIds.isNotEmpty) {
-                            repo.fetchMultipleDevices(deviceIds);
+                            
+                            // 2) Refresh repository (re-fetch positions from REST + reconnect WebSocket)
+                            final repo = ref.read(vehicleDataRepositoryProvider);
+                            final devices = ref.read(devicesNotifierProvider).asData?.value ?? [];
+                            final deviceIds = devices
+                                .map((d) => d['id'] as int?)
+                                .whereType<int>()
+                                .toList();
+                            
+                            if (deviceIds.isNotEmpty) {
+                              repo.refreshAll();
+                              await repo.fetchMultipleDevices(deviceIds);
+                            }
+                            
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Data refreshed successfully'),
+                                  duration: Duration(seconds: 2),
+                                  backgroundColor: Color(0xFFA6CD27),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Refresh failed: ${e.toString()}'),
+                                  duration: const Duration(seconds: 3),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(() => _isRefreshing = false);
+                            }
                           }
                         },
                       ),
@@ -1092,27 +1142,39 @@ class _ActionButton extends StatelessWidget {
     required this.tooltip,
     this.onTap,
     this.disabled = false,
+    this.isLoading = false,
   });
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
   final bool disabled;
+  final bool isLoading;
+  
   @override
   Widget build(BuildContext context) {
-  final bg = disabled ? Colors.white.withValues(alpha: 0.6) : Colors.white;
+    final bg = disabled ? Colors.white.withValues(alpha: 0.6) : Colors.white;
     final fg = disabled ? Colors.black26 : Colors.black87;
     return Material(
       color: bg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 4,
       child: InkWell(
-        onTap: disabled ? null : onTap,
+        onTap: disabled || isLoading ? null : onTap,
         borderRadius: BorderRadius.circular(18),
         child: Tooltip(
           message: tooltip,
           child: Padding(
             padding: const EdgeInsets.all(10),
-            child: Icon(icon, size: 22, color: fg),
+            child: isLoading
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(fg),
+                    ),
+                  )
+                : Icon(icon, size: 22, color: fg),
           ),
         ),
       ),

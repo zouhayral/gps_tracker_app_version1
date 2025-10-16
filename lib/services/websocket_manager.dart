@@ -55,9 +55,16 @@ class WebSocketManager extends Notifier<WebSocketState> {
   @override
   WebSocketState build() {
     _controller = StreamController<Map<String, dynamic>>.broadcast();
+    
+    // Defer connection to after build completes to avoid reading uninitialized providers
     if (!testMode) {
-      _connect();
+      Future.microtask(() {
+        if (!_disposed) {
+          _connect();
+        }
+      });
     }
+    
     ref.onDispose(_dispose);
     ref.keepAlive();
     return const WebSocketState(status: WebSocketStatus.connecting);

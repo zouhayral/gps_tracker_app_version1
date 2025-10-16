@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:my_app_gps/core/diagnostics/diagnostics_config.dart';
 
 class RebuildProfilerOverlay extends StatefulWidget {
   const RebuildProfilerOverlay({
@@ -24,7 +25,7 @@ class _RebuildProfilerOverlayState extends State<RebuildProfilerOverlay> {
   @override
   void initState() {
     super.initState();
-    if (kDebugMode) {
+    if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
       _initTimers();
     }
   }
@@ -35,12 +36,14 @@ class _RebuildProfilerOverlayState extends State<RebuildProfilerOverlay> {
 
     // Log stats every 5 seconds
     _logTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      final stats = _stats.snapshot;
-      debugPrint(
-        '[PERF] Avg FPS: ${stats.avgFps.toStringAsFixed(1)}, '
-        'frame time: ${stats.avgFrameTime.toStringAsFixed(1)}ms, '
-        'dropped: ${stats.droppedFrames}',
-      );
+      if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+        final stats = _stats.snapshot;
+        debugPrint(
+          '[PERF] Avg FPS: ${stats.avgFps.toStringAsFixed(1)}, '
+          'frame time: ${stats.avgFrameTime.toStringAsFixed(1)}ms, '
+          'dropped: ${stats.droppedFrames}',
+        );
+      }
     });
 
     // Reset stats every 5 seconds to keep moving average
@@ -65,7 +68,7 @@ class _RebuildProfilerOverlayState extends State<RebuildProfilerOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return widget.child;
+  if (!kDebugMode) return widget.child;
 
     return Stack(
       children: [
@@ -197,7 +200,7 @@ class _RebuildCounterState extends State<RebuildCounter> {
 
   @override
   Widget build(BuildContext context) {
-    if (kDebugMode) {
+    if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
       _rebuilds++;
       final now = DateTime.now();
       if (_lastRebuild != null) {

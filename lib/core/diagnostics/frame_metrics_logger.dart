@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:my_app_gps/core/diagnostics/diagnostics_config.dart';
 
 /// Lightweight frame metrics logger for performance validation
 /// 
@@ -44,7 +45,9 @@ class FrameMetricsLogger {
     _startTime = DateTime.now();
     
     SchedulerBinding.instance.addTimingsCallback(_onFrameTiming);
-    debugPrint('[FrameMetrics] ✅ Started collecting metrics');
+    if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+      debugPrint('[FrameMetrics] ✅ Started collecting metrics');
+    }
   }
   
   /// Stop collecting frame metrics
@@ -56,7 +59,9 @@ class FrameMetricsLogger {
     
     _isRunning = false;
     SchedulerBinding.instance.removeTimingsCallback(_onFrameTiming);
-    debugPrint('[FrameMetrics] ⏹️  Stopped collecting metrics');
+    if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+      debugPrint('[FrameMetrics] ⏹️  Stopped collecting metrics');
+    }
   }
   
   /// Callback for frame timings
@@ -76,7 +81,7 @@ class FrameMetricsLogger {
       // Detect jank (frame took longer than target)
       if (totalTime > _jankThreshold) {
         _jankCount++;
-        if (kDebugMode) {
+        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
           debugPrint('[FrameMetrics] ⚠️  JANK: ${totalTime.toStringAsFixed(2)}ms (build: ${buildTime.toStringAsFixed(2)}ms, raster: ${rasterTime.toStringAsFixed(2)}ms)');
         }
       }
@@ -150,44 +155,48 @@ class FrameMetricsLogger {
     
     final elapsed = elapsedTime.inMilliseconds / 1000.0;
     
-    debugPrint('');
-    debugPrint('╔═══════════════════════════════════════════════════════════╗');
-    debugPrint('║           FRAME METRICS SUMMARY                           ║');
-    debugPrint('╠═══════════════════════════════════════════════════════════╣');
-    debugPrint('║ Duration:        ${elapsed.toStringAsFixed(1)}s');
-    debugPrint('║ Total Frames:    $totalFrames');
-    debugPrint('║ Avg Frame Time:  ${averageFrameTime.toStringAsFixed(2)} ms');
-    debugPrint('║ Min Frame Time:  ${minFrameTime.toStringAsFixed(2)} ms');
-    debugPrint('║ Max Frame Time:  ${maxFrameTime.toStringAsFixed(2)} ms');
-    debugPrint('║ P95 Frame Time:  ${p95FrameTime.toStringAsFixed(2)} ms');
-    debugPrint('║ P99 Frame Time:  ${p99FrameTime.toStringAsFixed(2)} ms');
-    debugPrint('║ Estimated FPS:   ${estimatedFps.toStringAsFixed(1)}');
-    debugPrint('╠═══════════════════════════════════════════════════════════╣');
-    debugPrint('║ Jank Frames:     $_jankCount/${_buildTimes.length} (${jankPercentage.toStringAsFixed(1)}%)');
-    debugPrint('║ Jank Threshold:  ${_jankThreshold.toStringAsFixed(2)} ms (60 FPS target)');
-    debugPrint('╠═══════════════════════════════════════════════════════════╣');
-    
-    if (jankPercentage < 1.0) {
-      debugPrint('║ Status: ✅ EXCELLENT - Smooth performance                  ║');
-    } else if (jankPercentage < 5.0) {
-      debugPrint('║ Status: ✅ GOOD - Minor jank detected                      ║');
-    } else if (jankPercentage < 10.0) {
-      debugPrint('║ Status: ⚠️  WARNING - Noticeable jank                      ║');
-    } else {
-      debugPrint('║ Status: ❌ POOR - Significant performance issues           ║');
+    if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+      debugPrint('');
+      debugPrint('╔═══════════════════════════════════════════════════════════╗');
+      debugPrint('║           FRAME METRICS SUMMARY                           ║');
+      debugPrint('╠═══════════════════════════════════════════════════════════╣');
+      debugPrint('║ Duration:        ${elapsed.toStringAsFixed(1)}s');
+      debugPrint('║ Total Frames:    $totalFrames');
+      debugPrint('║ Avg Frame Time:  ${averageFrameTime.toStringAsFixed(2)} ms');
+      debugPrint('║ Min Frame Time:  ${minFrameTime.toStringAsFixed(2)} ms');
+      debugPrint('║ Max Frame Time:  ${maxFrameTime.toStringAsFixed(2)} ms');
+      debugPrint('║ P95 Frame Time:  ${p95FrameTime.toStringAsFixed(2)} ms');
+      debugPrint('║ P99 Frame Time:  ${p99FrameTime.toStringAsFixed(2)} ms');
+      debugPrint('║ Estimated FPS:   ${estimatedFps.toStringAsFixed(1)}');
+      debugPrint('╠═══════════════════════════════════════════════════════════╣');
+      debugPrint('║ Jank Frames:     $_jankCount/${_buildTimes.length} (${jankPercentage.toStringAsFixed(1)}%)');
+      debugPrint('║ Jank Threshold:  ${_jankThreshold.toStringAsFixed(2)} ms (60 FPS target)');
+      debugPrint('╠═══════════════════════════════════════════════════════════╣');
+      
+      if (jankPercentage < 1.0) {
+        debugPrint('║ Status: ✅ EXCELLENT - Smooth performance                  ║');
+      } else if (jankPercentage < 5.0) {
+        debugPrint('║ Status: ✅ GOOD - Minor jank detected                      ║');
+      } else if (jankPercentage < 10.0) {
+        debugPrint('║ Status: ⚠️  WARNING - Noticeable jank                      ║');
+      } else {
+        debugPrint('║ Status: ❌ POOR - Significant performance issues           ║');
+      }
+      
+      debugPrint('╚═══════════════════════════════════════════════════════════╝');
+      debugPrint('');
+      
+      // One-line summary for quick validation
+      debugPrint('[FrameMetrics] Frame avg: ${averageFrameTime.toStringAsFixed(1)} ms | Jank: $_jankCount/$totalFrames | FPS: ${estimatedFps.toStringAsFixed(1)}');
     }
-    
-    debugPrint('╚═══════════════════════════════════════════════════════════╝');
-    debugPrint('');
-    
-    // One-line summary for quick validation
-    debugPrint('[FrameMetrics] Frame avg: ${averageFrameTime.toStringAsFixed(1)} ms | Jank: $_jankCount/$totalFrames | FPS: ${estimatedFps.toStringAsFixed(1)}');
   }
   
   /// Print compact summary (one line)
   void printCompactSummary() {
     if (_buildTimes.isEmpty) {
-      debugPrint('[FrameMetrics] No data');
+      if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+        debugPrint('[FrameMetrics] No data');
+      }
       return;
     }
     

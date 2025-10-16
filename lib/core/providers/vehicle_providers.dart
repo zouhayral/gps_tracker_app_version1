@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
@@ -15,15 +17,75 @@ final vehicleSnapshotProvider = Provider.family<ValueListenable<VehicleDataSnaps
 });
 
 /// Provider for a device's position
-final vehiclePositionProvider = Provider.family<Position?, int>((ref, deviceId) {
+/// IMPORTANT: Uses StreamProvider to properly listen to ValueNotifier changes!
+final vehiclePositionProvider = StreamProvider.family<Position?, int>((ref, deviceId) async* {
   final notifier = ref.watch(vehicleSnapshotProvider(deviceId));
-  return notifier.value?.position;
+  
+  // Emit initial value
+  yield notifier.value?.position;
+  
+  if (kDebugMode && notifier.value?.position != null) {
+    debugPrint('[VehicleProvider] Initial position for device $deviceId: '
+        'lat=${notifier.value!.position!.latitude}, lon=${notifier.value!.position!.longitude}, '
+        'ignition=${notifier.value!.position!.attributes['ignition']}, speed=${notifier.value!.position!.speed}');
+  }
+  
+  // Listen to ValueNotifier changes
+  final streamController = StreamController<Position?>();
+  void listener() {
+    final position = notifier.value?.position;
+    if (kDebugMode && position != null) {
+      debugPrint('[VehicleProvider] 🔄 Position updated for device $deviceId: '
+          'lat=${position.latitude}, lon=${position.longitude}, '
+          'ignition=${position.attributes['ignition']}, speed=${position.speed}');
+    }
+    streamController.add(position);
+  }
+  
+  notifier.addListener(listener);
+  ref.onDispose(() {
+    streamController.close();
+    notifier.removeListener(listener);
+  });
+  
+  // Emit updates from the stream
+  await for (final position in streamController.stream) {
+    yield position;
+  }
 });
 
 /// Provider for a device's engine state
-final vehicleEngineProvider = Provider.family<EngineState?, int>((ref, deviceId) {
+/// IMPORTANT: Uses StreamProvider to properly listen to ValueNotifier changes!
+final vehicleEngineProvider = StreamProvider.family<EngineState?, int>((ref, deviceId) async* {
   final notifier = ref.watch(vehicleSnapshotProvider(deviceId));
-  return notifier.value?.engineState;
+  
+  // Emit initial value
+  yield notifier.value?.engineState;
+  
+  if (kDebugMode) {
+    debugPrint('[VehicleProvider] Initial engine state for device $deviceId: ${notifier.value?.engineState}');
+  }
+  
+  // Listen to ValueNotifier changes
+  final streamController = StreamController<EngineState?>();
+  void listener() {
+    final engineState = notifier.value?.engineState;
+    if (kDebugMode) {
+      debugPrint('[VehicleProvider] 🔄 Engine state updated for device $deviceId: $engineState');
+    }
+    streamController.add(engineState);
+  }
+  
+  notifier.addListener(listener);
+  ref.onDispose(() {
+    streamController.close();
+    notifier.removeListener(listener);
+  });
+  
+  // Emit updates from the stream
+  await for (final engineState in streamController.stream) {
+    yield engineState;
+  }
 });
 
 /// Provider for a device's speed (km/h)
@@ -59,10 +121,12 @@ final vehicleFuelProvider = Provider.family<double?, int>((ref, deviceId) {
 /// Helper extension to easily watch specific metrics in widgets
 extension VehicleDataX on WidgetRef {
   /// Watch a device's position and rebuild only when it changes
-  Position? watchPosition(int deviceId) => watch(vehiclePositionProvider(deviceId));
+  /// Returns null if loading or on error
+  Position? watchPosition(int deviceId) => watch(vehiclePositionProvider(deviceId)).valueOrNull;
   
   /// Watch a device's engine state and rebuild only when it changes
-  EngineState? watchEngine(int deviceId) => watch(vehicleEngineProvider(deviceId));
+  /// Returns null if loading or on error
+  EngineState? watchEngine(int deviceId) => watch(vehicleEngineProvider(deviceId)).valueOrNull;
   
   /// Watch a device's speed and rebuild only when it changes
   double? watchSpeed(int deviceId) => watch(vehicleSpeedProvider(deviceId));
