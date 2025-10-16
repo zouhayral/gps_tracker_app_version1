@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -8,14 +7,17 @@ import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/diagnostics/frame_timing_summarizer.dart';
 import 'package:my_app_gps/core/diagnostics/performance_metrics_service.dart';
 import 'package:my_app_gps/core/diagnostics/performance_overlay.dart';
 import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 import 'package:my_app_gps/core/map/fps_monitor.dart';
 import 'package:my_app_gps/core/map/marker_cache.dart';
+import 'package:my_app_gps/core/map/marker_processing_isolate.dart';
 import 'package:my_app_gps/core/map/rebuild_profiler.dart';
 import 'package:my_app_gps/core/providers/connectivity_providers.dart';
 import 'package:my_app_gps/core/providers/vehicle_providers.dart';
+import 'package:my_app_gps/core/utils/throttled_value_notifier.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
@@ -122,8 +124,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   // Track last selected device to detect changes
   int? _lastSelectedSingleDevice;
 
-  // OPTIMIZATION: ValueNotifier for marker updates (keeps FlutterMap static)
-  final _markersNotifier = ValueNotifier<List<MapMarkerData>>(const []);
+  // OPTIMIZATION: Throttled ValueNotifier for marker updates (reduces rebuilds when updates <50ms apart)
+  late final ThrottledValueNotifier<List<MapMarkerData>> _markersNotifier;
 
   // Bottom panel snaps
   final List<double> _panelStops = const [0.05, 0.30, 0.50, 0.80];
@@ -134,11 +136,31 @@ class _MapPageState extends ConsumerState<MapPage> {
   @override
   void initState() {
     super.initState();
+    
+    // OPTIMIZATION: Initialize throttled marker notifier (50ms throttle)
+    _markersNotifier = ThrottledValueNotifier<List<MapMarkerData>>(
+      const [],
+      throttleDuration: const Duration(milliseconds: 50),
+    );
+    
     _focusNode.addListener(() => setState(() {}));
 
     // MIGRATION: Initialize VehicleDataRepository for cache-first startup
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      
+      // OPTIMIZATION: Initialize background marker processing isolate
+      await MarkerProcessingIsolate.instance.initialize();
+      
+      // OPTIMIZATION: Enable frame timing monitoring in debug/profile mode
+      if (kDebugMode || kProfileMode) {
+        FrameTimingSummarizer.instance.enable();
+        // Print stats every 5 seconds
+        Timer.periodic(const Duration(seconds: 5), (_) {
+          if (!mounted) return;
+          FrameTimingSummarizer.instance.printStats();
+        });
+      }
       
       // Get repository instance (starts WebSocket + REST fallback)
       final repo = ref.read(vehicleDataRepositoryProvider);
@@ -207,11 +229,47 @@ class _MapPageState extends ConsumerState<MapPage> {
     _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
-    _markersNotifier.dispose(); // OPTIMIZATION: Clean up marker notifier
+    _markersNotifier.dispose(); // OPTIMIZATION: Clean up throttled marker notifier
+    
+    // OPTIMIZATION: Cleanup frame timing and marker isolate
+    if (kDebugMode || kProfileMode) {
+      FrameTimingSummarizer.instance.disable();
+    }
+    MarkerProcessingIsolate.instance.dispose();
+    
     super.dispose();
   }
 
   // ---------- Helpers ----------
+  
+  /// OPTIMIZATION: Process markers asynchronously in background isolate
+  /// Moves heavy filtering + marker creation off the main thread
+  Future<void> _processMarkersAsync(
+    Map<int, Position> positions,
+    List<Map<String, dynamic>> devices,
+    Set<int> selectedIds,
+    String query,
+  ) async {
+    try {
+      // Use background isolate for marker processing (200+ markers)
+      final markers = await MarkerProcessingIsolate.instance.processMarkers(
+        positions,
+        devices,
+        selectedIds,
+        query,
+      );
+      
+      // Update throttled notifier (automatically throttles if updates <50ms apart)
+      if (_markersNotifier.value != markers) {
+        _markersNotifier.value = markers;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[MapPage] Marker processing error: $e');
+      }
+    }
+  }
+  
   double? _asDouble(dynamic v) {
     if (v == null) return null;
     if (v is double) return v;
@@ -351,27 +409,19 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
     
     // Use marker cache to memoize marker creation
-    final markerCache = ref.watch(markerCacheProvider);
+    // Note: markerCache not used directly anymore - background isolate handles it
     
     return Scaffold(
       body: SafeArea(
         child: devicesAsync.when(
           data: (devices) {
-            // Use positions from repository snapshots (already built above)
+            // OPTIMIZATION: Process markers in background isolate for heavy workloads
+            // This moves filtering + marker creation off the main thread
+            _processMarkersAsync(positions, devices, _selectedIds, _query);
+            
+            // Use current marker value from notifier for UI decisions
+            final currentMarkers = _markersNotifier.value;
             final q = _query.trim().toLowerCase();
-            // Use marker cache to memoize marker creation
-            final markers = markerCache.getMarkers(
-              positions,
-              devices,
-              _selectedIds,
-              q,
-            );
-
-            // OPTIMIZATION: Update ValueNotifier instead of setState for markers
-            // This keeps FlutterMap static and only rebuilds marker layer
-            if (_markersNotifier.value != markers) {
-              _markersNotifier.value = markers;
-            }
 
             // If exactly one device is selected, center to its position IMMEDIATELY
             if (_selectedIds.length == 1) {
@@ -441,14 +491,14 @@ class _MapPageState extends ConsumerState<MapPage> {
             MapCameraFit fit;
             final selectedMarkers = _selectedIds.isEmpty
                 ? <MapMarkerData>[]
-                : markers
+                : currentMarkers
                       .where(
                         (m) => _selectedIds.contains(int.tryParse(m.id) ?? -1),
                       )
                       .toList();
             final target = selectedMarkers.isNotEmpty
                 ? selectedMarkers
-                : markers;
+                : currentMarkers;
             if (target.isEmpty) {
               fit = const MapCameraFit(center: LatLng(0, 0));
             } else if (target.length == 1) {
@@ -463,7 +513,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             if (!_didAutoFocus &&
                 widget.preselectedIds != null &&
                 widget.preselectedIds!.isNotEmpty) {
-              final hasAny = markers.any(
+              final hasAny = currentMarkers.any(
                 (m) =>
                     widget.preselectedIds!.contains(int.tryParse(m.id) ?? -1),
               );
@@ -501,12 +551,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                     children: [
                       FlutterMapAdapter(
                         key: _mapKey,
-                        markers: markers,
+                        markers: currentMarkers,
                         cameraFit: fit,
                         onMarkerTap: _onMarkerTap,
                         onMapTap: _onMapTap,
                         tileProvider: ref.watch(_tileProviderProvider),
-                        markersNotifier: _markersNotifier, // OPTIMIZATION: Use ValueNotifier
+                        markersNotifier: _markersNotifier, // OPTIMIZATION: Use throttled ValueNotifier
                       ),
                       // Performance overlay (debug only)
                       const PerformanceOverlayWidget(),

@@ -5,7 +5,9 @@ import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+
 import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
+import 'package:my_app_gps/core/map/marker_layer_cache.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/view/map_marker.dart';
@@ -129,33 +131,37 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
     return point.latitude.abs() <= 90 && point.longitude.abs() <= 180;
   }
 
-  // Helper to build marker cluster layer - extracted for reuse
+  // Helper to build marker cluster layer with caching
   Widget _buildMarkerLayer(List<MapMarkerData> validMarkers) {
     // PERFORMANCE: Track marker layer rebuilds (should be ONLY when positions change)
     if (kDebugMode) {
       RebuildTracker.instance.trackRebuild('MarkerLayer');
     }
     
+    // Use cached marker layer options to avoid rebuilding identical layers
+    final cachedMarkers = MarkerLayerOptionsCache.instance.getCachedMarkers(validMarkers);
+    
     return MarkerClusterLayerWidget(
       options: MarkerClusterLayerOptions(
         maxClusterRadius: 45,
         size: const Size(36, 36),
-        markers: [
+        // Reuse cached markers if available to preserve widget identity
+        markers: cachedMarkers ?? [
           for (final m in validMarkers)
             Marker(
-              key: ValueKey(m.id),
+              key: ValueKey('marker_${m.id}_${m.isSelected}'),
               point: m.position,
               width: 32,
               height: 32,
               child: Consumer(
                 builder: (context, ref, _) {
                   return GestureDetector(
-                    key: ValueKey('mk_${m.id}'),
+                    key: ValueKey('tap_${m.id}'),
                     onTap: () => widget.onMarkerTap?.call(m.id),
                     child: MapMarkerWidget(
                       deviceId: int.tryParse(m.id) ?? -1,
                       isSelected: m.isSelected,
-                      key: ValueKey('marker_${m.id}_${m.isSelected}'),
+                      key: ValueKey('marker_widget_${m.id}_${m.isSelected}'),
                     ),
                   );
                 },
