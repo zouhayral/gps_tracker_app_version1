@@ -12,12 +12,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Setup Flutter
+      - name: Setup Flutter (latest stable)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0' # or your current version
+          flutter-version: '3.24.4'   # ✅ ensures Dart 3.9.2
+          channel: 'stable'
+
+      - name: Flutter doctor
+        run: flutter doctor -v
 
       - name: Install dependencies
         run: flutter pub get
