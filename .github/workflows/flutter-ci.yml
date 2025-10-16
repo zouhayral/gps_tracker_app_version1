@@ -14,15 +14,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Setup Flutter with caching and Dart 3.9.x support
-      - name: Setup Flutter (3.24.4)
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.4'
-          channel: 'stable'
-
-      - name: Flutter version
-        run: flutter --version
+      # ✅ Manually install Flutter 3.27.0-dev.1.0 (includes Dart 3.9.2)
+      - name: Install Flutter 3.27.0-dev.1.0
+        run: |
+          git clone https://github.com/flutter/flutter.git --branch 3.27.0-0.2.pre --depth 1
+          echo "$PWD/flutter/bin" >> $GITHUB_PATH
+          flutter --version
 
       - name: Install dependencies
         run: flutter pub get
