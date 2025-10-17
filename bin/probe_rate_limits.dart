@@ -162,8 +162,7 @@ Future<void> main(List<String> args) async {
         'latencyMs': {
           'min': latencies.first,
           'p50': latencies[(latencies.length * 0.5).floor()],
-          'p90':
-              latencies[(latencies.length * 0.9).floor().clamp(
+          'p90': latencies[(latencies.length * 0.9).floor().clamp(
                 0,
                 latencies.length - 1,
               )],

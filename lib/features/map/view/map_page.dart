@@ -10,7 +10,10 @@ import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/diagnostics/frame_timing_summarizer.dart';
 import 'package:my_app_gps/core/diagnostics/performance_metrics_service.dart';
 import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
+import 'package:my_app_gps/core/map/enhanced_marker_cache.dart';
 import 'package:my_app_gps/core/map/marker_cache.dart';
+import 'package:my_app_gps/core/map/marker_icon_manager.dart';
+import 'package:my_app_gps/core/map/marker_performance_monitor.dart';
 import 'package:my_app_gps/core/map/marker_processing_isolate.dart';
 import 'package:my_app_gps/core/map/rebuild_profiler.dart';
 import 'package:my_app_gps/core/providers/connectivity_providers.dart';
@@ -18,6 +21,7 @@ import 'package:my_app_gps/core/providers/vehicle_providers.dart';
 import 'package:my_app_gps/core/utils/throttled_value_notifier.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
+import 'package:my_app_gps/features/map/controller/fleet_map_telemetry_controller.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/data/granular_providers.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
@@ -70,6 +74,11 @@ class MapDebugFlags {
   static const bool enableFrameTiming = false;
   // Toggle to enable PerformanceMetricsService (FPS/Jank logs, CSV, etc.)
   static const bool enablePerfMetrics = false;
+  // Toggle to use FleetMapTelemetryController (async-first) instead of devicesNotifierProvider
+  // Set to true to enable the new async controller for testing
+  static const bool useFMTCController = false;
+  // Toggle to show marker performance stats (cache efficiency, processing time)
+  static const bool showMarkerPerformance = false;
 }
 
 // Simple rebuild badge for profiling; increments an internal counter each build.
@@ -137,6 +146,9 @@ class _MapPageState extends ConsumerState<MapPage>
   // OPTIMIZATION: Throttled ValueNotifier for marker updates (reduces rebuilds when updates <50ms apart)
   late final ThrottledValueNotifier<List<MapMarkerData>> _markersNotifier;
 
+  // OPTIMIZATION: Enhanced marker cache with intelligent diffing
+  final _enhancedMarkerCache = EnhancedMarkerCache();
+
   // Bottom panel snaps
   final List<double> _panelStops = const [0.05, 0.30, 0.50, 0.80];
   int _panelIndex = 1; // start at 30%
@@ -162,6 +174,13 @@ class _MapPageState extends ConsumerState<MapPage>
     // MIGRATION: Initialize VehicleDataRepository for cache-first startup
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+
+      // OPTIMIZATION: Preload marker icons for reduced first-draw latency
+      MarkerIconManager.instance.preloadIcons().catchError((Object e) {
+        if (kDebugMode) {
+          debugPrint('[MapPage] Icon preload error (non-fatal): $e');
+        }
+      });
 
       // OPTIMIZATION: Initialize background marker processing isolate
       await MarkerProcessingIsolate.instance.initialize();
@@ -252,8 +271,8 @@ class _MapPageState extends ConsumerState<MapPage>
 
   // ---------- Helpers ----------
 
-  /// OPTIMIZATION: Process markers asynchronously in background isolate
-  /// Moves heavy filtering + marker creation off the main thread
+  /// OPTIMIZATION: Process markers with intelligent diffing and caching
+  /// Uses EnhancedMarkerCache to minimize marker object creation
   Future<void> _processMarkersAsync(
     Map<int, Position> positions,
     List<Map<String, dynamic>> devices,
@@ -261,32 +280,51 @@ class _MapPageState extends ConsumerState<MapPage>
     String query,
   ) async {
     try {
+      final stopwatch = Stopwatch()..start();
+
       if (kDebugMode) {
         debugPrint(
             '[MapPage] Processing ${positions.length} positions for markers...');
       }
 
-      // Use background isolate for marker processing (200+ markers)
-      final markers = await MarkerProcessingIsolate.instance.processMarkers(
+      // OPTIMIZATION: Use enhanced marker cache with intelligent diffing
+      final diffResult = _enhancedMarkerCache.getMarkersWithDiff(
         positions,
         devices,
         selectedIds,
         query,
       );
 
+      stopwatch.stop();
+
+      // Record performance metrics
+      MarkerPerformanceMonitor.instance.recordUpdate(
+        markerCount: diffResult.markers.length,
+        created: diffResult.created,
+        reused: diffResult.reused,
+        removed: diffResult.removed,
+        processingTime: stopwatch.elapsed,
+      );
+
       // Update throttled notifier (automatically throttles if updates <80ms apart)
-      if (_markersNotifier.value != markers) {
+      // Only update if markers actually changed (diffResult handles this)
+      if (diffResult.created > 0 ||
+          diffResult.removed > 0 ||
+          _markersNotifier.value.length != diffResult.markers.length) {
         if (kDebugMode) {
-          debugPrint('[MapPage] ✅ Markers updated: ${markers.length} markers');
-          // Log first 3 marker IDs for debugging
-          final sampleIds = markers.take(3).map((m) => m.id).join(', ');
-          debugPrint('[MapPage] Sample marker IDs: $sampleIds');
+          debugPrint('[MapPage] 📊 $diffResult');
+          debugPrint(
+              '[MapPage] ⚡ Processing: ${stopwatch.elapsedMilliseconds}ms');
         }
-        _markersNotifier.value = markers;
+        _markersNotifier.value = diffResult.markers;
+      } else if (kDebugMode && diffResult.reused > 0) {
+        debugPrint(
+            '[MapPage] ♻️  All ${diffResult.reused} markers reused (no update)');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('[MapPage] ❌ Marker processing error: $e');
+        debugPrint('[MapPage] Stack trace: $stackTrace');
       }
     }
   }
@@ -412,6 +450,11 @@ class _MapPageState extends ConsumerState<MapPage>
     // PERFORMANCE: Track rebuilds for validation (disabled by default)
     if (MapDebugFlags.showRebuildOverlay) {
       RebuildTracker.instance.trackRebuild('MapPage');
+    }
+
+    // ASYNC OPTIMIZATION: Use FleetMapTelemetryController if enabled
+    if (MapDebugFlags.useFMTCController) {
+      return _buildMapContentWithFMTC();
     }
 
     // Watch entire devices list only once; consider splitting into smaller providers later
@@ -593,6 +636,12 @@ class _MapPageState extends ConsumerState<MapPage>
                     top: 56,
                     left: 16,
                     child: _RebuildBadge(label: 'MapPage'),
+                  ),
+                if (MapDebugFlags.showMarkerPerformance)
+                  Positioned(
+                    top: 56,
+                    right: 16,
+                    child: _MarkerPerformanceOverlay(),
                   ),
                 // Search + suggestions
                 Positioned(
@@ -1063,6 +1112,172 @@ class _MapPageState extends ConsumerState<MapPage>
           ),
         ),
       ),
+    );
+  }
+
+  /// ASYNC OPTIMIZATION: Build map content using FleetMapTelemetryController
+  /// This version uses AsyncNotifier for non-blocking device loading
+  Widget _buildMapContentWithFMTC() {
+    final fmState = ref.watch(fleetMapTelemetryControllerProvider);
+
+    return fmState.when(
+      // Loading state - show centered spinner
+      loading: () {
+        return Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading fleet data...',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+
+      // Error state - show error message with retry button
+      error: (error, stackTrace) {
+        if (kDebugMode) {
+          debugPrint('[FMTC] Error in UI: $error');
+          debugPrint('[FMTC] Stack: $stackTrace');
+        }
+
+        return Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Failed to load fleet data',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      error.toString(),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        ref
+                            .read(fleetMapTelemetryControllerProvider.notifier)
+                            .refreshDevices();
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+
+      // Data state - render map with devices
+      data: (fmtcState) {
+        if (kDebugMode) {
+          debugPrint(
+            '[FMTC] Rendering with ${fmtcState.devices.length} devices (updated: ${fmtcState.lastUpdated})',
+          );
+        }
+
+        final devices = fmtcState.devices;
+        final positions = <int, Position>{};
+
+        // Build positions map from per-device snapshots
+        for (final device in devices) {
+          final deviceId = device['id'] as int?;
+          if (deviceId == null) continue;
+
+          final asyncPosition = ref.watch(vehiclePositionProvider(deviceId));
+          final position = asyncPosition.valueOrNull;
+          if (position != null) {
+            positions[deviceId] = position;
+          }
+        }
+
+        // Process markers asynchronously
+        _processMarkersAsync(positions, devices, _selectedIds, _query);
+
+        // Continue with existing map rendering logic
+        final currentMarkers = _markersNotifier.value;
+
+        // Single device selection centering logic
+        if (_selectedIds.length == 1) {
+          final sid = _selectedIds.first;
+          final merged = ref.watch(positionByDeviceProvider(sid));
+          double? targetLat;
+          double? targetLon;
+
+          if (merged != null && _valid(merged.latitude, merged.longitude)) {
+            targetLat = merged.latitude;
+            targetLon = merged.longitude;
+          } else {
+            final device = ref.read(deviceByIdProvider(sid));
+            final lat = _asDouble(device?['latitude']);
+            final lon = _asDouble(device?['longitude']);
+            if (_valid(lat, lon)) {
+              targetLat = lat;
+              targetLon = lon;
+            }
+          }
+
+          if (targetLat != null && targetLon != null) {
+            final selectionChanged = _lastSelectedSingleDevice != sid;
+            if (selectionChanged) {
+              _lastSelectedSingleDevice = sid;
+              final lat = targetLat;
+              final lon = targetLon;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _mapKey.currentState?.moveTo(LatLng(lat, lon));
+              });
+            }
+          }
+        } else {
+          _lastSelectedSingleDevice = null;
+        }
+
+        // Render the full map UI using existing _buildMapScaffold logic
+        // (Simplified version - reuse scaffold structure from standard path)
+        return Scaffold(
+          body: SafeArea(
+            child: Stack(
+              children: [
+                // Map layer
+                FlutterMapAdapter(
+                  key: _mapKey,
+                  markers: currentMarkers,
+                  cameraFit: MapCameraFit(
+                    boundsPoints: currentMarkers.isNotEmpty
+                        ? currentMarkers.map((m) => m.position).toList()
+                        : [const LatLng(0, 0)],
+                  ),
+                ),
+                // TODO: Add full UI overlay (search bar, bottom panel, etc.)
+                // For now, this shows the map with markers
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1718,6 +1933,120 @@ class _OfflineBanner extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Marker performance overlay showing cache efficiency and processing time
+class _MarkerPerformanceOverlay extends StatefulWidget {
+  const _MarkerPerformanceOverlay();
+
+  @override
+  State<_MarkerPerformanceOverlay> createState() =>
+      _MarkerPerformanceOverlayState();
+}
+
+class _MarkerPerformanceOverlayState extends State<_MarkerPerformanceOverlay> {
+  Timer? _updateTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Update every 500ms
+    _updateTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = MarkerPerformanceMonitor.instance.getStats();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '⚡ Marker Performance',
+            style: TextStyle(
+              color: Colors.green[300],
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          _StatRow(
+            'Updates',
+            stats.totalUpdates.toString(),
+            Colors.white70,
+          ),
+          _StatRow(
+            'Avg Time',
+            '${stats.averageProcessingMs.toStringAsFixed(1)}ms',
+            stats.averageProcessingMs < 16
+                ? Colors.green[300]!
+                : Colors.orange[300]!,
+          ),
+          _StatRow(
+            'Reuse',
+            '${(stats.averageReuseRate * 100).toStringAsFixed(0)}%',
+            stats.averageReuseRate > 0.7
+                ? Colors.green[300]!
+                : Colors.orange[300]!,
+          ),
+          _StatRow(
+            'Created',
+            stats.totalCreated.toString(),
+            Colors.white70,
+          ),
+          _StatRow(
+            'Reused',
+            stats.totalReused.toString(),
+            Colors.green[300]!,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  const _StatRow(this.label, this.value, this.color);
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(color: Colors.white70, fontSize: 11),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }
