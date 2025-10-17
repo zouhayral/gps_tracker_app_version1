@@ -39,6 +39,8 @@ analyzer:
   exclude:
     - lib/**.g.dart
     - lib/**.freezed.dart
+    # Exclude accidental/malformed files which may appear during development
+    - lib/core/data/*onMarkerTap*.dart
 
 
 # Additional information about this file can be found at

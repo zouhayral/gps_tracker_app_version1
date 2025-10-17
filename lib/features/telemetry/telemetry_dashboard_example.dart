@@ -79,8 +79,8 @@ class _EngineMotionCard extends ConsumerWidget {
     final motion = ref.watchMotion(deviceId);
     final speed = ref.watchSpeed(deviceId);
 
-    final isRunning = engine == EngineState.on;
-    final isMoving = motion ?? false && (speed ?? 0) > 0;
+  final isRunning = engine == EngineState.on;
+  final isMoving = (motion ?? false) && ((speed ?? 0) > 0);
 
     return Card(
       child: Padding(

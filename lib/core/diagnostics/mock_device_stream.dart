@@ -53,22 +53,19 @@ class MockDeviceStream {
     // Initialize mock devices with random start positions
     _devices.clear();
     for (var i = 0; i < deviceCount; i++) {
-      _devices.add(
-        _MockDevice(
-          deviceId: 1000 + i,
-          latitude: 48.8566 + (_random.nextDouble() - 0.5) * 0.1, // Paris area
-          longitude: 2.3522 + (_random.nextDouble() - 0.5) * 0.1,
-          speed: 20.0 + _random.nextDouble() * 40.0, // 20-60 km/h
-          course: _random.nextDouble() * 360.0,
-        ),
-      );
+      _devices.add(_MockDevice(
+        deviceId: 1000 + i,
+        latitude: 48.8566 + (_random.nextDouble() - 0.5) * 0.1, // Paris area
+        longitude: 2.3522 + (_random.nextDouble() - 0.5) * 0.1,
+        speed: 20.0 + _random.nextDouble() * 40.0, // 20-60 km/h
+        course: _random.nextDouble() * 360.0,
+      ),);
     }
 
     debugPrint('[MockDeviceStream] ✅ Started with $deviceCount devices');
     debugPrint('[MockDeviceStream] Update interval: ${updateIntervalMs}ms');
     debugPrint(
-      '[MockDeviceStream] Movement: ${enableRandomMovement ? "ENABLED" : "STATIC"}',
-    );
+        '[MockDeviceStream] Movement: ${enableRandomMovement ? "ENABLED" : "STATIC"}',);
 
     // Start periodic updates
     _timer = Timer.periodic(
@@ -100,22 +97,20 @@ class MockDeviceStream {
       }
 
       // Create position update
-      positions.add(
-        Position(
-          id: 0, // Will be assigned by ObjectBox if needed
-          deviceId: device.deviceId,
-          latitude: device.latitude,
-          longitude: device.longitude,
-          altitude: 100.0 + _random.nextDouble() * 50.0,
-          speed: device.speed,
-          course: device.course,
-          accuracy: 5.0 + _random.nextDouble() * 10.0,
-          valid: true,
-          deviceTime: now,
-          serverTime: now,
-          attributes: const {},
-        ),
-      );
+      positions.add(Position(
+        id: 0, // Will be assigned by ObjectBox if needed
+        deviceId: device.deviceId,
+        latitude: device.latitude,
+        longitude: device.longitude,
+        altitude: 100.0 + _random.nextDouble() * 50.0,
+        speed: device.speed,
+        course: device.course,
+        accuracy: 5.0 + _random.nextDouble() * 10.0,
+        valid: true,
+        deviceTime: now,
+        serverTime: now,
+        attributes: const {},
+      ),);
     }
 
     // Emit batch update
@@ -123,8 +118,7 @@ class MockDeviceStream {
 
     if (_updateCount % 10 == 0) {
       debugPrint(
-        '[MockDeviceStream] Update #$_updateCount: ${positions.length} positions sent',
-      );
+          '[MockDeviceStream] Update #$_updateCount: ${positions.length} positions sent',);
     }
   }
 
@@ -141,15 +135,13 @@ class MockDeviceStream {
   /// Get device info for debugging
   List<Map<String, dynamic>> getDeviceInfo() {
     return _devices
-        .map(
-          (d) => {
-            'deviceId': d.deviceId,
-            'latitude': d.latitude.toStringAsFixed(6),
-            'longitude': d.longitude.toStringAsFixed(6),
-            'speed': d.speed.toStringAsFixed(1),
-            'course': d.course.toStringAsFixed(1),
-          },
-        )
+        .map((d) => {
+              'deviceId': d.deviceId,
+              'latitude': d.latitude.toStringAsFixed(6),
+              'longitude': d.longitude.toStringAsFixed(6),
+              'speed': d.speed.toStringAsFixed(1),
+              'course': d.course.toStringAsFixed(1),
+            },)
         .toList();
   }
 }
@@ -202,7 +194,9 @@ class MockDeviceScenarios {
       );
 
   /// Normal load: 20 devices, 5s intervals (typical Traccar setup)
-  static MockDeviceStream normal() => MockDeviceStream();
+  static MockDeviceStream normal() => MockDeviceStream(
+        updateIntervalMs: 5000,
+      );
 
   /// Heavy load: 50 devices, 5s intervals
   static MockDeviceStream heavy() => MockDeviceStream(

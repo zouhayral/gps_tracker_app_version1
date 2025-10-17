@@ -9,8 +9,7 @@ import 'package:my_app_gps/services/device_update_service.dart';
 
 /// Map camera center position
 final mapCenterProvider = StateProvider<LatLng>(
-  (ref) => const LatLng(33.5731, -7.5898),
-); // Default: Casablanca
+    (ref) => const LatLng(33.5731, -7.5898),); // Default: Casablanca
 
 /// Map zoom level
 final mapZoomProvider = StateProvider<double>((ref) => 13.0);

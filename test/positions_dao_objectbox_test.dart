@@ -107,18 +107,17 @@ void main() {
         attributes: const {},
       );
       await box.put(
-        p.deviceId,
-        jsonEncode({
-          'deviceId': p.deviceId,
-          'latitude': p.latitude,
-          'longitude': p.longitude,
-          'speed': p.speed,
-          'course': p.course,
-          'deviceTime': p.deviceTime.toUtc().toIso8601String(),
-          'serverTime': p.serverTime.toUtc().toIso8601String(),
-          'attributes': p.attributes,
-        }),
-      );
+          p.deviceId,
+          jsonEncode({
+            'deviceId': p.deviceId,
+            'latitude': p.latitude,
+            'longitude': p.longitude,
+            'speed': p.speed,
+            'course': p.course,
+            'deviceTime': p.deviceTime.toUtc().toIso8601String(),
+            'serverTime': p.serverTime.toUtc().toIso8601String(),
+            'attributes': p.attributes,
+          }),);
       await box.close();
 
       await dao.migrateFromHiveIfPresent();

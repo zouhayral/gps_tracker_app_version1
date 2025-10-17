@@ -58,8 +58,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 if (preselected.isEmpty) preselected = null; // ignore invalid
               }
               return NoTransitionPage(
-                child: MapPage(preselectedIds: preselected),
-              );
+                  child: MapPage(preselectedIds: preselected),);
             },
           ),
           GoRoute(

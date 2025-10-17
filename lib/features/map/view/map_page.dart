@@ -29,6 +29,8 @@ import 'package:my_app_gps/features/map/data/granular_providers.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
 import 'package:my_app_gps/features/map/view/map_page_lifecycle_mixin.dart';
+import 'package:my_app_gps/map/map_tile_source_provider.dart';
+import 'package:my_app_gps/widgets/map_layer_toggle.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
 
@@ -598,9 +600,14 @@ class _MapPageState extends ConsumerState<MapPage>
     return null;
   }
 
+  // DEFENSIVE: Validate coordinates are not null, NaN, or out of range
   bool _valid(double? lat, double? lon) =>
       lat != null &&
       lon != null &&
+      !lat.isNaN &&
+      !lon.isNaN &&
+      lat.isFinite &&
+      lon.isFinite &&
       lat >= -90 &&
       lat <= 90 &&
       lon >= -180 &&
@@ -779,6 +786,16 @@ class _MapPageState extends ConsumerState<MapPage>
     // Note: markerCache not used directly anymore - background isolate handles it
 
     return Scaffold(
+      floatingActionButton: Builder(
+        builder: (context) {
+          final activeLayer = ref.watch(mapTileSourceProvider);
+          final notifier = ref.read(mapTileSourceProvider.notifier);
+          return MapLayerToggleButton(
+            current: activeLayer,
+            onChanged: notifier.setSource,
+          );
+        },
+      ),
       body: SafeArea(
         child: devicesAsync.when(
           data: (devices) {
@@ -853,7 +870,7 @@ class _MapPageState extends ConsumerState<MapPage>
               _lastSelectedSingleDevice = null;
             }
 
-            // Camera fit
+            // Camera fit with defensive NaN checks
             MapCameraFit fit;
             final selectedMarkers = _selectedIds.isEmpty
                 ? <MapMarkerData>[]
@@ -864,13 +881,20 @@ class _MapPageState extends ConsumerState<MapPage>
                     .toList();
             final target =
                 selectedMarkers.isNotEmpty ? selectedMarkers : currentMarkers;
-            if (target.isEmpty) {
-              fit = const MapCameraFit(center: LatLng(0, 0));
-            } else if (target.length == 1) {
-              fit = MapCameraFit(center: target.first.position);
+            
+            // DEFENSIVE: Filter out markers with invalid positions
+            final validTarget = target
+                .where((m) => _valid(m.position.latitude, m.position.longitude))
+                .toList();
+            
+            if (validTarget.isEmpty) {
+              // No valid markers - use safe default
+              fit = const MapCameraFit(center: LatLng(33.5731, -7.5898)); // Casablanca
+            } else if (validTarget.length == 1) {
+              fit = MapCameraFit(center: validTarget.first.position);
             } else {
               fit = MapCameraFit(
-                boundsPoints: [for (final m in target) m.position],
+                boundsPoints: [for (final m in validTarget) m.position],
               );
             }
 

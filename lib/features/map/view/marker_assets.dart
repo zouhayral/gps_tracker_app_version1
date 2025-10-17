@@ -29,10 +29,8 @@ class MarkerAssets {
   }
 
   /// Returns a widget rendering the online/offline marker, preferring SVG.
-  static Widget buildMarkerByStatus({
-    required MarkerStatus status,
-    double size = 28,
-  }) {
+  static Widget buildMarkerByStatus(
+      {required MarkerStatus status, double size = 28,}) {
     switch (status) {
       case MarkerStatus.online:
         return SvgPicture.asset(

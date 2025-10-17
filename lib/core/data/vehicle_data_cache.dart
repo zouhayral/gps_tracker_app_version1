@@ -71,8 +71,7 @@ class VehicleDataCache {
 
       if (kDebugMode) {
         debugPrint(
-          '[VehicleCache] Loaded $loaded snapshots from disk, skipped $skipped stale entries',
-        );
+            '[VehicleCache] Loaded $loaded snapshots from disk, skipped $skipped stale entries',);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -100,8 +99,7 @@ class VehicleDataCache {
       _hits++;
       if (kDebugMode) {
         debugPrint(
-          '[VehicleCache] HIT device=$deviceId (hits=$_hits misses=$_misses)',
-        );
+            '[VehicleCache] HIT device=$deviceId (hits=$_hits misses=$_misses)',);
       }
       return snapshot;
     }
@@ -109,8 +107,7 @@ class VehicleDataCache {
     _misses++;
     if (kDebugMode) {
       debugPrint(
-        '[VehicleCache] MISS device=$deviceId (hits=$_hits misses=$_misses)',
-      );
+          '[VehicleCache] MISS device=$deviceId (hits=$_hits misses=$_misses)',);
     }
     return null;
   }
@@ -127,8 +124,7 @@ class VehicleDataCache {
     } catch (e) {
       if (kDebugMode) {
         debugPrint(
-          '[VehicleCache] Put error for device ${snapshot.deviceId}: $e',
-        );
+            '[VehicleCache] Put error for device ${snapshot.deviceId}: $e',);
       }
     }
   }

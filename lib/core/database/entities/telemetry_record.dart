@@ -7,9 +7,7 @@ import 'package:objectbox/objectbox.dart';
 @Entity()
 class TelemetryRecord {
   TelemetryRecord({
-    required this.deviceId,
-    required this.timestampMs,
-    this.id = 0,
+    required this.deviceId, required this.timestampMs, this.id = 0,
     this.speed,
     this.battery,
     this.signal,

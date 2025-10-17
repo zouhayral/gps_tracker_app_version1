@@ -44,7 +44,7 @@ class MarkerProcessingIsolate {
     );
 
     // Wait for isolate to be ready
-    await Future.delayed(const Duration(milliseconds: 100));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
   }
 
   /// Process markers in background isolate
@@ -63,7 +63,7 @@ class MarkerProcessingIsolate {
       final completer = Completer<List<MapMarkerData>>();
 
       // Listen for result
-      StreamSubscription? subscription;
+      StreamSubscription<List<MapMarkerData>>? subscription;
       subscription = _resultStreamController.stream.listen((markers) {
         if (!completer.isCompleted) {
           completer.complete(markers);

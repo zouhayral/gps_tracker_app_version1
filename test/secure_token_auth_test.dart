@@ -13,33 +13,23 @@ void main() {
         // Verify that the AuthNotifier no longer has _storedPasswordKey constant
         // This is enforced at compile time - the constant was removed
 
-        expect(
-          true,
-          true,
-          reason: 'Password storage removed from AuthNotifier',
-        );
+        expect(true, true, reason: 'Password storage removed from AuthNotifier');
       });
 
       test('Session token is validated before auto-login', () {
         // Bootstrap flow now validates session token with server
         // instead of attempting login with stored password
 
-        expect(
-          true,
-          true,
-          reason: 'Bootstrap uses validateSession() instead of login()',
-        );
+        expect(true, true,
+            reason: 'Bootstrap uses validateSession() instead of login()',);
       });
 
       test('Session validation requires server round-trip', () {
         // validateSession() in AuthService calls GET /api/session
         // This ensures the token is still valid on the server
 
-        expect(
-          true,
-          true,
-          reason: 'Session validation hits /api/session endpoint',
-        );
+        expect(true, true,
+            reason: 'Session validation hits /api/session endpoint',);
       });
     });
 
@@ -97,22 +87,16 @@ void main() {
         // Flow: AuthInitial -> AuthValidatingSession -> AuthAuthenticated
         // Happens when app starts and session token is still valid
 
-        expect(
-          true,
-          true,
-          reason: 'Valid session token leads to authenticated state',
-        );
+        expect(true, true,
+            reason: 'Valid session token leads to authenticated state',);
       });
 
       test('Bootstrap with expired session transitions to SessionExpired', () {
         // Flow: AuthInitial -> AuthValidatingSession -> AuthSessionExpired
         // Happens when app starts but session token is expired
 
-        expect(
-          true,
-          true,
-          reason: 'Expired session shows SessionExpired state',
-        );
+        expect(true, true,
+            reason: 'Expired session shows SessionExpired state',);
       });
 
       test('Bootstrap with no session shows login screen', () {
@@ -141,11 +125,8 @@ void main() {
         // This method can be called before critical operations
         // to ensure session is still valid
 
-        expect(
-          true,
-          true,
-          reason: 'validateCurrentSession() checks token validity',
-        );
+        expect(true, true,
+            reason: 'validateCurrentSession() checks token validity',);
       });
     });
 
@@ -154,7 +135,8 @@ void main() {
         // Session tokens (JSESSIONID) are stored in OS-level secure storage
         // iOS Keychain, Android Keystore, Windows Credential Manager
 
-        expect(true, true, reason: 'Session tokens use OS-level encryption');
+        expect(true, true,
+            reason: 'Session tokens use OS-level encryption',);
       });
 
       test('Logout clears session token from storage and server', () {
@@ -163,29 +145,24 @@ void main() {
         // 2. Clear local session token
         // 3. Clear stored email
 
-        expect(
-          true,
-          true,
-          reason: 'Logout clears both client and server session',
-        );
+        expect(true, true,
+            reason: 'Logout clears both client and server session',);
       });
 
       test('Failed login does not persist any credentials', () {
         // If login fails, no email or token should be stored
         // This prevents partial state corruption
 
-        expect(true, true, reason: 'Failed login clears all stored data');
+        expect(true, true,
+            reason: 'Failed login clears all stored data',);
       });
 
       test('Session validation failure auto-clears invalid tokens', () {
         // If validateSession() fails, invalid tokens are automatically cleared
         // User is transitioned to SessionExpired state
 
-        expect(
-          true,
-          true,
-          reason: 'Invalid tokens are cleaned up automatically',
-        );
+        expect(true, true,
+            reason: 'Invalid tokens are cleaned up automatically',);
       });
     });
 
@@ -198,10 +175,11 @@ void main() {
       });
 
       test('Token rehydrated during bootstrap', () {
-        // Flow: App starts -> Read token from secure storage ->
+        // Flow: App starts -> Read token from secure storage -> 
         // Add to cookie jar -> Validate with server
 
-        expect(true, true, reason: 'Bootstrap rehydrates token from storage');
+        expect(true, true,
+            reason: 'Bootstrap rehydrates token from storage',);
       });
 
       test('Token validated before each session restore', () {
@@ -212,7 +190,7 @@ void main() {
       });
 
       test('Token invalidated on logout', () {
-        // Flow: User logs out -> Server invalidates session ->
+        // Flow: User logs out -> Server invalidates session -> 
         // Client deletes token
 
         expect(true, true, reason: 'Logout fully invalidates token');
@@ -244,7 +222,8 @@ void main() {
         // 500 Internal Server Error should not invalidate session
         // Session may still be valid, just temporary server issue
 
-        expect(true, true, reason: 'Server errors preserve session token');
+        expect(true, true,
+            reason: 'Server errors preserve session token',);
       });
     });
 
@@ -311,7 +290,8 @@ void main() {
         // If validation fails, user can immediately retry login
         // No app crash or stuck state
 
-        expect(true, true, reason: 'Validation failures are non-fatal');
+        expect(true, true,
+            reason: 'Validation failures are non-fatal',);
       });
     });
 
@@ -327,11 +307,8 @@ void main() {
         // Client code never needs to access raw token
         // All token operations handled by AuthService
 
-        expect(
-          true,
-          true,
-          reason: 'Token access encapsulated in service layer',
-        );
+        expect(true, true,
+            reason: 'Token access encapsulated in service layer',);
       });
 
       test('Token storage uses platform security features', () {
@@ -347,16 +324,14 @@ void main() {
   group('AuthService Token Validation Tests', () {
     test('validateSession() method exists and has correct signature', () {
       // Verify the new validateSession() method is properly defined
-      expect(
-        true,
-        true,
-        reason: 'validateSession() returns Future<Map<String, dynamic>>',
-      );
+      expect(true, true,
+          reason: 'validateSession() returns Future<Map<String, dynamic>>',);
     });
 
     test('hasStoredSession() checks for token presence', () {
       // Verify we can check if session exists without reading it
-      expect(true, true, reason: 'hasStoredSession() returns Future<bool>');
+      expect(true, true,
+          reason: 'hasStoredSession() returns Future<bool>',);
     });
 
     test('validateSession() calls GET /api/session', () {
@@ -366,7 +341,8 @@ void main() {
 
     test('validateSession() rehydrates cookie before validation', () {
       // Token must be added to cookie jar before making validation request
-      expect(true, true, reason: 'Cookie rehydrated before validation call');
+      expect(true, true,
+          reason: 'Cookie rehydrated before validation call',);
     });
 
     test('validateSession() throws on 401 response', () {
@@ -388,17 +364,15 @@ void main() {
   group('Migration from Password-Based to Token-Based', () {
     test('Old _storedPasswordKey constant removed', () {
       // Compile-time verification that password storage is gone
-      expect(true, true, reason: '_storedPasswordKey no longer exists in code');
+      expect(true, true,
+          reason: '_storedPasswordKey no longer exists in code',);
     });
 
     test('Bootstrap no longer calls login() with stored password', () {
       // Old: login(storedEmail, storedPassword)
       // New: validateSession()
-      expect(
-        true,
-        true,
-        reason: 'Bootstrap uses validateSession() not login()',
-      );
+      expect(true, true,
+          reason: 'Bootstrap uses validateSession() not login()',);
     });
 
     test('Login method no longer stores password', () {

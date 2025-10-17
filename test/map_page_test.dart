@@ -44,36 +44,32 @@ void main() {
       },
     ];
 
-    final container = ProviderContainer(
-      overrides: [
-        webSocketProvider.overrideWith(() {
-          WebSocketManager.testMode = true;
-          return WebSocketManager();
-        }),
-        // Devices list
-        devicesNotifierProvider
-            .overrideWith((ref) => _DevicesNotifierFixed(devices)),
-        // Live positions empty
-        positionsLiveProvider
-            .overrideWith((ref) => const Stream<Map<int, Position>>.empty()),
-        // Last-known provider returns given map directly
-        positionsLastKnownProvider
-            .overrideWith(() => PositionsLastKnownNotifierFixed(lastKnown)),
-        // DAO provider not used in this widget test
-        positionsDaoProvider.overrideWith((ref) async => _DaoNoop()),
-      ],
-    );
+    final container = ProviderContainer(overrides: [
+      webSocketProvider.overrideWith(() {
+        WebSocketManager.testMode = true;
+        return WebSocketManager();
+      }),
+      // Devices list
+      devicesNotifierProvider
+          .overrideWith((ref) => _DevicesNotifierFixed(devices)),
+      // Live positions empty
+      positionsLiveProvider
+          .overrideWith((ref) => const Stream<Map<int, Position>>.empty()),
+      // Last-known provider returns given map directly
+      positionsLastKnownProvider
+          .overrideWith(() => PositionsLastKnownNotifierFixed(lastKnown)),
+      // DAO provider not used in this widget test
+      positionsDaoProvider.overrideWith((ref) async => _DaoNoop()),
+    ],);
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const Directionality(
-          textDirection: TextDirection.ltr,
-          child: MaterialApp(home: MapPage(preselectedIds: {1})),
-        ),
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const Directionality(
+        textDirection: TextDirection.ltr,
+        child: MaterialApp(home: MapPage(preselectedIds: {1})),
       ),
-    );
+    ),);
 
     // Allow frames to settle
     await tester.pumpAndSettle(const Duration(milliseconds: 200));
