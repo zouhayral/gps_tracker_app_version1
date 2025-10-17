@@ -35,10 +35,19 @@ class MapMarkerWidget extends ConsumerWidget {
     final statusStr = (device?['status']?.toString() ?? '').toLowerCase();
     final online = statusStr == 'online';
     
-    // Extract engine state (check common attribute names)
-    final engineOn = device?['ignition'] == true || 
-                     device?['engineOn'] == true || 
-                     false;
+    // Extract engine state (check both device fields and position attributes)
+    bool _asTrue(dynamic v) {
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      final s = v?.toString().toLowerCase().trim();
+      return s == 'true' || s == '1' || s == 'on' || s == 'yes';
+    }
+  final attrs = position.attributes;
+    final engineOn = _asTrue(device?['ignition']) ||
+        _asTrue(device?['engineOn']) ||
+        _asTrue(attrs['ignition']) ||
+        _asTrue(attrs['engineOn']) ||
+        _asTrue(attrs['engine_on']);
     
     // Determine if moving (speed > 1 km/h)
     final speed = position.speed;

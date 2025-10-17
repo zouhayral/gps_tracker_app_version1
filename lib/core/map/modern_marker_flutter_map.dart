@@ -45,12 +45,12 @@ class ModernMarkerFlutterMapWidget extends StatelessWidget {
 
   /// Determine if we should use compact layout based on zoom level
   bool get _useCompact {
-    // Use compact markers at lower zoom levels (more zoomed out)
-    // At zoom 10 and below, use compact
-    // At zoom 13 and above, use full
-    // Between 10-13, transition based on selection
-    if (zoomLevel <= 10.0) return true;
-    if (zoomLevel >= 13.0) return false;
+    // Compact markers at lower zoom levels (more zoomed out)
+    // At zoom 8 and below, use compact (48x48)
+    // At zoom 11 and above, use full (56x56)
+    // Between 8-11, transition based on selection
+    if (zoomLevel <= 8.0) return true;
+    if (zoomLevel >= 11.0) return false;
     
     // In transition zone, selected markers stay full
     return !isSelected;
@@ -63,8 +63,8 @@ class ModernMarkerFlutterMapWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final size = _markerSize;
     
-    // Add selection scaling
-    final scale = isSelected ? 1.2 : 1.0;
+    // Add selection scaling (make selected markers slightly larger)
+    final scale = isSelected ? 1.15 : 1.0;
     
     return Transform.scale(
       scale: scale,

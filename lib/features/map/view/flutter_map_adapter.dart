@@ -166,7 +166,7 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
     return MarkerClusterLayerWidget(
       options: MarkerClusterLayerOptions(
         maxClusterRadius: 45,
-        size: const Size(36, 36),
+        size: const Size(40, 40), // Cluster circle size
         // Reuse cached markers if available to preserve widget identity
         markers: cachedMarkers ??
             [
@@ -174,8 +174,8 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
                 Marker(
                   key: ValueKey('marker_${m.id}_${m.isSelected}'),
                   point: m.position,
-                  width: 280, // Full marker size
-                  height: 90,
+                  width: 56, // Modern circular marker size
+                  height: 56,
                   child: Consumer(
                     builder: (context, ref, _) {
                       return GestureDetector(
@@ -196,7 +196,7 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
         builder: (context, markers) {
           return Container(
             decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.8),
+              color: const Color(0xFFA6CD27).withValues(alpha: 0.9), // App seed color
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
