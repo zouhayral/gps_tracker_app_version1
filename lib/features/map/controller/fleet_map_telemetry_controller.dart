@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
@@ -59,7 +60,9 @@ class FleetMapTelemetryController extends AsyncNotifier<FMTCState> {
           devices.map((d) => d['id'] as int).where((id) => id > 0).toList();
       if (deviceIds.isNotEmpty) {
         // Don't await - let repository handle this in background
-        repo.fetchMultipleDevices(deviceIds);
+        unawaited(
+          repo.fetchMultipleDevices(deviceIds),
+        );
         if (kDebugMode) {
           debugPrint(
             '[FMTC] Triggered position fetch for ${deviceIds.length} devices',

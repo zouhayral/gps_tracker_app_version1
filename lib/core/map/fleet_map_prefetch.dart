@@ -9,6 +9,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:my_app_gps/core/map/ai_map_optimizer.dart';
+import 'package:my_app_gps/core/map/map_perf_monitor.dart';
+
 /// Fleet Map Prefetch & Snapshot Cache Manager
 ///
 /// Responsibilities:
@@ -26,10 +29,14 @@ class FleetMapPrefetchManager {
   FleetMapPrefetchManager({
     required this.prefs,
     this.debugMode = false,
+    this.perfMonitor,
+    this.aiOptimizer,
   });
 
   final SharedPreferences prefs;
   final bool debugMode;
+  final MapPerfMonitor? perfMonitor;
+  final AiMapOptimizer? aiOptimizer;
 
   // Snapshot cache keys
   static const String _keySnapshotImage = 'fleet_map_snapshot_image';
@@ -53,6 +60,9 @@ class FleetMapPrefetchManager {
   LatLng? _cachedCenter;
   double? _cachedZoom;
   DateTime? _cachedTimestamp;
+
+  // AI optimization config
+  MapOptimizationConfig _aiConfig = MapOptimizationConfig.defaults();
 
   /// Initialize and load cached snapshot
   Future<void> initialize() async {
@@ -246,14 +256,25 @@ class FleetMapPrefetchManager {
         );
       }
 
-      // Prefetch tiles in parallel (batches of 6 to avoid overwhelming network)
-      const batchSize = 6;
+      // Prefetch tiles in parallel (batches - use AI-optimized batch size)
+      final batchSize = _aiConfig.tilePrefetchBatch;
       var loadedCount = 0;
+      final tileLoadStopwatch = Stopwatch();
 
       for (var i = 0; i < tiles.length; i += batchSize) {
         final batch = tiles.skip(i).take(batchSize).toList();
+        
+        tileLoadStopwatch.reset();
+        tileLoadStopwatch.start();
+        
         final futures = batch.map(_prefetchTile);
         final results = await Future.wait(futures);
+        
+        tileLoadStopwatch.stop();
+        
+        // Track tile load time for AI telemetry
+        perfMonitor?.onTileLoaded(Duration(milliseconds: tileLoadStopwatch.elapsedMilliseconds));
+        
         loadedCount += results.where((success) => success).length;
 
         // Small delay between batches to avoid blocking UI
@@ -344,12 +365,18 @@ class FleetMapPrefetchManager {
   }) {
     if (_isDisposed) return; // Don't queue moves after dispose
 
+    // Track zoom start for AI telemetry
+    perfMonitor?.onZoomStart(controller.camera.zoom);
+
+    // Use AI-optimized duration if available
+    final optimizedDuration = _aiConfig.zoomAnimationDuration;
+
     // Add move to queue
     _cameraMoveQueue.add(
       _CameraMove(
         target: target,
         zoom: zoom,
-        duration: duration,
+        duration: optimizedDuration,
         curve: curve,
       ),
     );
@@ -425,6 +452,10 @@ class FleetMapPrefetchManager {
     }
 
     stopwatch.stop();
+    
+    // Track zoom end for AI telemetry
+    perfMonitor?.onZoomEnd(zoom);
+    
     if (debugMode && !_isDisposed) {
       debugPrint(
         '[FleetMapPrefetch] ✓ Camera animation completed in ${stopwatch.elapsedMilliseconds}ms',
@@ -471,6 +502,22 @@ class FleetMapPrefetchManager {
       debugPrint('[FleetMapPrefetch] ✓ Snapshot cache cleared');
     }
   }
+
+  /// Update AI optimization config
+  void updateAiConfig(MapOptimizationConfig config) {
+    _aiConfig = config;
+    
+    if (debugMode) {
+      debugPrint('[FleetMapPrefetch] 🤖 AI config updated:');
+      debugPrint('  - Zoom debounce: ${config.zoomDebounceDuration.inMilliseconds}ms');
+      debugPrint('  - Zoom animation: ${config.zoomAnimationDuration.inMilliseconds}ms');
+      debugPrint('  - Tile batch: ${config.tilePrefetchBatch}');
+      debugPrint('  - Marker cache: ${config.markerCacheSize}');
+    }
+  }
+
+  /// Get current AI config
+  MapOptimizationConfig get aiConfig => _aiConfig;
 
   /// Dispose resources
   void dispose() {

@@ -51,13 +51,16 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
   @override
   void didUpdateWidget(covariant FlutterMapAdapter oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _maybeFit();
+    // Use throttled fit for subsequent updates to avoid rapid camera jumps
+    _maybeFit(immediate: false);
   }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFit());
+    // CRITICAL FIX: Initial camera fit must be IMMEDIATE to show selected devices
+    // Without this, map shows (0,0) for 300ms+ while throttler delays the fit
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFit(immediate: true));
   }
 
   @override
@@ -66,16 +69,28 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
     super.dispose();
   }
 
-  void _maybeFit() {
+  void _maybeFit({bool immediate = false}) {
     final fit = widget.cameraFit;
     if (fit.boundsPoints != null && fit.boundsPoints!.isNotEmpty) {
       final bounds = LatLngBounds.fromPoints(fit.boundsPoints!);
       final center = bounds.center;
       final zoom = fitZoomForBounds(bounds, paddingFactor: 1.15);
-      _moveThrottler.run(() => _animatedMove(center, zoom));
+      if (immediate) {
+        // Immediate camera move for initial load or user-triggered actions
+        _animatedMove(center, zoom);
+      } else {
+        // Throttled move for automatic updates
+        _moveThrottler.run(() => _animatedMove(center, zoom));
+      }
     } else if (fit.center != null) {
-      _moveThrottler
-          .run(() => _animatedMove(fit.center!, mapController.camera.zoom));
+      if (immediate) {
+        // Immediate camera move for initial load or user-triggered actions
+        _animatedMove(fit.center!, mapController.camera.zoom);
+      } else {
+        // Throttled move for automatic updates
+        _moveThrottler
+            .run(() => _animatedMove(fit.center!, mapController.camera.zoom));
+      }
     }
   }
 
@@ -116,6 +131,11 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
     }
   }
 
+  // Public method to trigger immediate camera fit (for user interactions)
+  void fitCameraImmediate() {
+    _maybeFit(immediate: true);
+  }
+
   void _animatedMove(LatLng dest, double zoom) {
     // Use flutter_map's built-in animated move for smooth transitions
     // Duration optimized for <100ms total response time
@@ -154,8 +174,8 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
                 Marker(
                   key: ValueKey('marker_${m.id}_${m.isSelected}'),
                   point: m.position,
-                  width: 32,
-                  height: 32,
+                  width: 280, // Full marker size
+                  height: 90,
                   child: Consumer(
                     builder: (context, ref, _) {
                       return GestureDetector(
@@ -164,6 +184,7 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
                         child: MapMarkerWidget(
                           deviceId: int.tryParse(m.id) ?? -1,
                           isSelected: m.isSelected,
+                          zoomLevel: mapController.camera.zoom,
                           key:
                               ValueKey('marker_widget_${m.id}_${m.isSelected}'),
                         ),

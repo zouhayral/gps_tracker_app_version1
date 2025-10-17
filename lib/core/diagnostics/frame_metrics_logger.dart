@@ -83,8 +83,7 @@ class FrameMetricsLogger {
         _jankCount++;
         if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
           debugPrint(
-            '[FrameMetrics] ⚠️  JANK: ${totalTime.toStringAsFixed(2)}ms (build: ${buildTime.toStringAsFixed(2)}ms, raster: ${rasterTime.toStringAsFixed(2)}ms)',
-          );
+              '[FrameMetrics] ⚠️  JANK: ${totalTime.toStringAsFixed(2)}ms (build: ${buildTime.toStringAsFixed(2)}ms, raster: ${rasterTime.toStringAsFixed(2)}ms)',);
         }
       }
     }
@@ -160,64 +159,50 @@ class FrameMetricsLogger {
     if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
       debugPrint('');
       debugPrint(
-        '╔═══════════════════════════════════════════════════════════╗',
-      );
+          '╔═══════════════════════════════════════════════════════════╗',);
       debugPrint(
-        '║           FRAME METRICS SUMMARY                           ║',
-      );
+          '║           FRAME METRICS SUMMARY                           ║',);
       debugPrint(
-        '╠═══════════════════════════════════════════════════════════╣',
-      );
+          '╠═══════════════════════════════════════════════════════════╣',);
       debugPrint('║ Duration:        ${elapsed.toStringAsFixed(1)}s');
       debugPrint('║ Total Frames:    $totalFrames');
       debugPrint(
-        '║ Avg Frame Time:  ${averageFrameTime.toStringAsFixed(2)} ms',
-      );
+          '║ Avg Frame Time:  ${averageFrameTime.toStringAsFixed(2)} ms',);
       debugPrint('║ Min Frame Time:  ${minFrameTime.toStringAsFixed(2)} ms');
       debugPrint('║ Max Frame Time:  ${maxFrameTime.toStringAsFixed(2)} ms');
       debugPrint('║ P95 Frame Time:  ${p95FrameTime.toStringAsFixed(2)} ms');
       debugPrint('║ P99 Frame Time:  ${p99FrameTime.toStringAsFixed(2)} ms');
       debugPrint('║ Estimated FPS:   ${estimatedFps.toStringAsFixed(1)}');
       debugPrint(
-        '╠═══════════════════════════════════════════════════════════╣',
-      );
+          '╠═══════════════════════════════════════════════════════════╣',);
       debugPrint(
-        '║ Jank Frames:     $_jankCount/${_buildTimes.length} (${jankPercentage.toStringAsFixed(1)}%)',
-      );
+          '║ Jank Frames:     $_jankCount/${_buildTimes.length} (${jankPercentage.toStringAsFixed(1)}%)',);
       debugPrint(
-        '║ Jank Threshold:  ${_jankThreshold.toStringAsFixed(2)} ms (60 FPS target)',
-      );
+          '║ Jank Threshold:  ${_jankThreshold.toStringAsFixed(2)} ms (60 FPS target)',);
       debugPrint(
-        '╠═══════════════════════════════════════════════════════════╣',
-      );
+          '╠═══════════════════════════════════════════════════════════╣',);
 
       if (jankPercentage < 1.0) {
         debugPrint(
-          '║ Status: ✅ EXCELLENT - Smooth performance                  ║',
-        );
+            '║ Status: ✅ EXCELLENT - Smooth performance                  ║',);
       } else if (jankPercentage < 5.0) {
         debugPrint(
-          '║ Status: ✅ GOOD - Minor jank detected                      ║',
-        );
+            '║ Status: ✅ GOOD - Minor jank detected                      ║',);
       } else if (jankPercentage < 10.0) {
         debugPrint(
-          '║ Status: ⚠️  WARNING - Noticeable jank                      ║',
-        );
+            '║ Status: ⚠️  WARNING - Noticeable jank                      ║',);
       } else {
         debugPrint(
-          '║ Status: ❌ POOR - Significant performance issues           ║',
-        );
+            '║ Status: ❌ POOR - Significant performance issues           ║',);
       }
 
       debugPrint(
-        '╚═══════════════════════════════════════════════════════════╝',
-      );
+          '╚═══════════════════════════════════════════════════════════╝',);
       debugPrint('');
 
       // One-line summary for quick validation
       debugPrint(
-        '[FrameMetrics] Frame avg: ${averageFrameTime.toStringAsFixed(1)} ms | Jank: $_jankCount/$totalFrames | FPS: ${estimatedFps.toStringAsFixed(1)}',
-      );
+          '[FrameMetrics] Frame avg: ${averageFrameTime.toStringAsFixed(1)} ms | Jank: $_jankCount/$totalFrames | FPS: ${estimatedFps.toStringAsFixed(1)}',);
     }
   }
 
@@ -231,8 +216,7 @@ class FrameMetricsLogger {
     }
 
     debugPrint(
-      '[FrameMetrics] Frame avg: ${averageFrameTime.toStringAsFixed(1)} ms | Jank: $_jankCount/$totalFrames | FPS: ${estimatedFps.toStringAsFixed(1)}',
-    );
+        '[FrameMetrics] Frame avg: ${averageFrameTime.toStringAsFixed(1)} ms | Jank: $_jankCount/$totalFrames | FPS: ${estimatedFps.toStringAsFixed(1)}',);
   }
 
   /// Reset all metrics

@@ -154,8 +154,7 @@ class _MapPageState extends ConsumerState<MapPage>
   bool _isShowingSnapshot = false;
   MapSnapshot? _cachedSnapshot;
   // MIGRATION NOTE: Removed _debouncedPositions - repository provides debouncing
-  // Throttle camera fit operations to avoid rapid repeated moves (only for bounds fitting).
-  final _fitThrottler = Throttler(const Duration(milliseconds: 300));
+  // MIGRATION NOTE: Removed _fitThrottler - camera fit throttling now handled by FlutterMapAdapter
   // Track last selected device to detect changes
   int? _lastSelectedSingleDevice;
 
@@ -198,20 +197,24 @@ class _MapPageState extends ConsumerState<MapPage>
 
       // OPTIMIZATION: Preload bitmap descriptors for instant marker icons
       // This eliminates the "loading" spinner delay on first marker render
-      BitmapDescriptorCache.instance
-          .preloadAll(StandardMarkerIcons.assetPaths)
-          .catchError((Object e) {
-        if (kDebugMode) {
-          debugPrint('[MapPage] Bitmap cache preload error (non-fatal): $e');
-        }
-      });
+      unawaited(
+        BitmapDescriptorCache.instance
+            .preloadAll(StandardMarkerIcons.assetPaths)
+            .catchError((Object e) {
+          if (kDebugMode) {
+            debugPrint('[MapPage] Bitmap cache preload error (non-fatal): $e');
+          }
+        }),
+      );
 
       // OPTIMIZATION: Preload marker icons for reduced first-draw latency
-      MarkerIconManager.instance.preloadIcons().catchError((Object e) {
-        if (kDebugMode) {
-          debugPrint('[MapPage] Icon preload error (non-fatal): $e');
-        }
-      });
+      unawaited(
+        MarkerIconManager.instance.preloadIcons().catchError((Object e) {
+          if (kDebugMode) {
+            debugPrint('[MapPage] Icon preload error (non-fatal): $e');
+          }
+        }),
+      );
 
       // OPTIMIZATION: Initialize background marker processing isolate
       await MarkerProcessingIsolate.instance.initialize();
@@ -232,7 +235,7 @@ class _MapPageState extends ConsumerState<MapPage>
 
       if (deviceIds.isNotEmpty) {
         // Fetch from cache (instant) and trigger REST fetch (background)
-        repo.fetchMultipleDevices(deviceIds);
+        unawaited(repo.fetchMultipleDevices(deviceIds));
         if (kDebugMode) {
           debugPrint(
             '[MapPage] Initialized repository with ${deviceIds.length} devices',
@@ -254,11 +257,11 @@ class _MapPageState extends ConsumerState<MapPage>
     });
 
     // Warm up FMTC asynchronously - do not await here to avoid blocking initState
-    FMTCInitializer.warmup().then((_) {
+    unawaited(FMTCInitializer.warmup().then((_) {
       debugPrint('[FMTC] warmup finished');
     }).catchError((Object e, StackTrace? st) {
       debugPrint('[FMTC] warmup error: $e');
-    });
+    }));
 
     // MIGRATION NOTE: Removed old positionsLiveProvider listening
     // VehicleDataRepository handles WebSocket → Cache → Notifiers internally
@@ -297,10 +300,55 @@ class _MapPageState extends ConsumerState<MapPage>
   /// - Marker updates only when data actually changes
   /// - No redundant processing on unrelated rebuilds
   void _setupMarkerUpdateListeners() {
-    // Listen to device changes
+    if (kDebugMode) {
+      debugPrint('[MAP] _setupMarkerUpdateListeners called');
+    }
+    
+    // Track which devices we've set up listeners for
+    final _listenedDeviceIds = <int>{};
+    
+    // Helper to setup position listeners for a device
+    void setupPositionListener(int deviceId) {
+      if (_listenedDeviceIds.contains(deviceId)) {
+        if (kDebugMode) {
+          debugPrint('[MAP] Skipping duplicate listener for device $deviceId');
+        }
+        return;
+      }
+      _listenedDeviceIds.add(deviceId);
+      
+      if (kDebugMode) {
+        debugPrint('[MAP] Setting up position listener for device $deviceId');
+      }
+      
+      // Listen to position updates for this device
+      // Note: vehiclePositionProvider is a StreamProvider, so we listen to AsyncValue changes
+      ref.listen(vehiclePositionProvider(deviceId), (previous, next) {
+        if (!mounted) return;
+        if (kDebugMode) {
+          debugPrint('[MAP] Position listener fired for device $deviceId: '
+              'previous=${previous?.valueOrNull != null}, '
+              'next=${next.valueOrNull != null}');
+        }
+        // When any position updates, refresh all markers
+        final currentDevices = ref.read(devicesNotifierProvider);
+        currentDevices.whenData(_triggerMarkerUpdate);
+      });
+    }
+    
+    // Listen to device list changes
     ref.listen(devicesNotifierProvider, (previous, next) {
       next.whenData((devices) {
         if (!mounted) return;
+        
+        // Setup position listeners for any new devices
+        for (final device in devices) {
+          final deviceId = device['id'] as int?;
+          if (deviceId != null) {
+            setupPositionListener(deviceId);
+          }
+        }
+        
         _triggerMarkerUpdate(devices);
       });
     });
@@ -309,6 +357,14 @@ class _MapPageState extends ConsumerState<MapPage>
     final devicesAsync = ref.read(devicesNotifierProvider);
     devicesAsync.whenData((devices) {
       if (mounted) {
+        // Setup position listeners for all initial devices
+        for (final device in devices) {
+          final deviceId = device['id'] as int?;
+          if (deviceId != null) {
+            setupPositionListener(deviceId);
+          }
+        }
+        
         _triggerMarkerUpdate(devices);
       }
     });
@@ -317,6 +373,10 @@ class _MapPageState extends ConsumerState<MapPage>
   /// Trigger marker update with current state
   /// Called by listeners when data changes
   void _triggerMarkerUpdate(List<Map<String, dynamic>> devices) {
+    if (kDebugMode) {
+      debugPrint('[MAP] _triggerMarkerUpdate called for ${devices.length} devices');
+    }
+    
     // Build positions map from per-device providers
     final positions = <int, Position>{};
     for (final device in devices) {
@@ -329,6 +389,10 @@ class _MapPageState extends ConsumerState<MapPage>
       if (position != null) {
         positions[deviceId] = position;
       }
+    }
+
+    if (kDebugMode) {
+      debugPrint('[MAP] Found ${positions.length} positions for marker update');
     }
 
     // Process markers asynchronously
@@ -549,24 +613,19 @@ class _MapPageState extends ConsumerState<MapPage>
     // Trigger fresh fetch for this device immediately
     refreshDevice(n);
 
-    // Optimized: Get position data BEFORE setState to trigger immediate camera move
-    final position = ref.read(positionByDeviceProvider(n));
-    final hasValidPos =
-        position != null && _valid(position.latitude, position.longitude);
-
     setState(() {
       if (_selectedIds.contains(n)) {
         _selectedIds.remove(n);
       } else {
         _selectedIds.add(n);
-        // Trigger smooth camera move if this is now the only selected device
-        if (_selectedIds.length == 1 && hasValidPos) {
-          // OPTIMIZATION: Use smooth camera move for better UX
-          _smoothMoveTo(
-            LatLng(position.latitude, position.longitude),
-          );
-        }
       }
+    });
+
+    // CRITICAL FIX: Trigger immediate camera fit after device selection
+    // This ensures the camera moves immediately to show the selected device(s)
+    // without waiting for the throttled didUpdateWidget in FlutterMapAdapter
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapKey.currentState?.fitCameraImmediate();
     });
 
     // OPTIMIZATION: Trigger marker update with new selection state
@@ -636,6 +695,10 @@ class _MapPageState extends ConsumerState<MapPage>
   // ---------- Build ----------
   @override
   Widget build(BuildContext context) {
+    // CRITICAL FIX: Setup position update listeners in build method
+    // ref.listen() must be called in build method, not in initState
+    _setupPositionListenersInBuild();
+    
     var content = _buildMapContent();
 
     // Add performance profiling overlay (disabled by default)
@@ -649,6 +712,36 @@ class _MapPageState extends ConsumerState<MapPage>
     }
 
     return content;
+  }
+
+  /// Setup position listeners for all devices (called in build method)
+  /// This ensures markers update when positions change via WebSocket
+  void _setupPositionListenersInBuild() {
+    final devicesAsync = ref.watch(devicesNotifierProvider);
+    final devices = devicesAsync.asData?.value ?? [];
+    
+    if (kDebugMode && devices.isNotEmpty) {
+      debugPrint('[MAP] Setting up position listeners for ${devices.length} devices in build');
+    }
+    
+    // Watch each device's position to trigger marker updates
+    for (final device in devices) {
+      final deviceId = device['id'] as int?;
+      if (deviceId == null) continue;
+      
+      // Watch position changes - this will trigger rebuild and marker update
+      ref.listen(vehiclePositionProvider(deviceId), (previous, next) {
+        if (!mounted) return;
+        
+        if (kDebugMode) {
+          debugPrint('[MAP] Position changed for device $deviceId, triggering marker update');
+        }
+        
+        // Trigger marker update when position changes
+        final currentDevices = ref.read(devicesNotifierProvider).asData?.value ?? [];
+        _triggerMarkerUpdate(currentDevices);
+      });
+    }
   }
 
   Widget _buildMapContent() {
@@ -791,19 +884,9 @@ class _MapPageState extends ConsumerState<MapPage>
               );
               if (hasAny) {
                 _didAutoFocus = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (target.isEmpty) return;
-                  _fitThrottler.run(() {
-                    if (target.length == 1) {
-                      // OPTIMIZATION: Use smooth camera move for autofocus
-                      _smoothMoveTo(
-                        target.first.position,
-                      );
-                    } else {
-                      setState(() {}); // trigger rebuild for bounds fit
-                    }
-                  });
-                });
+                // CRITICAL FIX: Camera must move IMMEDIATELY to show preselected devices
+                // The map adapter's initState will handle immediate fitting via _maybeFit(immediate: true)
+                // No need to delay or throttle here - just mark as focused
               }
             }
 
@@ -1147,7 +1230,7 @@ class _MapPageState extends ConsumerState<MapPage>
                                 .toList();
 
                             if (deviceIds.isNotEmpty) {
-                              repo.refreshAll();
+                              unawaited(repo.refreshAll());
                               await repo.fetchMultipleDevices(deviceIds);
                             }
 
