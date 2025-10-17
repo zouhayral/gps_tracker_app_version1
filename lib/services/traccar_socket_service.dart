@@ -53,7 +53,8 @@ class TraccarSocketService {
       print('[SOCKET] Host: ${uri.host}');
       print('[SOCKET] Port: ${uri.port}');
       print('[SOCKET] Scheme: ${uri.scheme}');
-      print('[SOCKET] Cookie: ${cookie != null ? 'present (${cookie.substring(0, 10)}...)' : 'MISSING'}');
+      print(
+          '[SOCKET] Cookie: ${cookie != null ? 'present (${cookie.substring(0, 10)}...)' : 'MISSING'}');
       print('[SOCKET] ═══════════════════════════════════════');
     }
     try {
@@ -114,28 +115,30 @@ class TraccarSocketService {
   void _onData(dynamic data) {
     try {
       final text = data is String ? data : utf8.decode(data as List<int>);
-      
+
       if (kDebugMode) {
         // ignore: avoid_print
         print('[SOCKET] 📨 RAW WebSocket message received:');
-        print('[SOCKET] ${text.length > 500 ? '${text.substring(0, 500)}...' : text}');
+        print(
+            '[SOCKET] ${text.length > 500 ? '${text.substring(0, 500)}...' : text}');
       }
-      
+
       final jsonObj = jsonDecode(text);
       if (jsonObj is Map<String, dynamic>) {
         // positions
         if (jsonObj.containsKey('positions')) {
-          final list =
-              (jsonObj['positions'] as List<dynamic>?)
+          final list = (jsonObj['positions'] as List<dynamic>?)
                   ?.whereType<Map<String, dynamic>>()
                   .toList() ??
               const <Map<String, dynamic>>[];
           final positions = list.map(Position.fromJson).toList();
           if (kDebugMode) {
             // ignore: avoid_print
-            print('[SOCKET] 📍 Received ${positions.length} positions from WebSocket');
+            print(
+                '[SOCKET] 📍 Received ${positions.length} positions from WebSocket');
             for (final pos in positions) {
-              print('[SOCKET]   Device ${pos.deviceId}: ignition=${pos.attributes['ignition']}, speed=${pos.speed}');
+              print(
+                  '[SOCKET]   Device ${pos.deviceId}: ignition=${pos.attributes['ignition']}, speed=${pos.speed}');
             }
           }
           _controller?.add(TraccarSocketMessage.positions(positions));

@@ -11,7 +11,8 @@ import 'package:my_app_gps/core/diagnostics/diagnostics_config.dart';
 /// Provider to toggle overlay visibility/logging
 final performanceOverlayEnabledProvider = StateProvider<bool>((ref) => true);
 
-final performanceMetricsServiceProvider = Provider<PerformanceMetricsService>((ref) {
+final performanceMetricsServiceProvider =
+    Provider<PerformanceMetricsService>((ref) {
   final s = PerformanceMetricsService();
   ref.onDispose(s.dispose);
   return s;
@@ -31,7 +32,9 @@ class PerformanceMetricsService {
   int Function()? _markerCountSupplier;
 
   /// Start sampling metrics. Updates latestMetrics frequently and writes CSV every 5s
-  void start({Duration sampleInterval = const Duration(seconds: 1), Duration csvInterval = const Duration(seconds: 5)}) {
+  void start(
+      {Duration sampleInterval = const Duration(seconds: 1),
+      Duration csvInterval = const Duration(seconds: 5)}) {
     if (_isRunning) return;
     _isRunning = true;
 
@@ -44,7 +47,9 @@ class PerformanceMetricsService {
     // after the widget tree is torn down. Detect the test binding by checking the binding's
     // runtimeType string (the test binding types are only present during widget tests).
     final bindingName = WidgetsBinding.instance.runtimeType.toString();
-    final inWidgetTest = bindingName.contains('AutomatedTestWidgetsFlutterBinding') || bindingName.contains('TestWidgetsFlutterBinding');
+    final inWidgetTest =
+        bindingName.contains('AutomatedTestWidgetsFlutterBinding') ||
+            bindingName.contains('TestWidgetsFlutterBinding');
 
     // Frequent sampling for overlay
     if (!inWidgetTest) {
@@ -57,14 +62,15 @@ class PerformanceMetricsService {
           if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
             await _exportCsv();
           } else {
-              if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
-                debugPrint('[PerfMetrics] Skipping CSV export on mobile (sandboxed FS)');
-              }
+            if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+              debugPrint(
+                  '[PerfMetrics] Skipping CSV export on mobile (sandboxed FS)');
+            }
           }
         } catch (e) {
-            if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
-              debugPrint('[PerfMetrics] CSV export skipped/error: $e');
-            }
+          if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+            debugPrint('[PerfMetrics] CSV export skipped/error: $e');
+          }
         }
       });
     } else {
@@ -98,7 +104,8 @@ class PerformanceMetricsService {
     final memBytes = _safeCurrentRss();
     final memMb = memBytes != null ? (memBytes / (1024 * 1024)) : null;
 
-    final markers = _markerCountSupplier != null ? _markerCountSupplier!() : null;
+    final markers =
+        _markerCountSupplier != null ? _markerCountSupplier!() : null;
 
     final now = DateTime.now().toUtc().toIso8601String();
 
@@ -119,9 +126,9 @@ class PerformanceMetricsService {
       final snap = _collectSnapshot();
       latestMetrics.value = Map<String, dynamic>.from(snap);
     } catch (e, st) {
-        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
-          debugPrint('[PerfMetrics] sample error: $e');
-        }
+      if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+        debugPrint('[PerfMetrics] sample error: $e');
+      }
       if (kDebugMode) debugPrintStack(stackTrace: st);
     }
   }
@@ -137,18 +144,19 @@ class PerformanceMetricsService {
         await file.writeAsString(_csvHeader() + '\n');
       }
       await file.writeAsString(csvLine + '\n', mode: FileMode.append);
-        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
-          debugPrint('[PerfMetrics] CSV row appended');
-        }
+      if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+        debugPrint('[PerfMetrics] CSV row appended');
+      }
     } catch (e, st) {
-        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
-          debugPrint('[PerfMetrics] export error: $e');
-        }
+      if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+        debugPrint('[PerfMetrics] export error: $e');
+      }
       if (kDebugMode) debugPrintStack(stackTrace: st);
     }
   }
 
-  String _csvHeader() => 'timestamp,avg_frame_ms,p95_frame_ms,p99_frame_ms,jank_count,fps,mem_mb,marker_count';
+  String _csvHeader() =>
+      'timestamp,avg_frame_ms,p95_frame_ms,p99_frame_ms,jank_count,fps,mem_mb,marker_count';
 
   String _toCsvLine(Map<String, dynamic> snap) {
     final parts = [
@@ -172,7 +180,8 @@ class PerformanceMetricsService {
 
   Future<File> _openLogFile() async {
     final now = DateTime.now();
-    final name = 'perf_log_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}.csv';
+    final name =
+        'perf_log_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}.csv';
     Directory dir;
     try {
       // Prefer application documents directory if available
@@ -199,14 +208,15 @@ class PerformanceMetricsService {
     try {
       final snap = _collectSnapshot();
       final now = DateTime.now();
-      final name = 'perf_snapshot_${now.toIso8601String().replaceAll(':', '-')}.json';
+      final name =
+          'perf_snapshot_${now.toIso8601String().replaceAll(':', '-')}.json';
       final file = File('${Directory.current.path}/$name');
       await file.writeAsString(jsonEncode(snap));
       return file;
     } catch (e) {
-        if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
-          debugPrint('[PerfMetrics] exportJson error: $e');
-        }
+      if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
+        debugPrint('[PerfMetrics] exportJson error: $e');
+      }
       return null;
     }
   }

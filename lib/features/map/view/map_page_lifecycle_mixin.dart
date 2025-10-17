@@ -15,7 +15,7 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
     on ConsumerState<T>, WidgetsBindingObserver {
   Timer? _periodicRefreshTimer;
   bool _hasInitializedOnce = false;
-  
+
   /// Override this to provide device IDs to refresh
   List<int> get activeDeviceIds;
 
@@ -36,7 +36,7 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
+
     switch (state) {
       case AppLifecycleState.resumed:
         _onAppResumed();
@@ -52,24 +52,25 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
   /// Called when app comes back to foreground
   void _onAppResumed() {
     if (kDebugMode) {
-      debugPrint('[LIFECYCLE] Resumed → reconnecting WebSocket and refreshing data');
+      debugPrint(
+          '[LIFECYCLE] Resumed → reconnecting WebSocket and refreshing data');
     }
-    
+
     // 1. Force WebSocket reconnection
     final wsManager = ref.read(webSocketManagerProvider.notifier);
     wsManager.forceReconnect();
-    
+
     // 2. Fetch fresh data from REST API (in case WebSocket was disconnected)
     final repo = ref.read(vehicleDataRepositoryProvider);
     final deviceIds = activeDeviceIds;
-    
+
     if (deviceIds.isNotEmpty) {
       repo.refreshAll();
       if (kDebugMode) {
         debugPrint('[LIFECYCLE] Refreshing ${deviceIds.length} devices');
       }
     }
-    
+
     // 3. Restart periodic refresh
     _startPeriodicRefresh();
   }
@@ -79,11 +80,11 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
     if (kDebugMode) {
       debugPrint('[LIFECYCLE] Paused → suspending WebSocket');
     }
-    
+
     // Suspend WebSocket to save battery (will auto-reconnect on resume)
     final wsManager = ref.read(webSocketManagerProvider.notifier);
     wsManager.suspend();
-    
+
     // Stop periodic refresh
     _periodicRefreshTimer?.cancel();
   }
@@ -91,26 +92,27 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
+
     // Trigger fresh data fetch when map page first opens
     if (!_hasInitializedOnce) {
       _hasInitializedOnce = true;
-      
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        
+
         if (kDebugMode) {
-          debugPrint('[LIFECYCLE] First open → fetching fresh data from server');
+          debugPrint(
+              '[LIFECYCLE] First open → fetching fresh data from server');
         }
-        
+
         // Force WebSocket health check
         final wsManager = ref.read(webSocketManagerProvider.notifier);
         wsManager.checkHealth();
-        
+
         // Fetch fresh positions from REST API
         final repo = ref.read(vehicleDataRepositoryProvider);
         final deviceIds = activeDeviceIds;
-        
+
         if (deviceIds.isNotEmpty) {
           repo.refreshAll();
         }
@@ -123,7 +125,7 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
     if (kDebugMode) {
       debugPrint('[LIFECYCLE] Device $deviceId selected → forcing fresh fetch');
     }
-    
+
     final repo = ref.read(vehicleDataRepositoryProvider);
     await repo.refresh(deviceId);
   }
@@ -132,32 +134,34 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
   /// Smart fallback: only triggers REST refresh if WebSocket has been silent for 20+ seconds
   void _startPeriodicRefresh() {
     _periodicRefreshTimer?.cancel();
-    
+
     const refreshInterval = Duration(seconds: 45);
     const silenceThreshold = Duration(seconds: 20);
-    
+
     _periodicRefreshTimer = Timer.periodic(refreshInterval, (_) {
       if (!mounted) return;
-      
+
       final wsState = ref.read(webSocketManagerProvider);
       final wsManager = ref.read(webSocketManagerProvider.notifier);
-      
+
       // Smart fallback: Only refresh if WebSocket is disconnected OR silent for 20+ seconds
-      final shouldRefresh = wsState.status != WebSocketStatus.connected || 
-                           wsState.isSilent(silenceThreshold);
-      
+      final shouldRefresh = wsState.status != WebSocketStatus.connected ||
+          wsState.isSilent(silenceThreshold);
+
       if (shouldRefresh) {
         if (kDebugMode) {
           if (wsState.status != WebSocketStatus.connected) {
-            debugPrint('[FALLBACK] WebSocket not connected → using REST refresh');
+            debugPrint(
+                '[FALLBACK] WebSocket not connected → using REST refresh');
           } else {
-            debugPrint('[FALLBACK] WebSocket silent for 20s → using REST refresh');
+            debugPrint(
+                '[FALLBACK] WebSocket silent for 20s → using REST refresh');
           }
         }
-        
+
         final repo = ref.read(vehicleDataRepositoryProvider);
         final deviceIds = activeDeviceIds;
-        
+
         if (deviceIds.isNotEmpty) {
           repo.fetchMultipleDevices(deviceIds);
         }
@@ -166,16 +170,17 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
         wsManager.checkHealth();
       }
     });
-    
+
     if (kDebugMode) {
-      debugPrint('[FALLBACK] Started periodic refresh every ${refreshInterval.inSeconds}s');
+      debugPrint(
+          '[FALLBACK] Started periodic refresh every ${refreshInterval.inSeconds}s');
     }
   }
 
   /// Check if data is stale and needs refresh
   bool isDataStale(DateTime? lastUpdate) {
     if (lastUpdate == null) return true;
-    
+
     const staleThreshold = Duration(minutes: 2);
     return DateTime.now().difference(lastUpdate) > staleThreshold;
   }

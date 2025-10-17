@@ -82,8 +82,7 @@ class DeviceEntity {
       phone: phone,
       lastUpdate: lastUpdate?.toUtc().millisecondsSinceEpoch,
       disabled: disabled,
-      attributesJson:
-          attributes != null ? _encodeAttributes(attributes) : '{}',
+      attributesJson: attributes != null ? _encodeAttributes(attributes) : '{}',
     );
   }
 

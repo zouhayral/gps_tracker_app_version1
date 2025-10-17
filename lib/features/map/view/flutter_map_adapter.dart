@@ -29,7 +29,7 @@ class FlutterMapAdapter extends StatefulWidget implements MapAdapter {
   final MapCameraFit cameraFit;
   final void Function(String markerId)? onMarkerTap;
   final VoidCallback? onMapTap;
-  
+
   // OPTIMIZATION: When provided, use ValueListenableBuilder for marker layer
   // This keeps FlutterMap itself static and only rebuilds markers
   final ValueNotifier<List<MapMarkerData>>? markersNotifier;
@@ -44,7 +44,7 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
   final _moveThrottler = Throttler(const Duration(milliseconds: 300));
   // Toggle to force-disable FMTC for troubleshooting
   static const bool kForceDisableFMTC =
-  false; // enable FMTC by default; set to true only for troubleshooting
+      false; // enable FMTC by default; set to true only for troubleshooting
   // Test helper: when true, don't load any remote tiles to avoid HTTP errors in widget tests
   static bool kDisableTilesForTests = false;
 
@@ -74,7 +74,8 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
       final zoom = fitZoomForBounds(bounds, paddingFactor: 1.15);
       _moveThrottler.run(() => _animatedMove(center, zoom));
     } else if (fit.center != null) {
-      _moveThrottler.run(() => _animatedMove(fit.center!, mapController.camera.zoom));
+      _moveThrottler
+          .run(() => _animatedMove(fit.center!, mapController.camera.zoom));
     }
   }
 
@@ -137,37 +138,40 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
     if (kDebugMode) {
       RebuildTracker.instance.trackRebuild('MarkerLayer');
     }
-    
+
     // Use cached marker layer options to avoid rebuilding identical layers
-    final cachedMarkers = MarkerLayerOptionsCache.instance.getCachedMarkers(validMarkers);
-    
+    final cachedMarkers =
+        MarkerLayerOptionsCache.instance.getCachedMarkers(validMarkers);
+
     return MarkerClusterLayerWidget(
       options: MarkerClusterLayerOptions(
         maxClusterRadius: 45,
         size: const Size(36, 36),
         // Reuse cached markers if available to preserve widget identity
-        markers: cachedMarkers ?? [
-          for (final m in validMarkers)
-            Marker(
-              key: ValueKey('marker_${m.id}_${m.isSelected}'),
-              point: m.position,
-              width: 32,
-              height: 32,
-              child: Consumer(
-                builder: (context, ref, _) {
-                  return GestureDetector(
-                    key: ValueKey('tap_${m.id}'),
-                    onTap: () => widget.onMarkerTap?.call(m.id),
-                    child: MapMarkerWidget(
-                      deviceId: int.tryParse(m.id) ?? -1,
-                      isSelected: m.isSelected,
-                      key: ValueKey('marker_widget_${m.id}_${m.isSelected}'),
-                    ),
-                  );
-                },
-              ),
-            ),
-        ],
+        markers: cachedMarkers ??
+            [
+              for (final m in validMarkers)
+                Marker(
+                  key: ValueKey('marker_${m.id}_${m.isSelected}'),
+                  point: m.position,
+                  width: 32,
+                  height: 32,
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      return GestureDetector(
+                        key: ValueKey('tap_${m.id}'),
+                        onTap: () => widget.onMarkerTap?.call(m.id),
+                        child: MapMarkerWidget(
+                          deviceId: int.tryParse(m.id) ?? -1,
+                          isSelected: m.isSelected,
+                          key:
+                              ValueKey('marker_widget_${m.id}_${m.isSelected}'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
         builder: (context, markers) {
           return Container(
             decoration: BoxDecoration(
@@ -177,7 +181,8 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
             alignment: Alignment.center,
             child: Text(
               markers.length.toString(),
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
             ),
           );
         },
@@ -191,7 +196,7 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
     if (kDebugMode) {
       RebuildTracker.instance.trackRebuild('FlutterMapAdapter');
     }
-    
+
     // Choose tile provider (only if tiles enabled)
     TileProvider? tileProvider;
     if (widget.tileProvider != null) {
@@ -234,7 +239,8 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
                   .where((m) => _validLatLng(m.position))
                   .toList(growable: false);
               if (validMarkers.isEmpty) {
-                debugPrint('[MAP] Skipping cluster render – no valid markers yet');
+                debugPrint(
+                    '[MAP] Skipping cluster render – no valid markers yet');
                 return const SizedBox.shrink();
               }
               return _buildMarkerLayer(validMarkers);
@@ -246,7 +252,8 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
                 .where((m) => _validLatLng(m.position))
                 .toList(growable: false);
             if (validMarkers.isEmpty) {
-              debugPrint('[MAP] Skipping cluster render – no valid markers yet');
+              debugPrint(
+                  '[MAP] Skipping cluster render – no valid markers yet');
               return const SizedBox.shrink();
             }
             return _buildMarkerLayer(validMarkers);

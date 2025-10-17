@@ -70,7 +70,8 @@ class VehicleDataCache {
       }
 
       if (kDebugMode) {
-        debugPrint('[VehicleCache] Loaded $loaded snapshots from disk, skipped $skipped stale entries');
+        debugPrint(
+            '[VehicleCache] Loaded $loaded snapshots from disk, skipped $skipped stale entries');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -97,14 +98,16 @@ class VehicleDataCache {
     if (snapshot != null) {
       _hits++;
       if (kDebugMode) {
-        debugPrint('[VehicleCache] HIT device=$deviceId (hits=$_hits misses=$_misses)');
+        debugPrint(
+            '[VehicleCache] HIT device=$deviceId (hits=$_hits misses=$_misses)');
       }
       return snapshot;
     }
 
     _misses++;
     if (kDebugMode) {
-      debugPrint('[VehicleCache] MISS device=$deviceId (hits=$_hits misses=$_misses)');
+      debugPrint(
+          '[VehicleCache] MISS device=$deviceId (hits=$_hits misses=$_misses)');
     }
     return null;
   }
@@ -120,7 +123,8 @@ class VehicleDataCache {
       unawaited(_writeToDisk(snapshot.deviceId));
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[VehicleCache] Put error for device ${snapshot.deviceId}: $e');
+        debugPrint(
+            '[VehicleCache] Put error for device ${snapshot.deviceId}: $e');
       }
     }
   }
@@ -186,11 +190,11 @@ class VehicleDataCache {
 
   /// Get cache statistics
   Map<String, dynamic> get stats => {
-    'hot_cache_size': _hotCache.length,
-    'hits': _hits,
-    'misses': _misses,
-    'hit_ratio': (hitRatio * 100).toStringAsFixed(1) + '%',
-  };
+        'hot_cache_size': _hotCache.length,
+        'hits': _hits,
+        'misses': _misses,
+        'hit_ratio': (hitRatio * 100).toStringAsFixed(1) + '%',
+      };
 
   /// Reset metrics
   void resetMetrics() {

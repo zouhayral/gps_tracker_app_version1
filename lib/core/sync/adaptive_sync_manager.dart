@@ -30,12 +30,12 @@ final adaptiveSyncManagerProvider = Provider<AdaptiveSyncManager>((ref) {
 
 /// Sync context for adaptive scheduling decisions
 enum SyncContext {
-  foregroundMoving,    // App visible, vehicles moving
-  foregroundIdle,      // App visible, vehicles idle
-  backgroundActive,    // App background, recent activity
+  foregroundMoving, // App visible, vehicles moving
+  foregroundIdle, // App visible, vehicles idle
+  backgroundActive, // App background, recent activity
   backgroundSuspended, // App background, long idle
-  offline,             // No network
-  reconnecting,        // WebSocket reconnecting
+  offline, // No network
+  reconnecting, // WebSocket reconnecting
 }
 
 /// Statistics for adaptive sync manager
@@ -63,24 +63,24 @@ class SyncStats {
 }
 
 /// Manages adaptive sync scheduling based on app lifecycle, motion, network, and battery
-/// 
+///
 /// Features:
 /// - Dynamic interval adjustment (5s moving → 30s idle → 60-120s background)
 /// - Pause sync during reconnection attempts
 /// - Skip sync when offline (cache-only)
 /// - Reduce sync when battery low
 /// - Fast resume when returning to foreground
-/// 
+///
 /// Usage:
 /// ```dart
 /// final manager = ref.watch(adaptiveSyncManagerProvider);
-/// 
+///
 /// // Notify motion state change
 /// manager.notifyVehicleMotion(deviceId: 42, isMoving: true);
-/// 
+///
 /// // Notify app lifecycle change
 /// manager.notifyLifecycleChange(AppLifecycleState.paused);
-/// 
+///
 /// // Get statistics
 /// final stats = manager.stats;
 /// ```
@@ -139,7 +139,8 @@ class AdaptiveSyncManager {
     _isStarted = true;
 
     if (kDebugMode) {
-      debugPrint('[AdaptiveSync] 🚀 Starting with interval: ${_currentInterval.inSeconds}s');
+      debugPrint(
+          '[AdaptiveSync] 🚀 Starting with interval: ${_currentInterval.inSeconds}s');
     }
 
     // Subscribe to network state changes
@@ -176,7 +177,8 @@ class AdaptiveSyncManager {
     _isStarted = false;
 
     if (kDebugMode) {
-      debugPrint('[AdaptiveSync] 🛑 Stopped. Total syncs: ${_stats.totalSyncs}');
+      debugPrint(
+          '[AdaptiveSync] 🛑 Stopped. Total syncs: ${_stats.totalSyncs}');
     }
   }
 
@@ -222,7 +224,8 @@ class AdaptiveSyncManager {
 
     if (wasMoving != isMoving) {
       if (kDebugMode) {
-        debugPrint('[AdaptiveSync] 🚗 Device $deviceId: ${isMoving ? "MOVING" : "IDLE"}');
+        debugPrint(
+            '[AdaptiveSync] 🚗 Device $deviceId: ${isMoving ? "MOVING" : "IDLE"}');
       }
       _updateSyncContext();
     }
@@ -234,7 +237,8 @@ class AdaptiveSyncManager {
       // Increase interval to save battery
       _currentInterval = _intervalBackgroundSuspended;
       if (kDebugMode) {
-        debugPrint('[AdaptiveSync] 🔋 Low battery - reduced sync: ${_currentInterval.inSeconds}s');
+        debugPrint(
+            '[AdaptiveSync] 🔋 Low battery - reduced sync: ${_currentInterval.inSeconds}s');
       }
       _rescheduleSyncTimer();
     }
@@ -254,12 +258,15 @@ class AdaptiveSyncManager {
     final oldContext = _currentContext;
 
     // Determine new context based on state
-    if (_networkSub == null || networkMonitor.currentState == NetworkState.offline) {
+    if (_networkSub == null ||
+        networkMonitor.currentState == NetworkState.offline) {
       _currentContext = SyncContext.offline;
-    } else if (_ref.read(connectionStatusProvider) == ConnectionStatus.reconnecting) {
+    } else if (_ref.read(connectionStatusProvider) ==
+        ConnectionStatus.reconnecting) {
       _currentContext = SyncContext.reconnecting;
     } else if (_isInForeground) {
-      final hasMovingVehicles = _vehicleMotionState.values.any((moving) => moving);
+      final hasMovingVehicles =
+          _vehicleMotionState.values.any((moving) => moving);
       _currentContext = hasMovingVehicles
           ? SyncContext.foregroundMoving
           : SyncContext.foregroundIdle;

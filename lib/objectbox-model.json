@@ -365,10 +365,68 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "6:4884911390848185971",
+      "lastPropertyId": "9:4055737664901968062",
+      "name": "TelemetryRecord",
+      "properties": [
+        {
+          "id": "1:4276626307023430888",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1944236348208386085",
+          "name": "deviceId",
+          "indexId": "20:1193383617258029940",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "3:6133613763831947324",
+          "name": "timestampMs",
+          "indexId": "21:3816651612327145533",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "4:6394000758318156867",
+          "name": "speed",
+          "type": 8
+        },
+        {
+          "id": "5:4368013641233144920",
+          "name": "battery",
+          "type": 8
+        },
+        {
+          "id": "6:4250605828746500783",
+          "name": "signal",
+          "type": 8
+        },
+        {
+          "id": "7:5622026549713914196",
+          "name": "engine",
+          "type": 9
+        },
+        {
+          "id": "8:6965802003024492481",
+          "name": "odometer",
+          "type": 8
+        },
+        {
+          "id": "9:4055737664901968062",
+          "name": "motion",
+          "type": 1
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "5:7368267337847358361",
-  "lastIndexId": "19:8642255856666822365",
+  "lastEntityId": "6:4884911390848185971",
+  "lastIndexId": "21:3816651612327145533",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

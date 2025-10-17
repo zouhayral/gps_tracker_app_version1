@@ -10,14 +10,14 @@ class ThrottledValueNotifier<T> extends ValueNotifier<T> {
     this.throttleDuration = const Duration(milliseconds: 50),
     this.enabled = true,
   });
-  
+
   final Duration throttleDuration;
   bool enabled;
-  
+
   Timer? _throttleTimer;
   T? _pendingValue;
   bool _hasUpdate = false;
-  
+
   @override
   set value(T newValue) {
     // If throttling disabled, update immediately
@@ -25,22 +25,22 @@ class ThrottledValueNotifier<T> extends ValueNotifier<T> {
       super.value = newValue;
       return;
     }
-    
+
     // If identical value, skip
     if (newValue == value) {
       return;
     }
-    
+
     // Store pending value
     _pendingValue = newValue;
     _hasUpdate = true;
-    
+
     // If no timer active, start one
     if (_throttleTimer == null || !_throttleTimer!.isActive) {
       _throttleTimer = Timer(throttleDuration, _flushUpdate);
     }
   }
-  
+
   void _flushUpdate() {
     if (_hasUpdate && _pendingValue != null) {
       super.value = _pendingValue as T;
@@ -48,7 +48,7 @@ class ThrottledValueNotifier<T> extends ValueNotifier<T> {
       _pendingValue = null;
     }
   }
-  
+
   /// Force immediate update, bypassing throttle
   void forceUpdate(T newValue) {
     _throttleTimer?.cancel();
@@ -56,7 +56,7 @@ class ThrottledValueNotifier<T> extends ValueNotifier<T> {
     _pendingValue = null;
     super.value = newValue;
   }
-  
+
   @override
   void dispose() {
     _throttleTimer?.cancel();

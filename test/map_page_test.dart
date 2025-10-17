@@ -20,7 +20,8 @@ void main() {
     await setupTestEnvironment();
   });
 
-  testWidgets('Offline device shows last-known marker and info', (tester) async {
+  testWidgets('Offline device shows last-known marker and info',
+      (tester) async {
     final lastKnown = {
       1: Position(
         deviceId: 1,
@@ -34,7 +35,13 @@ void main() {
       ),
     };
     final devices = [
-      {'id': 1, 'name': 'Truck 1', 'latitude': 0.0, 'longitude': 0.0, 'positionId': 10},
+      {
+        'id': 1,
+        'name': 'Truck 1',
+        'latitude': 0.0,
+        'longitude': 0.0,
+        'positionId': 10
+      },
     ];
 
     final container = ProviderContainer(overrides: [
@@ -43,11 +50,14 @@ void main() {
         return WebSocketManager();
       }),
       // Devices list
-      devicesNotifierProvider.overrideWith((ref) => _DevicesNotifierFixed(devices)),
+      devicesNotifierProvider
+          .overrideWith((ref) => _DevicesNotifierFixed(devices)),
       // Live positions empty
-  positionsLiveProvider.overrideWith((ref) => const Stream<Map<int, Position>>.empty()),
+      positionsLiveProvider
+          .overrideWith((ref) => const Stream<Map<int, Position>>.empty()),
       // Last-known provider returns given map directly
-      positionsLastKnownProvider.overrideWith(() => PositionsLastKnownNotifierFixed(lastKnown)),
+      positionsLastKnownProvider
+          .overrideWith(() => PositionsLastKnownNotifierFixed(lastKnown)),
       // DAO provider not used in this widget test
       positionsDaoProvider.overrideWith((ref) async => _DaoNoop()),
     ]);

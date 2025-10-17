@@ -12,7 +12,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (kDebugMode || kProfileMode) {
-    debugPrint('[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}');
+    debugPrint(
+        '[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}');
   }
 
   // Initialize SharedPreferences for vehicle data cache
@@ -30,7 +31,8 @@ Future<void> main() async {
   // Limit global image cache to reduce memory pressure on low-end devices.
   try {
     PaintingBinding.instance.imageCache.maximumSizeBytes = 50 << 20; // ~50MB
-    PaintingBinding.instance.imageCache.maximumSize = 200; // optional object count limit
+    PaintingBinding.instance.imageCache.maximumSize =
+        200; // optional object count limit
     // ignore: avoid_print
     print('[IMAGES] ImageCache limits set: maxBytes=50MB, maxCount=200');
   } catch (e) {
@@ -63,10 +65,10 @@ Future<void> main() async {
       );
     }
     await const FMTCStore('main').manage.create();
-  // ignore: avoid_print
-  print("[FMTC][INIT] Store 'main' created and ready");
-  // Confirm global init for diagnostic clarity
-  debugPrint('[FMTC][INIT] Initialized globally in main.dart');
+    // ignore: avoid_print
+    print("[FMTC][INIT] Store 'main' created and ready");
+    // Confirm global init for diagnostic clarity
+    debugPrint('[FMTC][INIT] Initialized globally in main.dart');
   } catch (e) {
     // ignore: avoid_print
     print('[FMTC][ERROR] FMTC init failed (${e.runtimeType}): $e');
@@ -95,7 +97,7 @@ Future<void> main() async {
       ),
     );
   };
-  
+
   runApp(
     ProviderScope(
       overrides: [
@@ -105,7 +107,10 @@ Future<void> main() async {
       // Ensure performance overlay is disabled unless explicitly enabled by the user
       child: Builder(builder: (context) {
         WidgetsApp.showPerformanceOverlayOverride = false;
-        return const MaterialApp(home: AppRoot(), debugShowCheckedModeBanner: false, showPerformanceOverlay: false);
+        return const MaterialApp(
+            home: AppRoot(),
+            debugShowCheckedModeBanner: false,
+            showPerformanceOverlay: false);
       }),
     ),
   );

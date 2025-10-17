@@ -15,10 +15,10 @@ abstract class PositionsDaoBase {
   Future<Position?> latestByDevice(int deviceId);
   Future<Map<int, Position>> loadAll();
 }
+
 /// ObjectBox-backed DAO storing a single last-known Position per device.
 class PositionsDaoObjectBox implements PositionsDaoBase {
-  PositionsDaoObjectBox(this._store)
-      : _box = _store.box<PositionEntity>();
+  PositionsDaoObjectBox(this._store) : _box = _store.box<PositionEntity>();
   // Store reference kept to keep the database open for the lifetime of the DAO.
   // ignore: unused_field
   final ob.Store _store;
@@ -29,7 +29,8 @@ class PositionsDaoObjectBox implements PositionsDaoBase {
   @override
   Future<void> upsert(Position p) async {
     // Upsert by unique deviceId
-    final query = _box.query(PositionEntity_.deviceId.equals(p.deviceId)).build();
+    final query =
+        _box.query(PositionEntity_.deviceId.equals(p.deviceId)).build();
     try {
       final existing = query.findFirst();
       final entity = PositionEntity.fromPosition(p);

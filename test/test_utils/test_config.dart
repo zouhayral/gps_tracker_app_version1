@@ -8,7 +8,7 @@
 //
 // Usage in tests:
 //   import 'test_utils/test_config.dart';
-//   
+//
 //   void main() {
 //     setUpAll(() async {
 //       await setupTestEnvironment();
@@ -28,6 +28,13 @@ import 'package:my_app_gps/objectbox.g.dart';
 // ignore: unused_import
 import 'package:objectbox_flutter_libs/objectbox_flutter_libs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart'
+    as ws_enhanced;
+import 'package:my_app_gps/core/services/network_connectivity_monitor.dart'
+    as netmon;
+import 'package:my_app_gps/core/data/vehicle_data_repository.dart' as repo;
 
 /// Disable map tiles/network in widget tests to prevent HTTP traffic and flakiness.
 void disableMapTilesForTests() {
@@ -68,6 +75,8 @@ Future<void> mockHiveAndPrefsForTests() async {
   final dir = await Directory.systemTemp.createTemp('hive_test_');
   hive.Hive.init(dir.path);
   SharedPreferences.setMockInitialValues(<String, Object>{});
+  final prefs = await SharedPreferences.getInstance();
+  SharedPrefsHolder.set(prefs);
 }
 
 /// One-shot test environment setup for all tests.
@@ -75,4 +84,12 @@ Future<void> setupTestEnvironment() async {
   disableMapTilesForTests();
   await mockHiveAndPrefsForTests();
   await skipObjectBoxTestsIfUnavailable();
+
+  // Ensure WebSocketManager test mode so it doesn't throw unimplemented mocks
+  WebSocketManager.testMode = true;
+  // Disable enhanced WS auto-connect in tests by default
+  ws_enhanced.WebSocketManagerEnhanced.testMode = true;
+  // Disable background timers that cause pending timers in widget tests
+  netmon.NetworkConnectivityMonitor.testMode = true;
+  repo.VehicleDataRepository.testMode = true;
 }

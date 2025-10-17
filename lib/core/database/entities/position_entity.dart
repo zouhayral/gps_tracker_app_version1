@@ -9,7 +9,15 @@ import 'package:objectbox/objectbox.dart';
 @Entity()
 class PositionEntity {
   PositionEntity({
-    required this.deviceId, required this.latitude, required this.longitude, required this.speed, required this.course, required this.deviceTimeMs, required this.serverTimeMs, required this.attributesJson, this.id = 0,
+    required this.deviceId,
+    required this.latitude,
+    required this.longitude,
+    required this.speed,
+    required this.course,
+    required this.deviceTimeMs,
+    required this.serverTimeMs,
+    required this.attributesJson,
+    this.id = 0,
   });
 
   @Id()
@@ -50,8 +58,12 @@ class PositionEntity {
         longitude: longitude,
         speed: speed,
         course: course,
-        deviceTime: DateTime.fromMillisecondsSinceEpoch(deviceTimeMs, isUtc: true).toLocal(),
-        serverTime: DateTime.fromMillisecondsSinceEpoch(serverTimeMs, isUtc: true).toLocal(),
+        deviceTime:
+            DateTime.fromMillisecondsSinceEpoch(deviceTimeMs, isUtc: true)
+                .toLocal(),
+        serverTime:
+            DateTime.fromMillisecondsSinceEpoch(serverTimeMs, isUtc: true)
+                .toLocal(),
         attributes: jsonDecode(attributesJson) as Map<String, dynamic>,
       );
 }

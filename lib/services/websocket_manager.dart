@@ -50,12 +50,13 @@ class WebSocketManager extends Notifier<WebSocketState> {
   bool _disposed = false;
   DateTime? _lastPingSent;
 
-  Stream<Map<String, dynamic>> get stream => _controller?.stream ?? const Stream.empty();
+  Stream<Map<String, dynamic>> get stream =>
+      _controller?.stream ?? const Stream.empty();
 
   @override
   WebSocketState build() {
     _controller = StreamController<Map<String, dynamic>>.broadcast();
-    
+
     // Defer connection to after build completes to avoid reading uninitialized providers
     if (!testMode) {
       Future.microtask(() {
@@ -64,7 +65,7 @@ class WebSocketManager extends Notifier<WebSocketState> {
         }
       });
     }
-    
+
     ref.onDispose(_dispose);
     ref.keepAlive();
     return const WebSocketState(status: WebSocketStatus.connecting);
@@ -93,7 +94,9 @@ class WebSocketManager extends Notifier<WebSocketState> {
         if (data is String) {
           final msg = jsonDecode(data);
           if (msg is Map<String, dynamic> && msg['type'] == 'pong') {
-            final latency = DateTime.now().difference(_lastPingSent ?? DateTime.now()).inMilliseconds;
+            final latency = DateTime.now()
+                .difference(_lastPingSent ?? DateTime.now())
+                .inMilliseconds;
             state = state.copyWith(pingMs: latency);
             _log('[WS][PONG] latency: ${latency}ms');
           } else if (msg is Map<String, dynamic>) {
@@ -132,9 +135,13 @@ class WebSocketManager extends Notifier<WebSocketState> {
   void _handleReconnect(String error) {
     if (_disposed) return;
     _retryCount++;
-    state = state.copyWith(status: WebSocketStatus.retrying, retryCount: _retryCount, error: error);
+    state = state.copyWith(
+        status: WebSocketStatus.retrying,
+        retryCount: _retryCount,
+        error: error);
     if (_retryCount > _maxRetries) {
-      _log('[WS][CIRCUIT BREAKER] Too many retries, pausing for ${_circuitBreakerTimeout.inMinutes}m');
+      _log(
+          '[WS][CIRCUIT BREAKER] Too many retries, pausing for ${_circuitBreakerTimeout.inMinutes}m');
       _circuitBreakerTimer = Timer(_circuitBreakerTimeout, () {
         _retryCount = 0;
         _connect();
@@ -174,4 +181,5 @@ class WebSocketManager extends Notifier<WebSocketState> {
   }
 }
 
-final webSocketProvider = NotifierProvider<WebSocketManager, WebSocketState>(WebSocketManager.new);
+final webSocketProvider =
+    NotifierProvider<WebSocketManager, WebSocketState>(WebSocketManager.new);

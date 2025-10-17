@@ -26,11 +26,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.map,
     redirect: (context, state) {
-       final isLoggedIn = auth is AuthAuthenticated;
-       final loggingIn = state.fullPath == AppRoutes.login;
-       if (!isLoggedIn && !loggingIn) return AppRoutes.login;
-       if (isLoggedIn && loggingIn) return AppRoutes.map;
-       return null;
+      final isLoggedIn = auth is AuthAuthenticated;
+      final loggingIn = state.fullPath == AppRoutes.login;
+      if (!isLoggedIn && !loggingIn) return AppRoutes.login;
+      if (isLoggedIn && loggingIn) return AppRoutes.map;
+      return null;
     },
     routes: [
       GoRoute(
@@ -57,23 +57,27 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 };
                 if (preselected.isEmpty) preselected = null; // ignore invalid
               }
-              return NoTransitionPage(child: MapPage(preselectedIds: preselected));
+              return NoTransitionPage(
+                  child: MapPage(preselectedIds: preselected));
             },
           ),
           GoRoute(
             path: AppRoutes.trips,
             name: 'trips',
-            pageBuilder: (context, state) => const NoTransitionPage(child: TripsPage()),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: TripsPage()),
           ),
           GoRoute(
             path: AppRoutes.alerts,
             name: 'alerts',
-            pageBuilder: (context, state) => const NoTransitionPage(child: NotificationsPage()),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: NotificationsPage()),
           ),
           GoRoute(
             path: AppRoutes.settings,
             name: 'settings',
-            pageBuilder: (context, state) => const NoTransitionPage(child: SettingsPage()),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: SettingsPage()),
           ),
         ],
       ),
@@ -83,4 +87,5 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 });
 
 // Simple RouteObserver for analytics / logging hooks.
-final RouteObserver<PageRoute<dynamic>> routeObserver = RouteObserver<PageRoute<dynamic>>();
+final RouteObserver<PageRoute<dynamic>> routeObserver =
+    RouteObserver<PageRoute<dynamic>>();

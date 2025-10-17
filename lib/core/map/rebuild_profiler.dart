@@ -54,7 +54,8 @@ class _RebuildProfilerOverlayState extends State<RebuildProfilerOverlay> {
 
   void _onFrameTimings(List<FrameTiming> timings) {
     for (final timing in timings) {
-      final duration = timing.totalSpan.inMicroseconds / 1000.0; // Convert to ms
+      final duration =
+          timing.totalSpan.inMicroseconds / 1000.0; // Convert to ms
       _stats.addFrameTiming(duration);
     }
   }
@@ -68,7 +69,7 @@ class _RebuildProfilerOverlayState extends State<RebuildProfilerOverlay> {
 
   @override
   Widget build(BuildContext context) {
-  if (!kDebugMode) return widget.child;
+    if (!kDebugMode) return widget.child;
 
     return Stack(
       children: [
@@ -117,7 +118,8 @@ class _PerformanceStats {
 
   void addFrameTiming(double frameTimeMs) {
     _frameTimes.add(frameTimeMs);
-    if (frameTimeMs > 16.67) { // Above 60 FPS threshold
+    if (frameTimeMs > 16.67) {
+      // Above 60 FPS threshold
       _droppedFrames++;
     }
     _updateSnapshot();
@@ -132,7 +134,8 @@ class _PerformanceStats {
   void _updateSnapshot() {
     if (_frameTimes.isEmpty) return;
 
-    final avgFrameTime = _frameTimes.reduce((a, b) => a + b) / _frameTimes.length;
+    final avgFrameTime =
+        _frameTimes.reduce((a, b) => a + b) / _frameTimes.length;
     final avgFps = 1000.0 / avgFrameTime;
 
     notifier.value = _StatsSnapshot(

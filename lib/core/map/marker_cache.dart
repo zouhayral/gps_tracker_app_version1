@@ -18,10 +18,13 @@ class MarkerCache {
     // Devices with positions
     for (final p in positions.values) {
       final deviceId = p.deviceId;
-      final name = devices.firstWhere(
-        (d) => d['id'] == deviceId,
-        orElse: () => <String, Object>{'name': ''},
-      )['name']?.toString() ?? '';
+      final name = devices
+              .firstWhere(
+                (d) => d['id'] == deviceId,
+                orElse: () => <String, Object>{'name': ''},
+              )['name']
+              ?.toString() ??
+          '';
       if (q.isNotEmpty &&
           !name.toLowerCase().contains(q) &&
           !selectedIds.contains(deviceId)) {
@@ -70,7 +73,8 @@ class MarkerCache {
       }
     }
     // Defensive: filter out any markers with invalid positions just in case
-    markers.removeWhere((m) => !_valid(m.position.latitude, m.position.longitude));
+    markers
+        .removeWhere((m) => !_valid(m.position.latitude, m.position.longitude));
     return markers;
   }
 

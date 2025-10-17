@@ -3,7 +3,7 @@
 // with `dart run build_runner build`.
 // See also https://docs.objectbox.io/getting-started#generate-objectbox-code
 
-// ignore_for_file: camel_case_types, depend_on_referenced_packages, always_use_package_imports, strict_raw_type, avoid_js_rounded_ints, cascade_invocations
+// ignore_for_file: camel_case_types, depend_on_referenced_packages
 // coverage:ignore-file
 
 import 'dart:typed_data';
@@ -18,6 +18,7 @@ import 'core/database/entities/device_entity.dart';
 import 'core/database/entities/event_entity.dart';
 import 'core/database/entities/geofence_entity.dart';
 import 'core/database/entities/position_entity.dart';
+import 'core/database/entities/telemetry_record.dart';
 import 'core/database/entities/trip_entity.dart';
 
 export 'package:objectbox/objectbox.dart'; // so that callers only have to import this file
@@ -428,6 +429,72 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(6, 4884911390848185971),
+    name: 'TelemetryRecord',
+    lastPropertyId: const obx_int.IdUid(9, 4055737664901968062),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 4276626307023430888),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 1944236348208386085),
+        name: 'deviceId',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(20, 1193383617258029940),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 6133613763831947324),
+        name: 'timestampMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(21, 3816651612327145533),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 6394000758318156867),
+        name: 'speed',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 4368013641233144920),
+        name: 'battery',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 4250605828746500783),
+        name: 'signal',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 5622026549713914196),
+        name: 'engine',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 6965802003024492481),
+        name: 'odometer',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 4055737664901968062),
+        name: 'motion',
+        type: 1,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -468,8 +535,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(5, 7368267337847358361),
-    lastIndexId: const obx_int.IdUid(19, 8642255856666822365),
+    lastEntityId: const obx_int.IdUid(6, 4884911390848185971),
+    lastIndexId: const obx_int.IdUid(21, 3816651612327145533),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -586,18 +653,14 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final nameOffset = fbb.writeString(object.name);
         final uniqueIdOffset = fbb.writeString(object.uniqueId);
         final statusOffset = fbb.writeString(object.status);
-        final categoryOffset = object.category == null
-            ? null
-            : fbb.writeString(object.category!);
-        final modelOffset = object.model == null
-            ? null
-            : fbb.writeString(object.model!);
-        final contactOffset = object.contact == null
-            ? null
-            : fbb.writeString(object.contact!);
-        final phoneOffset = object.phone == null
-            ? null
-            : fbb.writeString(object.phone!);
+        final categoryOffset =
+            object.category == null ? null : fbb.writeString(object.category!);
+        final modelOffset =
+            object.model == null ? null : fbb.writeString(object.model!);
+        final contactOffset =
+            object.contact == null ? null : fbb.writeString(object.contact!);
+        final phoneOffset =
+            object.phone == null ? null : fbb.writeString(object.phone!);
         final attributesJsonOffset = fbb.writeString(object.attributesJson);
         fbb.startTable(13);
         fbb.addInt64(0, object.id);
@@ -694,15 +757,12 @@ obx_int.ModelDefinition getObjectBoxModel() {
       objectToFB: (EventEntity object, fb.Builder fbb) {
         final eventIdOffset = fbb.writeString(object.eventId);
         final eventTypeOffset = fbb.writeString(object.eventType);
-        final priorityOffset = object.priority == null
-            ? null
-            : fbb.writeString(object.priority!);
-        final severityOffset = object.severity == null
-            ? null
-            : fbb.writeString(object.severity!);
-        final messageOffset = object.message == null
-            ? null
-            : fbb.writeString(object.message!);
+        final priorityOffset =
+            object.priority == null ? null : fbb.writeString(object.priority!);
+        final severityOffset =
+            object.severity == null ? null : fbb.writeString(object.severity!);
+        final messageOffset =
+            object.message == null ? null : fbb.writeString(object.message!);
         final attributesJsonOffset = fbb.writeString(object.attributesJson);
         fbb.startTable(13);
         fbb.addInt64(0, object.id);
@@ -805,9 +865,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final descriptionOffset = object.description == null
             ? null
             : fbb.writeString(object.description!);
-        final areaOffset = object.area == null
-            ? null
-            : fbb.writeString(object.area!);
+        final areaOffset =
+            object.area == null ? null : fbb.writeString(object.area!);
         final attributesJsonOffset = fbb.writeString(object.attributesJson);
         fbb.startTable(8);
         fbb.addInt64(0, object.id);
@@ -1004,6 +1063,94 @@ obx_int.ModelDefinition getObjectBoxModel() {
           endPositionId: endPositionIdParam,
           spentFuel: spentFuelParam,
           attributesJson: attributesJsonParam,
+        );
+
+        return object;
+      },
+    ),
+    TelemetryRecord: obx_int.EntityDefinition<TelemetryRecord>(
+      model: _entities[5],
+      toOneRelations: (TelemetryRecord object) => [],
+      toManyRelations: (TelemetryRecord object) => {},
+      getId: (TelemetryRecord object) => object.id,
+      setId: (TelemetryRecord object, int id) {
+        object.id = id;
+      },
+      objectToFB: (TelemetryRecord object, fb.Builder fbb) {
+        final engineOffset =
+            object.engine == null ? null : fbb.writeString(object.engine!);
+        fbb.startTable(10);
+        fbb.addInt64(0, object.id);
+        fbb.addInt64(1, object.deviceId);
+        fbb.addInt64(2, object.timestampMs);
+        fbb.addFloat64(3, object.speed);
+        fbb.addFloat64(4, object.battery);
+        fbb.addFloat64(5, object.signal);
+        fbb.addOffset(6, engineOffset);
+        fbb.addFloat64(7, object.odometer);
+        fbb.addBool(8, object.motion);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final deviceIdParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          6,
+          0,
+        );
+        final timestampMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          8,
+          0,
+        );
+        final speedParam = const fb.Float64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          10,
+        );
+        final batteryParam = const fb.Float64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          12,
+        );
+        final signalParam = const fb.Float64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          14,
+        );
+        final engineParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 16);
+        final odometerParam = const fb.Float64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          18,
+        );
+        final motionParam = const fb.BoolReader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          20,
+        );
+        final object = TelemetryRecord(
+          id: idParam,
+          deviceId: deviceIdParam,
+          timestampMs: timestampMsParam,
+          speed: speedParam,
+          battery: batteryParam,
+          signal: signalParam,
+          engine: engineParam,
+          odometer: odometerParam,
+          motion: motionParam,
         );
 
         return object;
@@ -1306,5 +1453,53 @@ class TripEntity_ {
   /// See [TripEntity.attributesJson].
   static final attributesJson = obx.QueryStringProperty<TripEntity>(
     _entities[4].properties[15],
+  );
+}
+
+/// [TelemetryRecord] entity fields to define ObjectBox queries.
+class TelemetryRecord_ {
+  /// See [TelemetryRecord.id].
+  static final id = obx.QueryIntegerProperty<TelemetryRecord>(
+    _entities[5].properties[0],
+  );
+
+  /// See [TelemetryRecord.deviceId].
+  static final deviceId = obx.QueryIntegerProperty<TelemetryRecord>(
+    _entities[5].properties[1],
+  );
+
+  /// See [TelemetryRecord.timestampMs].
+  static final timestampMs = obx.QueryIntegerProperty<TelemetryRecord>(
+    _entities[5].properties[2],
+  );
+
+  /// See [TelemetryRecord.speed].
+  static final speed = obx.QueryDoubleProperty<TelemetryRecord>(
+    _entities[5].properties[3],
+  );
+
+  /// See [TelemetryRecord.battery].
+  static final battery = obx.QueryDoubleProperty<TelemetryRecord>(
+    _entities[5].properties[4],
+  );
+
+  /// See [TelemetryRecord.signal].
+  static final signal = obx.QueryDoubleProperty<TelemetryRecord>(
+    _entities[5].properties[5],
+  );
+
+  /// See [TelemetryRecord.engine].
+  static final engine = obx.QueryStringProperty<TelemetryRecord>(
+    _entities[5].properties[6],
+  );
+
+  /// See [TelemetryRecord.odometer].
+  static final odometer = obx.QueryDoubleProperty<TelemetryRecord>(
+    _entities[5].properties[7],
+  );
+
+  /// See [TelemetryRecord.motion].
+  static final motion = obx.QueryBooleanProperty<TelemetryRecord>(
+    _entities[5].properties[8],
   );
 }

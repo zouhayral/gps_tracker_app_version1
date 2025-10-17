@@ -11,10 +11,12 @@ class PerformanceOverlayWidget extends ConsumerStatefulWidget {
   const PerformanceOverlayWidget({super.key});
 
   @override
-  ConsumerState<PerformanceOverlayWidget> createState() => _PerformanceOverlayWidgetState();
+  ConsumerState<PerformanceOverlayWidget> createState() =>
+      _PerformanceOverlayWidgetState();
 }
 
-class _PerformanceOverlayWidgetState extends ConsumerState<PerformanceOverlayWidget> {
+class _PerformanceOverlayWidgetState
+    extends ConsumerState<PerformanceOverlayWidget> {
   Timer? _tick;
 
   @override
@@ -32,9 +34,9 @@ class _PerformanceOverlayWidgetState extends ConsumerState<PerformanceOverlayWid
     try {
       if (event is KeyDownEvent) {
         final isCtrl = HardwareKeyboard.instance.physicalKeysPressed
-            .contains(PhysicalKeyboardKey.controlLeft) ||
+                .contains(PhysicalKeyboardKey.controlLeft) ||
             HardwareKeyboard.instance.physicalKeysPressed
-            .contains(PhysicalKeyboardKey.controlRight);
+                .contains(PhysicalKeyboardKey.controlRight);
         if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyP) {
           final cur = ref.read(performanceOverlayVisibleProvider);
           ref.read(performanceOverlayVisibleProvider.notifier).state = !cur;
@@ -67,23 +69,31 @@ class _PerformanceOverlayWidgetState extends ConsumerState<PerformanceOverlayWid
         valueListenable: svc.latestMetrics,
         builder: (context, metrics, _) {
           final fpsVal = metrics['fps'] ?? 0;
-          final fps = (fpsVal is num) ? fpsVal.toStringAsFixed(1) : fpsVal.toString();
+          final fps =
+              (fpsVal is num) ? fpsVal.toStringAsFixed(1) : fpsVal.toString();
           final memVal = metrics['mem_mb'];
-          final mem = (memVal is num) ? '${(memVal.toDouble()).toStringAsFixed(0)} MB' : 'N/A';
+          final mem = (memVal is num)
+              ? '${(memVal.toDouble()).toStringAsFixed(0)} MB'
+              : 'N/A';
           final markers = metrics['marker_count']?.toString() ?? '-';
           return Material(
             color: Colors.black.withValues(alpha: 0.5),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('FPS: $fps', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text('FPS: $fps',
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 12),
-                  Text('Mem: $mem', style: const TextStyle(color: Colors.white)),
+                  Text('Mem: $mem',
+                      style: const TextStyle(color: Colors.white)),
                   const SizedBox(width: 12),
-                  Text('Markers: $markers', style: const TextStyle(color: Colors.white)),
+                  Text('Markers: $markers',
+                      style: const TextStyle(color: Colors.white)),
                 ],
               ),
             ),

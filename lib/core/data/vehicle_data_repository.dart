@@ -4,11 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/data/vehicle_data_cache.dart';
 import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
+import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
+import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 
 /// Provider for the vehicle data repository singleton
 final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
@@ -16,12 +19,14 @@ final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
   final devSvc = ref.watch(deviceServiceProvider);
   final posSvc = ref.watch(positionsServiceProvider);
   final socketSvc = ref.watch(traccarSocketServiceProvider);
+  final telemetryDao = ref.watch(telemetryDaoProvider);
 
   final repo = VehicleDataRepository(
     cache: cache,
     deviceService: devSvc,
     positionsService: posSvc,
     socketService: socketSvc,
+    telemetryDao: telemetryDao,
   );
 
   ref.onDispose(repo.dispose);
@@ -36,11 +41,13 @@ final vehicleDataCacheProvider = Provider<VehicleDataCache>((ref) {
 
 /// Provider for SharedPreferences (async init) - PUBLIC for override in main
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
+  final fromHolder = SharedPrefsHolder.instance;
+  if (fromHolder != null) return fromHolder;
   throw UnimplementedError('SharedPreferences must be overridden in main.dart');
 });
 
 /// Centralized repository for vehicle data.
-/// 
+///
 /// Architecture:
 /// - Merges REST API + WebSocket updates
 /// - Maintains in-memory + disk cache
@@ -53,6 +60,7 @@ class VehicleDataRepository {
     required this.deviceService,
     required this.positionsService,
     required this.socketService,
+    required this.telemetryDao,
   }) {
     _init();
   }
@@ -61,6 +69,7 @@ class VehicleDataRepository {
   final DeviceService deviceService;
   final PositionsService positionsService;
   final TraccarSocketService socketService;
+  final TelemetryDaoBase telemetryDao;
 
   // Per-device notifiers
   final Map<int, ValueNotifier<VehicleDataSnapshot?>> _notifiers = {};
@@ -84,23 +93,52 @@ class VehicleDataRepository {
   static const _minFetchInterval = Duration(seconds: 5);
   static const _restFallbackInterval = Duration(seconds: 10);
 
+  // Test-mode flag to disable background timers in widget tests
+  // Set from test setup: VehicleDataRepository.testMode = true;
+  static bool testMode = false;
+
   void _init() {
     // Defer WebSocket connection to avoid reading uninitialized providers
     // Pre-warm cache synchronously (safe - only reads SharedPreferences)
     _prewarmCache();
+
+    // Fire-and-forget: apply telemetry retention policy (30 days) on startup
+    // This runs once and does not block initialization.
+    unawaited(_applyTelemetryRetention());
 
     // Defer WebSocket subscription to after provider initialization completes
     Future.microtask(() {
       // Subscribe to WebSocket updates (connect returns a stream)
       _socketSub = socketService.connect().listen(_handleSocketMessage);
 
-      // Start REST fallback timer
-      _startFallbackPolling();
+      // Start REST fallback timer (disabled in tests)
+      if (!VehicleDataRepository.testMode) {
+        _startFallbackPolling();
+      } else if (kDebugMode) {
+        debugPrint('[VehicleRepo][TEST] Skipping REST fallback timer');
+      }
 
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] Initialized with deferred WebSocket connection');
+        debugPrint(
+            '[VehicleRepo] Initialized with deferred WebSocket connection');
       }
     });
+  }
+
+  /// Deletes telemetry records older than 30 days.
+  Future<void> _applyTelemetryRetention() async {
+    try {
+      final cutoff = DateTime.now().toUtc().subtract(const Duration(days: 30));
+      await telemetryDao.deleteOlderThan(cutoff);
+      if (kDebugMode) {
+        debugPrint(
+            '[VehicleRepo] Telemetry retention applied. Cutoff: $cutoff');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] Telemetry retention failed: $e');
+      }
+    }
   }
 
   /// Pre-warm cache by loading all cached snapshots into notifiers
@@ -108,7 +146,7 @@ class VehicleDataRepository {
   void _prewarmCache() {
     try {
       final allCached = cache.loadAll();
-      
+
       if (allCached.isEmpty) {
         if (kDebugMode) {
           debugPrint('[VehicleRepo] No cached data to prewarm');
@@ -119,13 +157,14 @@ class VehicleDataRepository {
       for (final entry in allCached.entries) {
         final deviceId = entry.key;
         final snapshot = entry.value;
-        
+
         // Create notifier with cached value
         _notifiers[deviceId] = ValueNotifier<VehicleDataSnapshot?>(snapshot);
       }
 
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] ✅ Pre-warmed cache with ${allCached.length} devices');
+        debugPrint(
+            '[VehicleRepo] ✅ Pre-warmed cache with ${allCached.length} devices');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -153,24 +192,32 @@ class VehicleDataRepository {
     // Events payload: may include positionId or deviceId and attributes (e.g., ignition)
     if (msg.type == 'events' && msg.payload != null) {
       try {
-        if (kDebugMode) debugPrint('[VehicleRepo][WS] events payload: ${msg.payload}');
+        if (kDebugMode)
+          debugPrint('[VehicleRepo][WS] events payload: ${msg.payload}');
         final payload = msg.payload;
-        final List events = payload is List ? payload : [payload];
+        final List<dynamic> events =
+            payload is List ? List<dynamic>.from(payload) : <dynamic>[payload];
         for (final e in events) {
           if (e is Map<String, dynamic>) {
             final posId = e['positionId'] as int?;
             final deviceId = e['deviceId'] as int?;
-            if (kDebugMode) debugPrint('[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId');
+            if (kDebugMode)
+              debugPrint(
+                  '[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId');
             // If event contains a positionId, fetch that position (likely contains attributes)
             if (posId != null) {
               try {
                 final p = await positionsService.latestByPositionId(posId);
                 if (p != null) {
-                  if (kDebugMode) debugPrint('[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}');
+                  if (kDebugMode)
+                    debugPrint(
+                        '[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}');
                   _handlePositionUpdates([p]);
                 }
               } catch (e) {
-                if (kDebugMode) debugPrint('[VehicleRepo] Failed to fetch position for positionId=$posId: $e');
+                if (kDebugMode)
+                  debugPrint(
+                      '[VehicleRepo] Failed to fetch position for positionId=$posId: $e');
               }
             }
 
@@ -186,10 +233,14 @@ class VehicleDataRepository {
                   engineState = EngineState.on;
                 }
                 if (engineState != null) {
-                  final rawTime = (e['eventTime'] ?? e['serverTime'] ?? e['deviceTime']) as String?;
+                  final rawTime = (e['eventTime'] ??
+                      e['serverTime'] ??
+                      e['deviceTime']) as String?;
                   DateTime ts;
                   try {
-                    ts = rawTime != null ? DateTime.parse(rawTime).toUtc() : DateTime.now().toUtc();
+                    ts = rawTime != null
+                        ? DateTime.parse(rawTime).toUtc()
+                        : DateTime.now().toUtc();
                   } catch (_) {
                     ts = DateTime.now().toUtc();
                   }
@@ -207,7 +258,8 @@ class VehicleDataRepository {
                     fuelLevel: null,
                   );
                   if (kDebugMode) {
-                    debugPrint('[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts');
+                    debugPrint(
+                        '[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts');
                   }
                   _updateDeviceSnapshot(partial);
                 }
@@ -216,7 +268,9 @@ class VehicleDataRepository {
               // Also refresh device data if no positionId to keep other fields fresh
               if (posId == null) {
                 _lastFetchTime.remove(deviceId);
-                if (kDebugMode) debugPrint('[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)');
+                if (kDebugMode)
+                  debugPrint(
+                      '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)');
                 _fetchDeviceData(deviceId);
               }
             }
@@ -231,23 +285,31 @@ class VehicleDataRepository {
     // Devices payload: updated device metadata or positionId may be present
     if (msg.type == 'devices' && msg.payload != null) {
       try {
-        if (kDebugMode) debugPrint('[VehicleRepo][WS] devices payload: ${msg.payload}');
+        if (kDebugMode)
+          debugPrint('[VehicleRepo][WS] devices payload: ${msg.payload}');
         final payload = msg.payload;
-        final List devices = payload is List ? payload : [payload];
+        final List<dynamic> devices =
+            payload is List ? List<dynamic>.from(payload) : <dynamic>[payload];
         for (final d in devices) {
           if (d is Map<String, dynamic>) {
             final posId = d['positionId'] as int?;
             final deviceId = d['id'] as int?;
-            if (kDebugMode) debugPrint('[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
+            if (kDebugMode)
+              debugPrint(
+                  '[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
             if (posId != null) {
               try {
                 final p = await positionsService.latestByPositionId(posId);
                 if (p != null) {
-                  if (kDebugMode) debugPrint('[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}');
+                  if (kDebugMode)
+                    debugPrint(
+                        '[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}');
                   _handlePositionUpdates([p]);
                 }
               } catch (e) {
-                if (kDebugMode) debugPrint('[VehicleRepo] Failed to fetch position for device update posId=$posId: $e');
+                if (kDebugMode)
+                  debugPrint(
+                      '[VehicleRepo] Failed to fetch position for device update posId=$posId: $e');
               }
             }
 
@@ -263,7 +325,9 @@ class VehicleDataRepository {
                   engineState = EngineState.on;
                 }
                 if (engineState != null) {
-                  final ts = DateTime.now().toUtc().add(const Duration(milliseconds: 1));
+                  final ts = DateTime.now()
+                      .toUtc()
+                      .add(const Duration(milliseconds: 1));
                   final partial = VehicleDataSnapshot(
                     deviceId: deviceId,
                     timestamp: ts,
@@ -276,7 +340,8 @@ class VehicleDataRepository {
                     fuelLevel: null,
                   );
                   if (kDebugMode) {
-                    debugPrint('[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts');
+                    debugPrint(
+                        '[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts');
                   }
                   _updateDeviceSnapshot(partial);
                 }
@@ -284,7 +349,9 @@ class VehicleDataRepository {
 
               // Refresh device data if no positionId to keep other fields fresh
               if (posId == null) {
-                if (kDebugMode) debugPrint('[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)');
+                if (kDebugMode)
+                  debugPrint(
+                      '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)');
                 _lastFetchTime.remove(deviceId);
                 _fetchDeviceData(deviceId);
               }
@@ -313,7 +380,8 @@ class VehicleDataRepository {
     }
 
     if (kDebugMode) {
-      debugPrint('[VehicleRepo] Processed ${positions.length} position updates');
+      debugPrint(
+          '[VehicleRepo] Processed ${positions.length} position updates');
     }
   }
 
@@ -321,38 +389,62 @@ class VehicleDataRepository {
   void _updateDeviceSnapshot(VehicleDataSnapshot snapshot) {
     if (kDebugMode) {
       final existing = _notifiers[snapshot.deviceId]?.value;
-      debugPrint('[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}');
+      debugPrint(
+          '[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}');
       debugPrint('[VehicleRepo]   incoming: ${snapshot}');
       debugPrint('[VehicleRepo]   existing: ${existing}');
-      
+
       // Log engine state changes explicitly
-      if (snapshot.engineState != null && snapshot.engineState != existing?.engineState) {
-        debugPrint('[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}');
+      if (snapshot.engineState != null &&
+          snapshot.engineState != existing?.engineState) {
+        debugPrint(
+            '[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}');
       }
     }
 
     // Update cache
     cache.put(snapshot);
 
+    // Persist telemetry record (history) - best-effort, ignore failures
+    try {
+      telemetryDao.put(
+        TelemetryRecord(
+          deviceId: snapshot.deviceId,
+          timestampMs: snapshot.timestamp.toUtc().millisecondsSinceEpoch,
+          speed: snapshot.speed,
+          battery: snapshot.batteryLevel,
+          signal: snapshot.signal,
+          engine: snapshot.engineState?.name,
+          odometer: snapshot.odometer,
+          motion: snapshot.motion,
+        ),
+      );
+    } catch (_) {
+      // Swallow errors to keep UI pipeline unaffected
+    }
+
     // Get or create notifier
     final notifier = _notifiers[snapshot.deviceId];
     if (notifier != null) {
       final existing = notifier.value;
       final merged = existing?.merge(snapshot) ?? snapshot;
-      
+
       // CRITICAL: Always create a new object reference to trigger ValueNotifier updates
       // Even if values are the same, ValueNotifier needs a new reference to notify
       notifier.value = merged;
-      
+
       if (kDebugMode) {
         debugPrint('[VehicleRepo]   merged: ${merged}');
-        debugPrint('[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
+        debugPrint(
+            '[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
       }
     } else {
       // Create new notifier if it doesn't exist
-      _notifiers[snapshot.deviceId] = ValueNotifier<VehicleDataSnapshot?>(snapshot);
+      _notifiers[snapshot.deviceId] =
+          ValueNotifier<VehicleDataSnapshot?>(snapshot);
       if (kDebugMode) {
-        debugPrint('[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}');
+        debugPrint(
+            '[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}');
       }
     }
   }
@@ -380,7 +472,8 @@ class VehicleDataRepository {
     if (lastFetch != null &&
         DateTime.now().difference(lastFetch) < _minFetchInterval) {
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] Skipping fetch for device $deviceId (fetched recently)');
+        debugPrint(
+            '[VehicleRepo] Skipping fetch for device $deviceId (fetched recently)');
       }
       return;
     }
@@ -425,7 +518,7 @@ class VehicleDataRepository {
         var snapshot = VehicleDataSnapshot.fromPosition(position);
         // Overlay engine state from device attributes if present
         final devAttrs = (device['attributes'] is Map)
-            ? Map<String, dynamic>.from(device['attributes'])
+            ? Map<String, dynamic>.from(device['attributes'] as Map)
             : const <String, dynamic>{};
         final ign = devAttrs['ignition'];
         EngineState? engineState;
@@ -448,7 +541,8 @@ class VehicleDataRepository {
             fuelLevel: snapshot.fuelLevel,
           );
           if (kDebugMode) {
-            debugPrint('[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState');
+            debugPrint(
+                '[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState');
           }
         }
         _updateDeviceSnapshot(snapshot);
@@ -466,7 +560,8 @@ class VehicleDataRepository {
 
     try {
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] Fetching ${deviceIds.length} devices in parallel');
+        debugPrint(
+            '[VehicleRepo] Fetching ${deviceIds.length} devices in parallel');
       }
 
       // Fetch all devices
@@ -502,7 +597,8 @@ class VehicleDataRepository {
     _fallbackTimer = Timer.periodic(_restFallbackInterval, (_) {
       if (!_isWebSocketConnected && _notifiers.isNotEmpty) {
         if (kDebugMode) {
-          debugPrint('[VehicleRepo] WebSocket disconnected, using REST fallback');
+          debugPrint(
+              '[VehicleRepo] WebSocket disconnected, using REST fallback');
         }
         final deviceIds = _notifiers.keys.toList();
         fetchMultipleDevices(deviceIds);

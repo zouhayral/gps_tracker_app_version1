@@ -24,7 +24,8 @@ class _FakeService extends PositionsService {
   _FakeService(this.map) : super(Dio());
   final Map<int, Position> map;
   @override
-  Future<Map<int, Position>> latestForDevices(List<Map<String, dynamic>> _) async {
+  Future<Map<int, Position>> latestForDevices(
+      List<Map<String, dynamic>> _) async {
     // Simulate network latency so that DAO prefill is emitted first in tests.
     await Future<void>.delayed(const Duration(milliseconds: 50));
     return map;
@@ -57,7 +58,7 @@ void main() {
     ]);
     addTearDown(container.dispose);
     // Prime devices
-  fakeDevices.setDevices([device]);
+    fakeDevices.setDevices([device]);
 
     final result = await container.read(positionsLastKnownProvider.future);
     expect(result.length, 1);
@@ -97,7 +98,7 @@ void main() {
       positionsServiceProvider.overrideWith((ref) => _FakeService(restMap)),
     ]);
     addTearDown(container.dispose);
-  fakeDevices.setDevices([device]);
+    fakeDevices.setDevices([device]);
 
     // Start the provider and listen to intermediate states
     final sub = container.listen(

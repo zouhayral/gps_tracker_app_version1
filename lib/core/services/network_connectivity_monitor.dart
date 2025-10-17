@@ -8,10 +8,10 @@ import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 /// Provider for network connectivity monitor
 final networkConnectivityProvider = Provider<NetworkConnectivityMonitor>((ref) {
   final repository = ref.watch(vehicleDataRepositoryProvider);
-  
+
   final monitor = NetworkConnectivityMonitor(repository: repository);
   ref.onDispose(monitor.dispose);
-  
+
   return monitor;
 });
 
@@ -23,7 +23,8 @@ enum NetworkState {
 }
 
 /// Provider for network state (for UI consumption)
-final networkStateProvider = StateNotifierProvider<NetworkStateNotifier, NetworkState>((ref) {
+final networkStateProvider =
+    StateNotifierProvider<NetworkStateNotifier, NetworkState>((ref) {
   final monitor = ref.watch(networkConnectivityProvider);
   return NetworkStateNotifier(monitor);
 });
@@ -47,13 +48,13 @@ class NetworkStateNotifier extends StateNotifier<NetworkState> {
 }
 
 /// Monitors network connectivity and triggers repository sync on reconnection
-/// 
+///
 /// Features:
 /// - Periodic network checks using simple HTTP HEAD request
 /// - Detects offline → online transitions
 /// - Triggers repository.refreshAll() when network restored
 /// - Broadcasts network state via networkStateProvider
-/// 
+///
 /// Note: For production, consider using connectivity_plus package for better
 /// network type detection (WiFi, cellular, etc.) and battery efficiency
 class NetworkConnectivityMonitor {
@@ -72,6 +73,10 @@ class NetworkConnectivityMonitor {
   static const _checkTimeout = Duration(seconds: 5);
   static const _checkHost = 'google.com'; // Reliable check host
 
+  // Test-mode toggle: when true, skip creating timers/network checks in tests
+  // Set from test setup: NetworkConnectivityMonitor.testMode = true;
+  static bool testMode = false;
+
   Stream<NetworkState> get stateStream => _stateController.stream;
   NetworkState get currentState => _currentState;
 
@@ -80,11 +85,17 @@ class NetworkConnectivityMonitor {
       debugPrint('[NetworkMonitor] Initialized');
     }
 
-    // Perform initial check
-    _checkConnectivity();
+    if (!testMode) {
+      // Perform initial check
+      _checkConnectivity();
 
-    // Start periodic checks
-    _startPeriodicChecks();
+      // Start periodic checks
+      _startPeriodicChecks();
+    } else {
+      if (kDebugMode) {
+        debugPrint('[NetworkMonitor][TEST] Skipping connectivity timers');
+      }
+    }
   }
 
   /// Start periodic network connectivity checks
@@ -99,8 +110,8 @@ class NetworkConnectivityMonitor {
   Future<void> _checkConnectivity() async {
     try {
       // Simple connectivity check: try to connect to reliable host
-      final result = await InternetAddress.lookup(_checkHost)
-          .timeout(_checkTimeout);
+      final result =
+          await InternetAddress.lookup(_checkHost).timeout(_checkTimeout);
 
       if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
         _handleConnected();
@@ -127,7 +138,8 @@ class NetworkConnectivityMonitor {
     if (_currentState == NetworkState.offline) {
       // Transition from offline to online - trigger sync
       if (kDebugMode) {
-        debugPrint('[NetworkMonitor] ✅ Network restored - triggering data sync');
+        debugPrint(
+            '[NetworkMonitor] ✅ Network restored - triggering data sync');
       }
 
       _syncAfterReconnection();
@@ -188,10 +200,10 @@ class NetworkConnectivityMonitor {
 
   /// Get connectivity statistics
   Map<String, dynamic> get stats => {
-    'currentState': _currentState.toString(),
-    'checkInterval': _checkInterval.inSeconds,
-    'checkHost': _checkHost,
-  };
+        'currentState': _currentState.toString(),
+        'checkInterval': _checkInterval.inSeconds,
+        'checkHost': _checkHost,
+      };
 
   /// Dispose resources
   void dispose() {

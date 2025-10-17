@@ -6,7 +6,7 @@ import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 import 'package:my_app_gps/services/device_update_service.dart';
 
 /// Performance validation test page
-/// 
+///
 /// Tests the map optimizations under various load scenarios:
 /// - Light (10 devices, 10s)
 /// - Normal (20 devices, 5s)
@@ -15,9 +15,10 @@ import 'package:my_app_gps/services/device_update_service.dart';
 /// - Burst (30 devices, 1s)
 class PerformanceTestPage extends ConsumerStatefulWidget {
   const PerformanceTestPage({super.key});
-  
+
   @override
-  ConsumerState<PerformanceTestPage> createState() => _PerformanceTestPageState();
+  ConsumerState<PerformanceTestPage> createState() =>
+      _PerformanceTestPageState();
 }
 
 class _PerformanceTestPageState extends ConsumerState<PerformanceTestPage> {
@@ -26,38 +27,38 @@ class _PerformanceTestPageState extends ConsumerState<PerformanceTestPage> {
   bool _isTestRunning = false;
   String _currentTest = 'None';
   int _updateCount = 0;
-  
+
   @override
   void initState() {
     super.initState();
     // Enable rebuild tracking
     RebuildTracker.instance.start();
   }
-  
+
   @override
   void dispose() {
     _stopTest();
     RebuildTracker.instance.stop();
     super.dispose();
   }
-  
+
   void _startTest(String testName, MockDeviceStream stream) {
     // Stop any existing test
     _stopTest();
-    
+
     setState(() {
       _isTestRunning = true;
       _currentTest = testName;
       _updateCount = 0;
     });
-    
+
     // Start frame metrics
     _metricsSession = FrameMetricsSession();
-    
+
     // Start mock stream
     _mockStream = stream;
     _mockStream!.start();
-    
+
     // Wire mock stream to device update service
     final updateService = ref.read(deviceUpdateServiceProvider);
     _mockStream!.positionStream.listen((positions) {
@@ -66,41 +67,41 @@ class _PerformanceTestPageState extends ConsumerState<PerformanceTestPage> {
         _updateCount = _mockStream!.updateCount;
       });
     });
-    
+
     debugPrint('[PerformanceTest] ✅ Started test: $testName');
   }
-  
+
   void _stopTest() {
     if (!_isTestRunning) return;
-    
+
     _mockStream?.stop();
     _mockStream?.dispose();
     _mockStream = null;
-    
+
     _metricsSession?.end();
     _metricsSession = null;
-    
+
     RebuildTracker.instance.printSummary();
-    
+
     setState(() {
       _isTestRunning = false;
       _currentTest = 'None';
     });
-    
+
     debugPrint('[PerformanceTest] ⏹️  Stopped test');
   }
-  
+
   void _printCurrentMetrics() {
     if (_metricsSession != null) {
       _metricsSession!.printSummary();
       RebuildTracker.instance.printSummary();
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     RebuildTracker.instance.trackRebuild('PerformanceTestPage');
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Performance Test'),
@@ -125,7 +126,8 @@ class _PerformanceTestPageState extends ConsumerState<PerformanceTestPage> {
           children: [
             // Status card
             Card(
-              color: _isTestRunning ? Colors.green.shade100 : Colors.grey.shade200,
+              color:
+                  _isTestRunning ? Colors.green.shade100 : Colors.grey.shade200,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -160,9 +162,9 @@ class _PerformanceTestPageState extends ConsumerState<PerformanceTestPage> {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Test scenarios
             Text(
               'Test Scenarios',
@@ -173,71 +175,85 @@ class _PerformanceTestPageState extends ConsumerState<PerformanceTestPage> {
               'Select a test scenario to validate performance under different loads:',
               style: TextStyle(color: Colors.grey),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             _TestCard(
               title: 'Light Load',
               description: '10 devices, 10s update interval',
               icon: Icons.battery_charging_full,
               color: Colors.green,
-              onPressed: _isTestRunning ? null : () {
-                _startTest('Light Load', MockDeviceScenarios.light());
-              },
+              onPressed: _isTestRunning
+                  ? null
+                  : () {
+                      _startTest('Light Load', MockDeviceScenarios.light());
+                    },
             ),
-            
+
             _TestCard(
               title: 'Normal Load',
-              description: '20 devices, 5s update interval\n(Typical Traccar setup)',
+              description:
+                  '20 devices, 5s update interval\n(Typical Traccar setup)',
               icon: Icons.devices,
               color: Colors.blue,
-              onPressed: _isTestRunning ? null : () {
-                _startTest('Normal Load', MockDeviceScenarios.normal());
-              },
+              onPressed: _isTestRunning
+                  ? null
+                  : () {
+                      _startTest('Normal Load', MockDeviceScenarios.normal());
+                    },
             ),
-            
+
             _TestCard(
               title: 'Heavy Load',
               description: '50 devices, 5s update interval',
               icon: Icons.warning_amber,
               color: Colors.orange,
-              onPressed: _isTestRunning ? null : () {
-                _startTest('Heavy Load', MockDeviceScenarios.heavy());
-              },
+              onPressed: _isTestRunning
+                  ? null
+                  : () {
+                      _startTest('Heavy Load', MockDeviceScenarios.heavy());
+                    },
             ),
-            
+
             _TestCard(
               title: 'Extreme Load',
               description: '100 devices, 3s update interval',
               icon: Icons.local_fire_department,
               color: Colors.red,
-              onPressed: _isTestRunning ? null : () {
-                _startTest('Extreme Load', MockDeviceScenarios.extreme());
-              },
+              onPressed: _isTestRunning
+                  ? null
+                  : () {
+                      _startTest('Extreme Load', MockDeviceScenarios.extreme());
+                    },
             ),
-            
+
             _TestCard(
               title: 'Burst Test',
               description: '30 devices, 1s update interval\n(Stress test)',
               icon: Icons.bolt,
               color: Colors.purple,
-              onPressed: _isTestRunning ? null : () {
-                _startTest('Burst Test', MockDeviceScenarios.burst());
-              },
+              onPressed: _isTestRunning
+                  ? null
+                  : () {
+                      _startTest('Burst Test', MockDeviceScenarios.burst());
+                    },
             ),
-            
+
             _TestCard(
               title: 'Static Rendering',
               description: '50 devices, no movement\n(Tests rendering only)',
               icon: Icons.stop_circle_outlined,
               color: Colors.grey,
-              onPressed: _isTestRunning ? null : () {
-                _startTest('Static Rendering', MockDeviceScenarios.staticDevices());
-              },
+              onPressed: _isTestRunning
+                  ? null
+                  : () {
+                      _startTest('Static Rendering',
+                          MockDeviceScenarios.staticDevices());
+                    },
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Expected results
             Card(
               child: Padding(
@@ -274,9 +290,9 @@ class _PerformanceTestPageState extends ConsumerState<PerformanceTestPage> {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Instructions
             Card(
               color: Colors.blue.shade50,
@@ -320,13 +336,13 @@ class _TestCard extends StatelessWidget {
     required this.color,
     required this.onPressed,
   });
-  
+
   final String title;
   final String description;
   final IconData icon;
   final Color color;
   final VoidCallback? onPressed;
-  
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -353,10 +369,10 @@ class _StatusRow extends StatelessWidget {
     required this.label,
     required this.value,
   });
-  
+
   final String label;
   final String value;
-  
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -385,10 +401,10 @@ class _ExpectedResultRow extends StatelessWidget {
     required this.label,
     required this.value,
   });
-  
+
   final String label;
   final String value;
-  
+
   @override
   Widget build(BuildContext context) {
     return Padding(

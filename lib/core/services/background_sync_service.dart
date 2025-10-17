@@ -41,28 +41,28 @@ class BackgroundSyncStats {
 }
 
 /// Lightweight periodic sync service for background mode
-/// 
+///
 /// **Current Implementation:**
 /// Uses simple Timer-based scheduling for background sync.
-/// 
+///
 /// **Production Upgrade Paths:**
-/// 
+///
 /// **Android:**
 /// ```yaml
 /// dependencies:
 ///   workmanager: ^0.5.2
 /// ```
-/// 
+///
 /// **iOS:**
 /// ```yaml
 /// dependencies:
 ///   background_fetch: ^1.3.0
 /// ```
-/// 
+///
 /// **Android WorkManager Integration:**
 /// ```dart
 /// import 'package:workmanager/workmanager.dart';
-/// 
+///
 /// void callbackDispatcher() {
 ///   Workmanager().executeTask((task, inputData) async {
 ///     // Initialize repository in background isolate
@@ -71,10 +71,10 @@ class BackgroundSyncStats {
 ///     return true;
 ///   });
 /// }
-/// 
+///
 /// // In main():
 /// await Workmanager().initialize(callbackDispatcher, isInDebugMode: kDebugMode);
-/// 
+///
 /// // Register periodic task:
 /// await Workmanager().registerPeriodicTask(
 ///   "vehicle-sync",
@@ -86,11 +86,11 @@ class BackgroundSyncStats {
 ///   ),
 /// );
 /// ```
-/// 
+///
 /// **iOS BGAppRefreshTask Integration:**
 /// ```dart
 /// import 'package:background_fetch/background_fetch.dart';
-/// 
+///
 /// // In main() or app initialization:
 /// BackgroundFetch.configure(
 ///   BackgroundFetchConfig(
@@ -114,30 +114,30 @@ class BackgroundSyncStats {
 ///     BackgroundFetch.finish(taskId);
 ///   },
 /// );
-/// 
+///
 /// // Info.plist configuration:
 /// // <key>BGTaskSchedulerPermittedIdentifiers</key>
 /// // <array>
 /// //   <string>com.transistorsoft.fetch</string>
 /// // </array>
 /// ```
-/// 
+///
 /// **Isolate-based Execution (Advanced):**
 /// ```dart
 /// import 'dart:isolate';
-/// 
+///
 /// Future<void> _executeOnIsolate() async {
 ///   final receivePort = ReceivePort();
 ///   await Isolate.spawn(_isolateEntry, receivePort.sendPort);
-///   
+///
 ///   final sendPort = await receivePort.first as SendPort;
 ///   final resultPort = ReceivePort();
 ///   sendPort.send(resultPort.sendPort);
-///   
+///
 ///   final result = await resultPort.first;
 ///   debugPrint('[BackgroundSync] Isolate result: $result');
 /// }
-/// 
+///
 /// void _isolateEntry(SendPort sendPort) async {
 ///   // Initialize repository in isolate
 ///   final repository = await initRepository();
@@ -164,7 +164,7 @@ class BackgroundSyncService {
   BackgroundSyncStats get stats => _stats;
 
   /// Enable background sync
-  /// 
+  ///
   /// Note: Current implementation uses simple Timer. For production:
   /// - Android: Use WorkManager for battery-efficient scheduling
   /// - iOS: Use BGAppRefreshTask for system-managed scheduling
@@ -279,28 +279,28 @@ class BackgroundSyncService {
 }
 
 /// Production WorkManager setup guide (Android)
-/// 
+///
 /// **Step 1: Add dependency**
 /// ```yaml
 /// dependencies:
 ///   workmanager: ^0.5.2
 /// ```
-/// 
+///
 /// **Step 2: Create callback dispatcher**
 /// ```dart
 /// // lib/background/work_manager_callback.dart
 /// import 'package:workmanager/workmanager.dart';
-/// 
+///
 /// @pragma('vm:entry-point')
 /// void callbackDispatcher() {
 ///   Workmanager().executeTask((task, inputData) async {
 ///     debugPrint('[WorkManager] Task: $task');
-///     
+///
 ///     try {
 ///       // Initialize necessary services
 ///       final repository = VehicleDataRepository(/* ... */);
 ///       await repository.refreshAll();
-///       
+///
 ///       return true; // Success
 ///     } catch (e) {
 ///       debugPrint('[WorkManager] Task failed: $e');
@@ -309,21 +309,21 @@ class BackgroundSyncService {
 ///   });
 /// }
 /// ```
-/// 
+///
 /// **Step 3: Initialize in main()**
 /// ```dart
 /// void main() async {
 ///   WidgetsFlutterBinding.ensureInitialized();
-///   
+///
 ///   await Workmanager().initialize(
 ///     callbackDispatcher,
 ///     isInDebugMode: kDebugMode,
 ///   );
-///   
+///
 ///   runApp(MyApp());
 /// }
 /// ```
-/// 
+///
 /// **Step 4: Register periodic task**
 /// ```dart
 /// await Workmanager().registerPeriodicTask(
@@ -341,7 +341,7 @@ class BackgroundSyncService {
 ///   backoffPolicyDelay: Duration(minutes: 5),
 /// );
 /// ```
-/// 
+///
 /// **Step 5: AndroidManifest.xml permissions**
 /// ```xml
 /// <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -349,20 +349,20 @@ class BackgroundSyncService {
 /// ```
 
 /// Production BGAppRefreshTask setup guide (iOS)
-/// 
+///
 /// **Step 1: Add dependency**
 /// ```yaml
 /// dependencies:
 ///   background_fetch: ^1.3.0
 /// ```
-/// 
+///
 /// **Step 2: Configure in main()**
 /// ```dart
 /// import 'package:background_fetch/background_fetch.dart';
-/// 
+///
 /// void main() async {
 ///   WidgetsFlutterBinding.ensureInitialized();
-///   
+///
 ///   // Configure background fetch
 ///   await BackgroundFetch.configure(
 ///     BackgroundFetchConfig(
@@ -379,14 +379,14 @@ class BackgroundSyncService {
 ///     _onBackgroundFetch,
 ///     _onBackgroundFetchTimeout,
 ///   );
-///   
+///
 ///   runApp(MyApp());
 /// }
-/// 
+///
 /// @pragma('vm:entry-point')
 /// void _onBackgroundFetch(String taskId) async {
 ///   debugPrint('[BGFetch] Task: $taskId');
-///   
+///
 ///   try {
 ///     final repository = VehicleDataRepository(/* ... */);
 ///     await repository.refreshAll();
@@ -395,14 +395,14 @@ class BackgroundSyncService {
 ///     BackgroundFetch.finish(taskId);
 ///   }
 /// }
-/// 
+///
 /// @pragma('vm:entry-point')
 /// void _onBackgroundFetchTimeout(String taskId) {
 ///   debugPrint('[BGFetch] Timeout: $taskId');
 ///   BackgroundFetch.finish(taskId);
 /// }
 /// ```
-/// 
+///
 /// **Step 3: Info.plist configuration**
 /// ```xml
 /// <key>UIBackgroundModes</key>
@@ -410,13 +410,13 @@ class BackgroundSyncService {
 ///   <string>fetch</string>
 ///   <string>processing</string>
 /// </array>
-/// 
+///
 /// <key>BGTaskSchedulerPermittedIdentifiers</key>
 /// <array>
 ///   <string>com.transistorsoft.fetch</string>
 /// </array>
 /// ```
-/// 
+///
 /// **Step 4: Schedule tasks**
 /// ```dart
 /// // One-time task

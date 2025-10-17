@@ -11,7 +11,8 @@ import 'package:my_app_gps/services/positions_service.dart';
 /// - Rebuilds when devices list changes.
 /// - Kept alive for 10 minutes after last listener to avoid refetch churn.
 final positionsLastKnownProvider = AutoDisposeAsyncNotifierProvider<
-    PositionsLastKnownNotifier, Map<int, Position>>(PositionsLastKnownNotifier.new);
+    PositionsLastKnownNotifier,
+    Map<int, Position>>(PositionsLastKnownNotifier.new);
 
 class PositionsLastKnownNotifier
     extends AutoDisposeAsyncNotifier<Map<int, Position>> {
@@ -66,7 +67,8 @@ class PositionsLastKnownNotifier
       if (prefill.isNotEmpty) {
         if (kDebugMode) {
           // ignore: avoid_print
-          print('[positionsLastKnown] DAO prefill: ${prefill.length} positions');
+          print(
+              '[positionsLastKnown] DAO prefill: ${prefill.length} positions');
         }
         // Emit prefill immediately
         state = AsyncData(Map<int, Position>.unmodifiable(prefill));
@@ -83,7 +85,8 @@ class PositionsLastKnownNotifier
 
     if (kDebugMode) {
       // ignore: avoid_print
-      print('[positionsLastKnown] ✅ REST fetch complete: ${map.length} positions');
+      print(
+          '[positionsLastKnown] ✅ REST fetch complete: ${map.length} positions');
     }
 
     // After successful REST fetch, upsert into DAO and emit

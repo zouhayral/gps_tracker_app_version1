@@ -25,7 +25,8 @@ void main() {
         final pos = Position(
           id: 100 + i,
           deviceId: i,
-          deviceTime: now.subtract(Duration(seconds: i)), // Use seconds, not minutes
+          deviceTime:
+              now.subtract(Duration(seconds: i)), // Use seconds, not minutes
           serverTime: now.subtract(Duration(seconds: i)),
           latitude: 45.0 + i * 0.01,
           longitude: -73.0 + i * 0.01,
@@ -44,7 +45,8 @@ void main() {
         );
 
         snapshots[i] = snapshot.toJson();
-        await prefs.setString('vehicle_cache_$i', jsonEncode(snapshot.toJson()));
+        await prefs.setString(
+            'vehicle_cache_$i', jsonEncode(snapshot.toJson()));
       }
 
       // Measure load time (happens in constructor)
@@ -94,7 +96,8 @@ void main() {
           lastUpdate: pos.deviceTime,
         );
 
-        await prefs.setString('vehicle_cache_$i', jsonEncode(snapshot.toJson()));
+        await prefs.setString(
+            'vehicle_cache_$i', jsonEncode(snapshot.toJson()));
       }
 
       final cache = VehicleDataCache(prefs: prefs);
@@ -142,7 +145,8 @@ void main() {
         lastUpdate: freshPos.deviceTime,
       );
 
-      await prefs.setString('vehicle_cache_1', jsonEncode(freshSnapshot.toJson()));
+      await prefs.setString(
+          'vehicle_cache_1', jsonEncode(freshSnapshot.toJson()));
 
       // Stale position (>30 minutes old)
       final stalePos = Position(
@@ -166,7 +170,8 @@ void main() {
         lastUpdate: stalePos.deviceTime,
       );
 
-      await prefs.setString('vehicle_cache_2', jsonEncode(staleSnapshot.toJson()));
+      await prefs.setString(
+          'vehicle_cache_2', jsonEncode(staleSnapshot.toJson()));
 
       final cache = VehicleDataCache(prefs: prefs);
 
@@ -203,7 +208,8 @@ void main() {
           lastUpdate: pos.deviceTime,
         );
 
-        await prefs.setString('vehicle_cache_$i', jsonEncode(snapshot.toJson()));
+        await prefs.setString(
+            'vehicle_cache_$i', jsonEncode(snapshot.toJson()));
       }
 
       final stopwatch = Stopwatch()..start();
@@ -244,7 +250,8 @@ void main() {
           lastUpdate: pos.deviceTime,
         );
 
-        await prefs.setString('vehicle_cache_$i', jsonEncode(snapshot.toJson()));
+        await prefs.setString(
+            'vehicle_cache_$i', jsonEncode(snapshot.toJson()));
       }
 
       final cache = VehicleDataCache(prefs: prefs);

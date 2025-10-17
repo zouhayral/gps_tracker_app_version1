@@ -37,14 +37,15 @@ class VehicleRepositoryBenchmark {
     await repository.refresh(deviceId);
     await Future<void>.delayed(Duration.zero); // Wait for next frame
     final latency = stopwatch.elapsedMilliseconds;
-    
+
     _positionLatencies.add(latency);
     _apiCallCount++;
-    
+
     if (kDebugMode) {
-      debugPrint('[Benchmark] Position update latency for device $deviceId: ${latency}ms');
+      debugPrint(
+          '[Benchmark] Position update latency for device $deviceId: ${latency}ms');
     }
-    
+
     return latency;
   }
 
@@ -55,13 +56,14 @@ class VehicleRepositoryBenchmark {
     final snapshot = notifier.value;
     final _ = snapshot?.engineState; // Access engine state
     final latency = stopwatch.elapsedMicroseconds;
-    
+
     _engineLatencies.add(latency);
-    
+
     if (kDebugMode) {
-      debugPrint('[Benchmark] Engine state extraction for device $deviceId: ${latency}μs');
+      debugPrint(
+          '[Benchmark] Engine state extraction for device $deviceId: ${latency}μs');
     }
-    
+
     return latency;
   }
 
@@ -78,37 +80,41 @@ class VehicleRepositoryBenchmark {
   /// Test multiple devices in parallel
   Future<void> benchmarkParallelFetch(List<int> deviceIds) async {
     if (kDebugMode) {
-      debugPrint('[Benchmark] Testing parallel fetch for ${deviceIds.length} devices');
+      debugPrint(
+          '[Benchmark] Testing parallel fetch for ${deviceIds.length} devices');
     }
 
     final stopwatch = Stopwatch()..start();
     await repository.fetchMultipleDevices(deviceIds);
     final totalTime = stopwatch.elapsedMilliseconds;
-    
+
     _apiCallCount++;
-    
+
     if (kDebugMode) {
       debugPrint('[Benchmark] Parallel fetch completed in ${totalTime}ms');
-      debugPrint('[Benchmark] Average time per device: ${totalTime / deviceIds.length}ms');
+      debugPrint(
+          '[Benchmark] Average time per device: ${totalTime / deviceIds.length}ms');
     }
   }
 
   /// Test cache hit ratio with repeated accesses
-  Future<void> benchmarkCacheEfficiency(List<int> deviceIds, {int iterations = 10}) async {
+  Future<void> benchmarkCacheEfficiency(List<int> deviceIds,
+      {int iterations = 10}) async {
     if (kDebugMode) {
-      debugPrint('[Benchmark] Testing cache efficiency with $iterations iterations');
+      debugPrint(
+          '[Benchmark] Testing cache efficiency with $iterations iterations');
     }
 
     for (var i = 0; i < iterations; i++) {
       for (final deviceId in deviceIds) {
         measureCacheAccess(deviceId);
-        
+
         // Occasionally trigger a refresh to test memoization
         if (i % 3 == 0) {
           await repository.refresh(deviceId);
         }
       }
-      
+
       // Small delay between iterations
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
@@ -117,7 +123,7 @@ class VehicleRepositoryBenchmark {
   /// Generate benchmark report
   Map<String, dynamic> generateReport() {
     final stats = repository.cacheStats;
-    final duration = _startTime != null 
+    final duration = _startTime != null
         ? DateTime.now().difference(_startTime!)
         : Duration.zero;
 
@@ -125,10 +131,12 @@ class VehicleRepositoryBenchmark {
     int? avgPosLatency;
     int? p95PosLatency;
     int? maxPosLatency;
-    
+
     if (_positionLatencies.isNotEmpty) {
       _positionLatencies.sort();
-      avgPosLatency = (_positionLatencies.reduce((a, b) => a + b) / _positionLatencies.length).round();
+      avgPosLatency = (_positionLatencies.reduce((a, b) => a + b) /
+              _positionLatencies.length)
+          .round();
       final p95Index = (_positionLatencies.length * 0.95).floor();
       p95PosLatency = _positionLatencies[p95Index];
       maxPosLatency = _positionLatencies.last;
@@ -137,7 +145,9 @@ class VehicleRepositoryBenchmark {
     // Engine latency stats (in microseconds)
     int? avgEngineLatency;
     if (_engineLatencies.isNotEmpty) {
-      avgEngineLatency = (_engineLatencies.reduce((a, b) => a + b) / _engineLatencies.length).round();
+      avgEngineLatency =
+          (_engineLatencies.reduce((a, b) => a + b) / _engineLatencies.length)
+              .round();
     }
 
     // Calculate cache hit ratio
@@ -181,40 +191,44 @@ class VehicleRepositoryBenchmark {
   /// Print benchmark results
   void printReport() {
     final report = generateReport();
-    
+
     debugPrint('\n' + '=' * 60);
     debugPrint('VEHICLE REPOSITORY BENCHMARK REPORT');
     debugPrint('=' * 60);
-    
+
     debugPrint('\n📊 Position Update Latency:');
     final posLatency = report['position_latency'] as Map;
-    debugPrint('  Average: ${posLatency['average_ms']}ms (target: <${posLatency['target_ms']}ms)');
+    debugPrint(
+        '  Average: ${posLatency['average_ms']}ms (target: <${posLatency['target_ms']}ms)');
     debugPrint('  P95: ${posLatency['p95_ms']}ms');
     debugPrint('  Max: ${posLatency['max_ms']}ms');
     debugPrint('  Status: ${posLatency['pass'] == true ? '✅ PASS' : '❌ FAIL'}');
-    
+
     debugPrint('\n⚡ Engine State Extraction:');
     final engineLatency = report['engine_latency'] as Map;
     debugPrint('  Average: ${engineLatency['average_us']}μs (<1ms)');
     debugPrint('  Status: ✅ PASS (instant)');
-    
+
     debugPrint('\n🌐 API Calls:');
     final apiCalls = report['api_calls'] as Map;
     debugPrint('  Total: ${apiCalls['total']}');
-    debugPrint('  Estimated Reduction: ${apiCalls['estimated_reduction_pct']}%');
+    debugPrint(
+        '  Estimated Reduction: ${apiCalls['estimated_reduction_pct']}%');
     final apiReduction = apiCalls['estimated_reduction_pct'] as double;
     debugPrint('  Status: ${apiReduction >= 70 ? '✅ PASS' : '⚠️  CHECK'}');
-    
+
     debugPrint('\n💾 Cache Performance:');
     final cache = report['cache'] as Map;
-    debugPrint('  Hit Ratio: ${cache['hit_ratio_pct']}% (target: >${cache['target_hit_ratio_pct']}%)');
+    debugPrint(
+        '  Hit Ratio: ${cache['hit_ratio_pct']}% (target: >${cache['target_hit_ratio_pct']}%)');
     debugPrint('  Hits: ${cache['hits']}');
     debugPrint('  Misses: ${cache['misses']}');
     debugPrint('  Hot Cache Size: ${cache['hot_cache_size']}');
     debugPrint('  Status: ${cache['pass'] == true ? '✅ PASS' : '❌ FAIL'}');
-    
+
     debugPrint('\n' + '=' * 60);
-    debugPrint('Overall: ${_allTestsPass(report) ? '✅ ALL TESTS PASSED' : '⚠️  SOME TESTS FAILED'}');
+    debugPrint(
+        'Overall: ${_allTestsPass(report) ? '✅ ALL TESTS PASSED' : '⚠️  SOME TESTS FAILED'}');
     debugPrint('=' * 60 + '\n');
   }
 
@@ -225,8 +239,9 @@ class VehicleRepositoryBenchmark {
     // Assuming 80% cache hit ratio and WebSocket active 90% of time
     final cacheReduction = 0.8; // 80% cache hits
     final wsUptime = 0.9; // 90% WebSocket uptime
-    
-    final totalReduction = (cacheReduction + wsUptime * (1 - cacheReduction)) * 100;
+
+    final totalReduction =
+        (cacheReduction + wsUptime * (1 - cacheReduction)) * 100;
     return totalReduction.clamp(0, 100);
   }
 
@@ -234,10 +249,10 @@ class VehicleRepositoryBenchmark {
     final posLatency = report['position_latency'] as Map;
     final cache = report['cache'] as Map;
     final apiCalls = report['api_calls'] as Map;
-    
+
     return posLatency['pass'] == true &&
-           cache['pass'] == true &&
-           (apiCalls['estimated_reduction_pct'] as double) >= 70;
+        cache['pass'] == true &&
+        (apiCalls['estimated_reduction_pct'] as double) >= 70;
   }
 
   /// Export report to JSON
@@ -254,36 +269,37 @@ class VehicleRepositoryBenchmarkRunner {
     required List<int> deviceIds,
   }) async {
     final benchmark = VehicleRepositoryBenchmark(repository: repository);
-    
+
     debugPrint('[Benchmark] Starting full benchmark suite...');
     benchmark.start();
-    
+
     // Test 1: Parallel fetch
     debugPrint('[Benchmark] Test 1: Parallel fetch');
     await benchmark.benchmarkParallelFetch(deviceIds);
     await Future<void>.delayed(const Duration(seconds: 1));
-    
+
     // Test 2: Individual position latency
     debugPrint('[Benchmark] Test 2: Position latency');
     for (final deviceId in deviceIds.take(5)) {
       await benchmark.measurePositionLatency(deviceId);
       await Future<void>.delayed(const Duration(milliseconds: 200));
     }
-    
+
     // Test 3: Engine state extraction
     debugPrint('[Benchmark] Test 3: Engine state extraction');
     for (final deviceId in deviceIds.take(5)) {
       await benchmark.measureEngineLatency(deviceId);
     }
-    
+
     // Test 4: Cache efficiency
     debugPrint('[Benchmark] Test 4: Cache efficiency');
-    await benchmark.benchmarkCacheEfficiency(deviceIds.take(10).toList(), iterations: 10);
-    
+    await benchmark.benchmarkCacheEfficiency(deviceIds.take(10).toList(),
+        iterations: 10);
+
     // Generate and print report
     await Future<void>.delayed(const Duration(milliseconds: 500));
     benchmark.printReport();
-    
+
     debugPrint('[Benchmark] Full benchmark suite completed');
   }
 }

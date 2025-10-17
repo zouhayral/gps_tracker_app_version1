@@ -106,16 +106,18 @@ void main() {
         serverTime: DateTime.utc(2023, 1, 1, 0, 0, 1),
         attributes: const {},
       );
-      await box.put(p.deviceId, jsonEncode({
-        'deviceId': p.deviceId,
-        'latitude': p.latitude,
-        'longitude': p.longitude,
-        'speed': p.speed,
-        'course': p.course,
-        'deviceTime': p.deviceTime.toUtc().toIso8601String(),
-        'serverTime': p.serverTime.toUtc().toIso8601String(),
-        'attributes': p.attributes,
-      }));
+      await box.put(
+          p.deviceId,
+          jsonEncode({
+            'deviceId': p.deviceId,
+            'latitude': p.latitude,
+            'longitude': p.longitude,
+            'speed': p.speed,
+            'course': p.course,
+            'deviceTime': p.deviceTime.toUtc().toIso8601String(),
+            'serverTime': p.serverTime.toUtc().toIso8601String(),
+            'attributes': p.attributes,
+          }));
       await box.close();
 
       await dao.migrateFromHiveIfPresent();

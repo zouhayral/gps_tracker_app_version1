@@ -37,7 +37,7 @@ class WebSocketState {
       lastEventAt: lastEventAt ?? this.lastEventAt,
     );
   }
-  
+
   /// Check if WebSocket has been silent for too long
   bool isSilent(Duration threshold) {
     if (lastEventAt == null) return true;
@@ -51,6 +51,10 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
   static const _initialRetryDelay = Duration(seconds: 2);
   static const _maxRetryDelay = Duration(seconds: 30);
 
+  // Test-mode toggle: when true, do not auto-connect or schedule timers
+  // Set from tests: WebSocketManagerEnhanced.testMode = true;
+  static bool testMode = false;
+
   StreamSubscription<TraccarSocketMessage>? _socketSub;
   Timer? _reconnectTimer;
   int _retryCount = 0;
@@ -58,52 +62,68 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
   bool _intentionalDisconnect = false;
   DateTime? _lastSuccessfulConnect;
   DateTime? _lastEventAt;
-  
+  bool _socketAvailable = true;
+
   late final TraccarSocketService _socketService;
-  
+
   // Callback for when position data is received
   final void Function(Position)? onPosition;
-  
+
   WebSocketManagerEnhanced({this.onPosition});
-  
+
   /// Getter for last event timestamp
   DateTime? get lastEventAt => _lastEventAt;
-  
+
   bool get isConnected => state.status == WebSocketStatus.connected;
   bool get isDisconnected => state.status == WebSocketStatus.disconnected;
 
   @override
   WebSocketState build() {
     // Get dependencies from Riverpod
-    _socketService = ref.watch(traccarSocketServiceProvider);
-    
+    try {
+      _socketService = ref.watch(traccarSocketServiceProvider);
+      _socketAvailable = true;
+    } catch (_) {
+      // In tests, provider may be overridden with a throwing mock. Avoid connecting.
+      _socketAvailable = false;
+    }
+
     // Defer connection to after build completes to avoid reading uninitialized providers
-    Future.microtask(() {
-      if (!_disposed && !_intentionalDisconnect) {
-        _connect();
-      }
-    });
-    
+    if (!testMode && _socketAvailable) {
+      Future.microtask(() {
+        if (!_disposed && !_intentionalDisconnect) {
+          _connect();
+        }
+      });
+    } else {
+      _log('[WS][TEST] Skipping auto-connect');
+    }
+
     ref.onDispose(_dispose);
     ref.keepAlive();
-    
+
     return const WebSocketState(status: WebSocketStatus.connecting);
   }
 
   /// Connect or reconnect to WebSocket
   Future<void> _connect() async {
     if (_disposed || _intentionalDisconnect) return;
-    
+    if (testMode) return;
+    if (!_socketAvailable) {
+      _log('[WS] Socket provider unavailable; skipping connect');
+      return;
+    }
+
     // Cancel any pending reconnect timer
     _reconnectTimer?.cancel();
-    
+
     state = state.copyWith(status: WebSocketStatus.connecting);
     _log('[WS] Connecting... (attempt ${_retryCount + 1})');
-    
+
     try {
       // Cancel existing subscription if any
       await _socketSub?.cancel();
-      
+
       // Connect to Traccar WebSocket (handles authentication internally)
       _socketSub = _socketService.connect().listen(
         _handleSocketMessage,
@@ -119,11 +139,11 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
         },
         cancelOnError: false,
       );
-      
+
       _retryCount = 0;
       _lastSuccessfulConnect = DateTime.now();
       _lastEventAt = DateTime.now();
-      
+
       state = state.copyWith(
         status: WebSocketStatus.connected,
         retryCount: 0,
@@ -131,7 +151,7 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
         lastConnected: _lastSuccessfulConnect,
         lastEventAt: _lastEventAt,
       );
-      
+
       _log('[WS] Connected');
     } catch (e) {
       _log('[WS] ERROR: Connection failed: $e');
@@ -142,14 +162,14 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
   /// Handle incoming WebSocket messages
   void _handleSocketMessage(TraccarSocketMessage msg) {
     if (_disposed) return;
-    
+
     // Update last event timestamp
     _lastEventAt = DateTime.now();
     state = state.copyWith(lastEventAt: _lastEventAt);
-    
+
     if (msg.type == 'positions' && msg.positions != null) {
       _log('[WS] Received ${msg.positions!.length} position(s)');
-      
+
       // Forward positions to callback
       if (onPosition != null) {
         for (final pos in msg.positions!) {
@@ -166,19 +186,21 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
   /// Schedule reconnection with exponential backoff
   void _scheduleReconnect(String error) {
     if (_disposed || _intentionalDisconnect) return;
-    
+    if (testMode) return;
+    if (!_socketAvailable) return;
+
     _retryCount++;
-    
+
     state = state.copyWith(
       status: WebSocketStatus.retrying,
       retryCount: _retryCount,
       error: error,
     );
-    
+
     // Exponential backoff with max delay
     final delay = _calculateBackoffDelay(_retryCount);
     _log('[WS] Retry #$_retryCount in ${delay.inSeconds}s');
-    
+
     _reconnectTimer = Timer(delay, () {
       if (!_disposed && !_intentionalDisconnect) {
         _connect();
@@ -188,8 +210,10 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
 
   /// Calculate exponential backoff delay
   Duration _calculateBackoffDelay(int attempt) {
-    final seconds = _initialRetryDelay.inSeconds * (1 << (attempt - 1).clamp(0, 5));
-    return Duration(seconds: seconds.clamp(
+    final seconds =
+        _initialRetryDelay.inSeconds * (1 << (attempt - 1).clamp(0, 5));
+    return Duration(
+        seconds: seconds.clamp(
       _initialRetryDelay.inSeconds,
       _maxRetryDelay.inSeconds,
     ));
@@ -201,12 +225,12 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
     _intentionalDisconnect = false;
     _retryCount = 0;
     _reconnectTimer?.cancel();
-    
+
     if (isConnected) {
       _log('[WS] Already connected');
       return;
     }
-    
+
     await _connect();
   }
 
@@ -224,7 +248,7 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
   Future<void> resume() async {
     _log('[WS] Resume');
     _intentionalDisconnect = false;
-    
+
     if (!isConnected) {
       await forceReconnect();
     } else {
@@ -235,17 +259,19 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
   /// Check connection health and reconnect if needed
   void checkHealth() {
     if (_disposed || _intentionalDisconnect) return;
-    
+
     if (!isConnected) {
       _log('[WS] Health check: reconnecting...');
       forceReconnect();
     } else if (_lastSuccessfulConnect != null) {
-      final timeSinceConnect = DateTime.now().difference(_lastSuccessfulConnect!);
-      final timeSinceEvent = _lastEventAt != null 
+      final timeSinceConnect =
+          DateTime.now().difference(_lastSuccessfulConnect!);
+      final timeSinceEvent = _lastEventAt != null
           ? DateTime.now().difference(_lastEventAt!)
           : Duration.zero;
-          
-      if (timeSinceConnect > const Duration(minutes: 5) && timeSinceEvent > const Duration(minutes: 2)) {
+
+      if (timeSinceConnect > const Duration(minutes: 5) &&
+          timeSinceEvent > const Duration(minutes: 2)) {
         _log('[WS] Health check: no activity, reconnecting...');
         forceReconnect();
       }
@@ -268,5 +294,6 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
 }
 
 /// Provider for the enhanced WebSocket manager
-final webSocketManagerProvider = NotifierProvider<WebSocketManagerEnhanced, WebSocketState>(WebSocketManagerEnhanced.new);
-
+final webSocketManagerProvider =
+    NotifierProvider<WebSocketManagerEnhanced, WebSocketState>(
+        WebSocketManagerEnhanced.new);

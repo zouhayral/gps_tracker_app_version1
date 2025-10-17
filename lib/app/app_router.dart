@@ -10,6 +10,7 @@ import 'package:my_app_gps/features/map/view/map_page.dart';
 import 'package:my_app_gps/features/notifications/view/notifications_page.dart';
 import 'package:my_app_gps/features/settings/view/settings_page.dart';
 import 'package:my_app_gps/features/trips/view/trips_page.dart';
+import 'package:my_app_gps/features/telemetry/telemetry_history_page.dart';
 
 // Route names / paths constants
 class AppRoutes {
@@ -18,6 +19,7 @@ class AppRoutes {
   static const trips = '/trips';
   static const alerts = '/alerts';
   static const settings = '/settings';
+  static const telemetryHistory = '/telemetry-history';
 }
 
 // Riverpod provider exposing a configured GoRouter. It rebuilds when auth changes.
@@ -40,6 +42,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.login,
         name: 'login',
         builder: (context, state) => const LoginPage(),
+      ),
+      // Standalone route for telemetry history page (push from any context)
+      GoRoute(
+        path: AppRoutes.telemetryHistory,
+        name: 'telemetry-history',
+        builder: (context, state) {
+          final qp = state.uri.queryParameters;
+          final idParam = qp['deviceId'];
+          final deviceId = int.tryParse(idParam ?? '');
+          if (deviceId == null) {
+            return const Scaffold(
+              body: Center(child: Text('Missing or invalid deviceId')),
+            );
+          }
+          return TelemetryHistoryPage(deviceId: deviceId);
+        },
       ),
       // Shell containing bottom navigation destinations
       ShellRoute(

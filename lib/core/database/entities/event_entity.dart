@@ -89,8 +89,7 @@ class EventEntity {
       priority: priority,
       severity: severity,
       message: message,
-      attributesJson:
-          attributes != null ? _encodeAttributes(attributes) : '{}',
+      attributesJson: attributes != null ? _encodeAttributes(attributes) : '{}',
     );
   }
 
@@ -100,9 +99,8 @@ class EventEntity {
       'id': eventId,
       'deviceId': deviceId,
       'type': eventType,
-      'eventTime':
-          DateTime.fromMillisecondsSinceEpoch(eventTimeMs, isUtc: true)
-              .toLocal(),
+      'eventTime': DateTime.fromMillisecondsSinceEpoch(eventTimeMs, isUtc: true)
+          .toLocal(),
       'positionId': positionId,
       'geofenceId': geofenceId,
       'maintenanceId': maintenanceId,

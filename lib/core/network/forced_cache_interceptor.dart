@@ -28,12 +28,12 @@ class ForcedLocalCacheInterceptor extends Interceptor {
     Map<String, Duration>? ttlOverrides,
     this.serveStaleOnError = true,
   }) : _ttlMap = {
-         // Sensible defaults; tune as needed
-         '/api/devices': const Duration(minutes: 5),
-         '/api/geofences': const Duration(minutes: 10),
-         '/api/users': const Duration(minutes: 10),
-         if (ttlOverrides != null) ...ttlOverrides,
-       };
+          // Sensible defaults; tune as needed
+          '/api/devices': const Duration(minutes: 5),
+          '/api/geofences': const Duration(minutes: 10),
+          '/api/users': const Duration(minutes: 10),
+          if (ttlOverrides != null) ...ttlOverrides,
+        };
 
   final Map<String, Duration> _ttlMap;
   final bool serveStaleOnError;

@@ -203,14 +203,12 @@ class AuthService {
     final any401 = attempts.any(
       (a) => a['status'] == 401 || a['status'] == 403,
     );
-    final statuses = attempts
-        .map((a) {
-          final base =
-              '${a['step']}:${a['status']}${a['error'] != null ? '(${a['error']})' : ''}';
-          final detail = a['detail'];
-          return detail != null ? '$base[$detail]' : base;
-        })
-        .join(', ');
+    final statuses = attempts.map((a) {
+      final base =
+          '${a['step']}:${a['status']}${a['error'] != null ? '(${a['error']})' : ''}';
+      final detail = a['detail'];
+      return detail != null ? '$base[$detail]' : base;
+    }).join(', ');
     final reason = any401
         ? 'Invalid credentials (401/403). Confirm via web UI.'
         : 'All strategies failed.';

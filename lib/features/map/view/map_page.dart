@@ -47,12 +47,14 @@ final _tileProviderProvider = Provider<TileProvider>((ref) {
 final markerCacheProvider = Provider<MarkerCache>((ref) => MarkerCache());
 
 // Debounced positions helper
-Map<int, Position> useDebouncedPositions(AsyncValue<Map<int, Position>> positionsAsync, Duration debounce) {
+Map<int, Position> useDebouncedPositions(
+    AsyncValue<Map<int, Position>> positionsAsync, Duration debounce) {
   // Simple debounce: returns latest positions after delay
   var latest = <int, Position>{};
   positionsAsync.when(
     data: (map) {
-      Future.delayed(debounce, () => latest = Map<int, Position>.unmodifiable(map));
+      Future.delayed(
+          debounce, () => latest = Map<int, Position>.unmodifiable(map));
     },
     loading: () {},
     error: (_, __) {},
@@ -106,10 +108,11 @@ class MapPage extends ConsumerStatefulWidget {
   ConsumerState<MapPage> createState() => _MapPageState();
 }
 
-class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, MapPageLifecycleMixin<MapPage> {
+class _MapPageState extends ConsumerState<MapPage>
+    with WidgetsBindingObserver, MapPageLifecycleMixin<MapPage> {
   // Selection
   final Set<int> _selectedIds = <int>{};
-  
+
   @override
   List<int> get activeDeviceIds => _selectedIds.toList();
 
@@ -146,47 +149,46 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
   @override
   void initState() {
     super.initState();
-    
+
     // OPTIMIZATION: Initialize throttled marker notifier
     // Raised throttle to 80ms to reduce UI thread load
     _markersNotifier = ThrottledValueNotifier<List<MapMarkerData>>(
       const [],
       throttleDuration: const Duration(milliseconds: 80),
     );
-    
+
     _focusNode.addListener(() => setState(() {}));
 
     // MIGRATION: Initialize VehicleDataRepository for cache-first startup
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      
+
       // OPTIMIZATION: Initialize background marker processing isolate
       await MarkerProcessingIsolate.instance.initialize();
-      
+
       // OPTIMIZATION: Frame timing monitoring (disabled by default)
       if (MapDebugFlags.enableFrameTiming) {
         FrameTimingSummarizer.instance.enable();
       }
-      
+
       // Get repository instance (starts WebSocket + REST fallback)
       final repo = ref.read(vehicleDataRepositoryProvider);
-      
+
       // Get device IDs to initialize
       final devicesAsync = ref.read(devicesNotifierProvider);
       final devices = devicesAsync.asData?.value ?? [];
-      final deviceIds = devices
-          .map((d) => d['id'] as int?)
-          .whereType<int>()
-          .toList();
-      
+      final deviceIds =
+          devices.map((d) => d['id'] as int?).whereType<int>().toList();
+
       if (deviceIds.isNotEmpty) {
         // Fetch from cache (instant) and trigger REST fetch (background)
         repo.fetchMultipleDevices(deviceIds);
         if (kDebugMode) {
-          debugPrint('[MapPage] Initialized repository with ${deviceIds.length} devices');
+          debugPrint(
+              '[MapPage] Initialized repository with ${deviceIds.length} devices');
         }
       }
-      
+
       // Register marker count supplier for performance overlay (disabled by default)
       if (MapDebugFlags.enablePerfMetrics) {
         final perfSvc = ref.read(performanceMetricsServiceProvider);
@@ -236,19 +238,20 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
     _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
-    _markersNotifier.dispose(); // OPTIMIZATION: Clean up throttled marker notifier
-    
+    _markersNotifier
+        .dispose(); // OPTIMIZATION: Clean up throttled marker notifier
+
     // OPTIMIZATION: Cleanup frame timing and marker isolate
     if (MapDebugFlags.enableFrameTiming) {
       FrameTimingSummarizer.instance.disable();
     }
     MarkerProcessingIsolate.instance.dispose();
-    
+
     super.dispose();
   }
 
   // ---------- Helpers ----------
-  
+
   /// OPTIMIZATION: Process markers asynchronously in background isolate
   /// Moves heavy filtering + marker creation off the main thread
   Future<void> _processMarkersAsync(
@@ -259,9 +262,10 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
   ) async {
     try {
       if (kDebugMode) {
-        debugPrint('[MapPage] Processing ${positions.length} positions for markers...');
+        debugPrint(
+            '[MapPage] Processing ${positions.length} positions for markers...');
       }
-      
+
       // Use background isolate for marker processing (200+ markers)
       final markers = await MarkerProcessingIsolate.instance.processMarkers(
         positions,
@@ -269,7 +273,7 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
         selectedIds,
         query,
       );
-      
+
       // Update throttled notifier (automatically throttles if updates <80ms apart)
       if (_markersNotifier.value != markers) {
         if (kDebugMode) {
@@ -286,7 +290,7 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
       }
     }
   }
-  
+
   double? _asDouble(dynamic v) {
     if (v == null) return null;
     if (v is double) return v;
@@ -312,8 +316,8 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
 
     // Optimized: Get position data BEFORE setState to trigger immediate camera move
     final position = ref.read(positionByDeviceProvider(n));
-    final hasValidPos = position != null &&
-        _valid(position.latitude, position.longitude);
+    final hasValidPos =
+        position != null && _valid(position.latitude, position.longitude);
 
     setState(() {
       if (_selectedIds.contains(n)) {
@@ -390,7 +394,7 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
   @override
   Widget build(BuildContext context) {
     Widget content = _buildMapContent();
-    
+
     // Add performance profiling overlay (disabled by default)
     if (MapDebugFlags.showRebuildOverlay) {
       content = RebuildProfilerOverlay(
@@ -400,7 +404,7 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
         ),
       );
     }
-    
+
     return content;
   }
 
@@ -409,10 +413,10 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
     if (MapDebugFlags.showRebuildOverlay) {
       RebuildTracker.instance.trackRebuild('MapPage');
     }
-    
+
     // Watch entire devices list only once; consider splitting into smaller providers later
     final devicesAsync = ref.watch(devicesNotifierProvider);
-    
+
     // MIGRATION: Repository-backed position watching (replaces positionsLiveProvider + positionsLastKnownProvider)
     // Build positions map from per-device snapshots (cache-first, WebSocket updates)
     final devices = devicesAsync.asData?.value ?? [];
@@ -420,7 +424,7 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
     for (final device in devices) {
       final deviceId = device['id'] as int?;
       if (deviceId == null) continue;
-      
+
       // Watch per-device position (cache-first, triggers on WebSocket updates)
       // vehiclePositionProvider is now StreamProvider, so get AsyncValue and extract value
       final asyncPosition = ref.watch(vehiclePositionProvider(deviceId));
@@ -429,10 +433,10 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
         positions[deviceId] = position;
       }
     }
-    
+
     // Use marker cache to memoize marker creation
     // Note: markerCache not used directly anymore - background isolate handles it
-    
+
     return Scaffold(
       body: SafeArea(
         child: devicesAsync.when(
@@ -440,7 +444,7 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
             // OPTIMIZATION: Process markers in background isolate for heavy workloads
             // This moves filtering + marker creation off the main thread
             _processMarkersAsync(positions, devices, _selectedIds, _query);
-            
+
             // Use current marker value from notifier for UI decisions
             final currentMarkers = _markersNotifier.value;
             final q = _query.trim().toLowerCase();
@@ -514,13 +518,12 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
             final selectedMarkers = _selectedIds.isEmpty
                 ? <MapMarkerData>[]
                 : currentMarkers
-                      .where(
-                        (m) => _selectedIds.contains(int.tryParse(m.id) ?? -1),
-                      )
-                      .toList();
-            final target = selectedMarkers.isNotEmpty
-                ? selectedMarkers
-                : currentMarkers;
+                    .where(
+                      (m) => _selectedIds.contains(int.tryParse(m.id) ?? -1),
+                    )
+                    .toList();
+            final target =
+                selectedMarkers.isNotEmpty ? selectedMarkers : currentMarkers;
             if (target.isEmpty) {
               fit = const MapCameraFit(center: LatLng(0, 0));
             } else if (target.length == 1) {
@@ -578,7 +581,8 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                         onMarkerTap: _onMarkerTap,
                         onMapTap: _onMapTap,
                         tileProvider: ref.watch(_tileProviderProvider),
-                        markersNotifier: _markersNotifier, // OPTIMIZATION: Use throttled ValueNotifier
+                        markersNotifier:
+                            _markersNotifier, // OPTIMIZATION: Use throttled ValueNotifier
                       ),
                       // Performance overlay removed for production
                     ],
@@ -608,7 +612,8 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                         ),
                         onClear: () {
                           _searchCtrl.clear();
-                          _searchDebouncer.run(() => setState(() => _query = ''));
+                          _searchDebouncer
+                              .run(() => setState(() => _query = ''));
                         },
                         onRequestEdit: () {
                           setState(() {
@@ -668,8 +673,12 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                                           final d = suggestions[i];
                                           if (d['__all__'] == true) {
                                             final total = devices.length;
-                                            final allSelected = _selectedIds.length == total && total > 0;
-                                            final someSelected = _selectedIds.isNotEmpty && !allSelected;
+                                            final allSelected =
+                                                _selectedIds.length == total &&
+                                                    total > 0;
+                                            final someSelected =
+                                                _selectedIds.isNotEmpty &&
+                                                    !allSelected;
                                             return CheckboxListTile(
                                               key: const ValueKey('__all__'),
                                               dense: true,
@@ -677,10 +686,13 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                                               controlAffinity:
                                                   ListTileControlAffinity
                                                       .leading,
-                                              title: Text('All devices ($total)'),
+                                              title:
+                                                  Text('All devices ($total)'),
                                               value: allSelected
                                                   ? true
-                                                  : (someSelected ? null : false),
+                                                  : (someSelected
+                                                      ? null
+                                                      : false),
                                               onChanged: (_) {
                                                 setState(() {
                                                   if (allSelected) {
@@ -698,21 +710,31 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                                               },
                                             );
                                           }
-                      final name = d['name']?.toString() ?? 'Device';
+                                          final name =
+                                              d['name']?.toString() ?? 'Device';
                                           final idRaw = d['id'];
                                           final id = (idRaw is int)
                                               ? idRaw
-                                              : int.tryParse(idRaw?.toString() ?? '');
-                                          final pos = id == null ? null : positions[id];
-                                          final lat = pos?.latitude ?? _asDouble(d['latitude']);
-                                          final lon = pos?.longitude ?? _asDouble(d['longitude']);
+                                              : int.tryParse(
+                                                  idRaw?.toString() ?? '');
+                                          final pos =
+                                              id == null ? null : positions[id];
+                                          final lat = pos?.latitude ??
+                                              _asDouble(d['latitude']);
+                                          final lon = pos?.longitude ??
+                                              _asDouble(d['longitude']);
                                           final hasCoords = _valid(lat, lon);
-                                          final selected = id != null && _selectedIds.contains(id);
+                                          final selected = id != null &&
+                                              _selectedIds.contains(id);
                                           DateTime? last;
                                           final devLast = d['lastUpdateDt'];
-                                          if (devLast is DateTime) last = devLast.toLocal();
-                                          final posTime = pos?.deviceTime.toLocal();
-                                          if (posTime != null && (last == null || posTime.isAfter(last))) {
+                                          if (devLast is DateTime)
+                                            last = devLast.toLocal();
+                                          final posTime =
+                                              pos?.deviceTime.toLocal();
+                                          if (posTime != null &&
+                                              (last == null ||
+                                                  posTime.isAfter(last))) {
                                             last = posTime;
                                           }
                                           final subtitle = last == null
@@ -741,9 +763,11 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                                                       }
                                                     });
                                                     // Immediately center on selected device
-                                                    if (hasCoords && (val ?? false)) {
+                                                    if (hasCoords &&
+                                                        (val ?? false)) {
                                                       // Direct synchronous update for instant response
-                                                      _mapKey.currentState?.moveTo(
+                                                      _mapKey.currentState
+                                                          ?.moveTo(
                                                         LatLng(lat!, lon!),
                                                       );
                                                     }
@@ -768,7 +792,8 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                     children: [
                       // Connection status indicator
                       _ConnectionStatusBadge(
-                        connectionStatus: ref.watch(webSocketProvider.select((s) => s.status)),
+                        connectionStatus: ref
+                            .watch(webSocketProvider.select((s) => s.status)),
                         positionsCount: positions.length,
                       ),
                       const SizedBox(height: 10),
@@ -778,28 +803,33 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                         isLoading: _isRefreshing,
                         onTap: () async {
                           if (_isRefreshing) return;
-                          
+
                           setState(() => _isRefreshing = true);
-                          
+
                           try {
                             // 1) Refresh static data from Traccar (devices list)
                             await ref
                                 .read(devicesNotifierProvider.notifier)
                                 .refresh();
-                            
+
                             // 2) Refresh repository (re-fetch positions from REST + reconnect WebSocket)
-                            final repo = ref.read(vehicleDataRepositoryProvider);
-                            final devices = ref.read(devicesNotifierProvider).asData?.value ?? [];
+                            final repo =
+                                ref.read(vehicleDataRepositoryProvider);
+                            final devices = ref
+                                    .read(devicesNotifierProvider)
+                                    .asData
+                                    ?.value ??
+                                [];
                             final deviceIds = devices
                                 .map((d) => d['id'] as int?)
                                 .whereType<int>()
                                 .toList();
-                            
+
                             if (deviceIds.isNotEmpty) {
                               repo.refreshAll();
                               await repo.fetchMultipleDevices(deviceIds);
                             }
-                            
+
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -813,7 +843,8 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Refresh failed: ${e.toString()}'),
+                                  content:
+                                      Text('Refresh failed: ${e.toString()}'),
                                   duration: const Duration(seconds: 3),
                                   backgroundColor: Colors.redAccent,
                                 ),
@@ -865,9 +896,9 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                               ).size.height;
                               final height =
                                   (screenH * _panelStops[_panelIndex]).clamp(
-                                    90.0,
-                                    screenH * 0.9,
-                                  );
+                                90.0,
+                                screenH * 0.9,
+                              );
                               return GestureDetector(
                                 onVerticalDragEnd: (details) {
                                   final v = details.primaryVelocity ?? 0;
@@ -910,7 +941,7 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                                         onTap: () => setState(
                                           () => _panelIndex =
                                               (_panelIndex + 1) %
-                                              _panelStops.length,
+                                                  _panelStops.length,
                                         ),
                                         borderRadius: BorderRadius.circular(40),
                                         child: Padding(
@@ -937,57 +968,64 @@ class _MapPageState extends ConsumerState<MapPage> with WidgetsBindingObserver, 
                                                 const BouncingScrollPhysics(),
                                             child: RepaintBoundary(
                                               child: AnimatedSwitcher(
-                                                duration: const Duration(milliseconds: 220),
+                                                duration: const Duration(
+                                                    milliseconds: 220),
                                                 switchInCurve: Curves.easeInOut,
-                                                switchOutCurve: Curves.easeInOut,
-                                                transitionBuilder: (child, animation) {
+                                                switchOutCurve:
+                                                    Curves.easeInOut,
+                                                transitionBuilder:
+                                                    (child, animation) {
                                                   final slide = Tween<Offset>(
-                                                    begin: const Offset(0, 0.02),
+                                                    begin:
+                                                        const Offset(0, 0.02),
                                                     end: Offset.zero,
                                                   ).animate(animation);
                                                   return FadeTransition(
                                                     opacity: animation,
-                                                    child: SlideTransition(position: slide, child: child),
+                                                    child: SlideTransition(
+                                                        position: slide,
+                                                        child: child),
                                                   );
                                                 },
                                                 child: _selectedIds.length == 1
-                                                  ? _InfoBox(
-                                                    key: const ValueKey(
-                                                      'single-info',
-                                                    ),
-                                                    deviceId:
-                                                        _selectedIds.first,
-                                                    devices: devices,
-                                                    position: ref.watch(
-                                                      positionByDeviceProvider(
-                                                        _selectedIds.first,
+                                                    ? _InfoBox(
+                                                        key: const ValueKey(
+                                                          'single-info',
+                                                        ),
+                                                        deviceId:
+                                                            _selectedIds.first,
+                                                        devices: devices,
+                                                        position: ref.watch(
+                                                          positionByDeviceProvider(
+                                                            _selectedIds.first,
+                                                          ),
+                                                        ),
+                                                        statusResolver:
+                                                            _deviceStatus,
+                                                        statusColorBuilder:
+                                                            _statusColor,
+                                                        onClose: () => setState(
+                                                          _selectedIds.clear,
+                                                        ),
+                                                        onFocus: _focusSelected,
+                                                      )
+                                                    : _MultiSelectionInfoBox(
+                                                        key: const ValueKey(
+                                                          'multi-info',
+                                                        ),
+                                                        selectedIds:
+                                                            _selectedIds,
+                                                        devices: devices,
+                                                        positions: positions,
+                                                        statusResolver:
+                                                            _deviceStatus,
+                                                        statusColorBuilder:
+                                                            _statusColor,
+                                                        onClear: () => setState(
+                                                          _selectedIds.clear,
+                                                        ),
+                                                        onFocus: _focusSelected,
                                                       ),
-                                                    ),
-                                                    statusResolver:
-                                                        _deviceStatus,
-                                                    statusColorBuilder:
-                                                        _statusColor,
-                                                    onClose: () => setState(
-                                                      _selectedIds.clear,
-                                                    ),
-                                                    onFocus: _focusSelected,
-                                                  )
-                                                  : _MultiSelectionInfoBox(
-                                                    key: const ValueKey(
-                                                      'multi-info',
-                                                    ),
-                                                    selectedIds: _selectedIds,
-                                                    devices: devices,
-                                                    positions: positions,
-                                                    statusResolver:
-                                                        _deviceStatus,
-                                                    statusColorBuilder:
-                                                        _statusColor,
-                                                    onClear: () => setState(
-                                                      _selectedIds.clear,
-                                                    ),
-                                                    onFocus: _focusSelected,
-                                                  ),
                                               ),
                                             ),
                                           ),
@@ -1149,7 +1187,7 @@ class _ActionButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool disabled;
   final bool isLoading;
-  
+
   @override
   Widget build(BuildContext context) {
     final bg = disabled ? Colors.white.withValues(alpha: 0.6) : Colors.white;
@@ -1236,8 +1274,7 @@ class _InfoBox extends StatelessWidget {
     final engineAttr = position?.attributes['ignition'];
     final engine = engineAttr is bool ? (engineAttr ? 'on' : 'off') : '_';
     final speed = position?.speed.toStringAsFixed(0) ?? '--';
-    final distanceAttr =
-        position?.attributes['distance'] ??
+    final distanceAttr = position?.attributes['distance'] ??
         position?.attributes['totalDistance'];
     String distance;
     if (distanceAttr is num) {
@@ -1254,7 +1291,8 @@ class _InfoBox extends StatelessWidget {
       if (posAddress != null && posAddress.isNotEmpty) {
         lastLocation = posAddress;
       } else {
-        lastLocation = '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
+        lastLocation =
+            '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
       }
     } else {
       // Fallback to device's stored lat/lon if no position
@@ -1291,17 +1329,17 @@ class _InfoBox extends StatelessWidget {
                   Text(
                     name,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: statusColor,
-                      fontWeight: FontWeight.w700,
-                    ),
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Engine & Movement',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .3,
-                    ),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: .3,
+                        ),
                   ),
                   const SizedBox(height: 4),
                   _InfoLine(
@@ -1324,9 +1362,9 @@ class _InfoBox extends StatelessWidget {
                   Text(
                     'Last Location',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .3,
-                    ),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: .3,
+                        ),
                   ),
                   const SizedBox(height: 4),
                   _InfoLine(
@@ -1414,8 +1452,8 @@ class _MultiSelectionInfoBox extends StatelessWidget {
                 Text(
                   '$total devices selected',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ],
             ),
@@ -1532,19 +1570,19 @@ class _StatusStat extends StatelessWidget {
   final Color color;
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      '$label: $count',
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: color,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          '$label: $count',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+      );
 }
 
 class _ConnectionStatusBadge extends StatelessWidget {
@@ -1591,7 +1629,8 @@ class _ConnectionStatusBadge extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 18, color: color),
-              if (positionsCount > 0 && connectionStatus == WebSocketStatus.connected) ...[
+              if (positionsCount > 0 &&
+                  connectionStatus == WebSocketStatus.connected) ...[
                 const SizedBox(width: 4),
                 Text(
                   '$positionsCount',

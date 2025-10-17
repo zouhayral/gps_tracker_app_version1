@@ -21,6 +21,6 @@ void main() {
     expect(p.speed, 10);
     expect(p.course, 90);
     expect(p.attributes['ignition'], true);
-  // Basic field checks done above; JSON serialization is covered by other layers.
+    // Basic field checks done above; JSON serialization is covered by other layers.
   });
 }

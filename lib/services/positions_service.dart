@@ -264,7 +264,8 @@ class PositionsService {
 
   /// Resolve deviceId -> Position using device.positionId for a set of devices.
   /// Fallback: For devices without positionId, fetch last 30min history.
-  Future<Map<int, Position>> latestForDevices(List<Map<String, dynamic>> devices) async {
+  Future<Map<int, Position>> latestForDevices(
+      List<Map<String, dynamic>> devices) async {
     final out = <int, Position>{};
     final tasks = <Future<void>>[];
     final devicesWithoutPosId = <int>[];
@@ -328,13 +329,13 @@ class HistoryProbeStep {
   final String? error;
 
   Map<String, dynamic> toJson() => {
-    'hours': windowHours,
-    'from': from.toIso8601String(),
-    'to': to.toIso8601String(),
-    'count': count,
-    'bytes': payloadBytes,
-    if (error != null) 'error': error,
-  };
+        'hours': windowHours,
+        'from': from.toIso8601String(),
+        'to': to.toIso8601String(),
+        'count': count,
+        'bytes': payloadBytes,
+        if (error != null) 'error': error,
+      };
 
   @override
   String toString() => jsonEncode(toJson());

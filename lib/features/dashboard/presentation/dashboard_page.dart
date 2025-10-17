@@ -31,7 +31,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   Widget build(BuildContext context) {
     // Watch only the AsyncValue state; deeper selects can be applied within itemBuilder if needed
     final devicesAsync = ref.watch(devicesNotifierProvider);
-  final query = ref.watch(searchQueryProvider);
+    final query = ref.watch(searchQueryProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Devices'),
@@ -60,8 +60,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             final filtered = q.isEmpty
                 ? devices
                 : devices
-                    .where((d) => (d['name']?.toString().toLowerCase() ?? '')
-                        .contains(q))
+                    .where((d) =>
+                        (d['name']?.toString().toLowerCase() ?? '').contains(q))
                     .toList();
             return Column(
               children: [
@@ -149,7 +149,8 @@ class _DeviceTile extends ConsumerWidget {
     if (d == null) return const SizedBox.shrink();
     // debugPrint('[REBUILD] DeviceTile($id) rebuilt');
     final nameText = Text(d['name']?.toString() ?? 'Unnamed');
-    final subtitleText = Text('ID: ${d['id']}  Status: ${d['status'] ?? 'unknown'}');
+    final subtitleText =
+        Text('ID: ${d['id']}  Status: ${d['status'] ?? 'unknown'}');
     return ListTile(
       title: nameText,
       subtitle: subtitleText,

@@ -25,7 +25,8 @@ void main() {
     container.dispose();
   });
 
-  test('WebSocketManager reconnect logic triggers after error (test mode)', () async {
+  test('WebSocketManager reconnect logic triggers after error (test mode)',
+      () async {
     final container = ProviderContainer();
     final wsManager = container.read(webSocketProvider.notifier);
     wsManager.stream.listen((_) {}, onError: (_) {});

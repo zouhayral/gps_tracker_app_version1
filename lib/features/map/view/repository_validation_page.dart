@@ -10,7 +10,7 @@ import 'package:my_app_gps/core/utils/motion_aware_helper.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 
 /// Post-Migration Validation & Performance Monitoring Page
-/// 
+///
 /// Provides real-time metrics for:
 /// - Cold-start data delay
 /// - Frame time performance
@@ -29,19 +29,19 @@ class _RepositoryValidationPageState
     extends ConsumerState<RepositoryValidationPage> {
   final List<String> _logs = [];
   final _stopwatch = Stopwatch();
-  
+
   // Metrics
   Duration? _coldStartDelay;
   double _avgFrameTime = 0.0;
   Map<String, dynamic> _cacheStats = {};
   Map<String, int> _rebuildCounts = {};
-  
+
   // Adaptive sync metrics
   SyncStats? _syncStats;
   // ignore: unused_field
   BackgroundSyncStats? _backgroundSyncStats;
   Map<String, dynamic>? _motionStats;
-  
+
   Timer? _metricsTimer;
 
   @override
@@ -122,25 +122,22 @@ class _RepositoryValidationPageState
 
   Future<void> _testColdStartDelay() async {
     _addLog('\n📊 Test 1: Cold Start Delay');
-    
+
     final repo = ref.read(vehicleDataRepositoryProvider);
     final devicesAsync = ref.read(devicesNotifierProvider);
     final devices = devicesAsync.asData?.value ?? [];
-    
+
     if (devices.isEmpty) {
       _addLog('⚠️ No devices found');
       return;
     }
 
     final testStopwatch = Stopwatch()..start();
-    
+
     // Trigger repository load
-    final deviceIds = devices
-        .map((d) => d['id'] as int?)
-        .whereType<int>()
-        .take(10)
-        .toList();
-    
+    final deviceIds =
+        devices.map((d) => d['id'] as int?).whereType<int>().take(10).toList();
+
     await repo.fetchMultipleDevices(deviceIds);
     testStopwatch.stop();
 
@@ -150,7 +147,7 @@ class _RepositoryValidationPageState
 
     _addLog(
         '  ⏱️ Loaded ${deviceIds.length} devices in ${testStopwatch.elapsedMilliseconds}ms');
-    
+
     if (testStopwatch.elapsedMilliseconds < 1000) {
       _addLog('  ✅ PASS: < 1 second (target met)');
     } else {
@@ -202,11 +199,8 @@ class _RepositoryValidationPageState
       return;
     }
 
-    final deviceIds = devices
-        .map((d) => d['id'] as int?)
-        .whereType<int>()
-        .take(20)
-        .toList();
+    final deviceIds =
+        devices.map((d) => d['id'] as int?).whereType<int>().take(20).toList();
 
     final testStopwatch = Stopwatch()..start();
     await repo.fetchMultipleDevices(deviceIds);
@@ -253,8 +247,9 @@ class _RepositoryValidationPageState
       final stats = syncManager.stats;
 
       _addLog('  📈 Total syncs: ${stats.totalSyncs}');
-      _addLog('  📈 Foreground: ${stats.foregroundSyncs} | Background: ${stats.backgroundSyncs}');
-      
+      _addLog(
+          '  📈 Foreground: ${stats.foregroundSyncs} | Background: ${stats.backgroundSyncs}');
+
       if (stats.averageInterval != null) {
         _addLog('  ⏱️ Average interval: ${stats.averageInterval!.inSeconds}s');
       }
@@ -267,14 +262,16 @@ class _RepositoryValidationPageState
       // Check motion tracking
       final motionStats = MotionAwareHelper.getStatistics();
       _addLog('  🚗 Motion tracking: ${motionStats['totalTracked']} vehicles');
-      _addLog('  🚗 Moving: ${motionStats['moving']} | Idle: ${motionStats['idle']}');
+      _addLog(
+          '  🚗 Moving: ${motionStats['moving']} | Idle: ${motionStats['idle']}');
 
       // Check background sync
       try {
         final backgroundSync = ref.read(backgroundSyncServiceProvider);
         final bgStats = backgroundSync.stats;
         _addLog('  🔄 Background syncs: ${bgStats.totalExecutions}');
-        _addLog('  ✅ Success: ${bgStats.successfulExecutions} | ❌ Failed: ${bgStats.failedExecutions}');
+        _addLog(
+            '  ✅ Success: ${bgStats.successfulExecutions} | ❌ Failed: ${bgStats.failedExecutions}');
       } catch (_) {
         _addLog('  ℹ️ Background sync not enabled');
       }
@@ -296,7 +293,7 @@ class _RepositoryValidationPageState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Repository Validation'),
@@ -363,16 +360,18 @@ class _RepositoryValidationPageState
                             ? '--'
                             : '${((_cacheStats['hitRate'] as double) * 100).toStringAsFixed(1)}%',
                         subtitle: 'Target: > 80%',
-                        color: ((_cacheStats['hitRate'] as double?) ?? 0.0) >= 0.80
-                            ? Colors.green
-                            : Colors.orange,
+                        color:
+                            ((_cacheStats['hitRate'] as double?) ?? 0.0) >= 0.80
+                                ? Colors.green
+                                : Colors.orange,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: _MetricCard(
                         title: 'Rebuilds',
-                        value: '${_rebuildCounts.values.fold(0, (a, b) => a + b)}',
+                        value:
+                            '${_rebuildCounts.values.fold(0, (a, b) => a + b)}',
                         subtitle: 'MapPage: ${_rebuildCounts['MapPage'] ?? 0}',
                         color: Colors.blue,
                       ),
@@ -397,7 +396,8 @@ class _RepositoryValidationPageState
                     Expanded(
                       child: _MetricCard(
                         title: 'Motion',
-                        value: '${_motionStats?['moving'] ?? 0}/${_motionStats?['totalTracked'] ?? 0}',
+                        value:
+                            '${_motionStats?['moving'] ?? 0}/${_motionStats?['totalTracked'] ?? 0}',
                         subtitle: 'Moving vehicles',
                         color: Colors.teal,
                       ),

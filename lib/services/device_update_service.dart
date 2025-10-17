@@ -10,7 +10,7 @@ class DeviceUpdateService {
   final StreamController<DeviceUpdate> _updateController;
   Timer? _batchTimer;
   final List<DeviceUpdate> _pendingUpdates = [];
-  
+
   DeviceUpdateService(this._positionsNotifier)
       : _updateController = StreamController<DeviceUpdate>.broadcast() {
     _listenToUpdates();
@@ -30,7 +30,7 @@ class DeviceUpdateService {
 
   void _processUpdate(DeviceUpdate update) {
     final currentPositions = Map<int, Position>.from(_positionsNotifier.value);
-    
+
     switch (update.type) {
       case UpdateType.position:
         if (update.position != null) {
@@ -44,20 +44,20 @@ class DeviceUpdateService {
         // Handled in _processBatchUpdate
         break;
     }
-    
+
     // Single notifier update - triggers marker layer rebuild only
     _positionsNotifier.value = currentPositions;
   }
 
   void _processBatchUpdate(DeviceUpdate update) {
     if (update.positions == null || update.positions!.isEmpty) return;
-    
+
     final currentPositions = Map<int, Position>.from(_positionsNotifier.value);
-    
+
     for (final position in update.positions!) {
       currentPositions[position.deviceId] = position;
     }
-    
+
     _positionsNotifier.value = currentPositions;
   }
 
@@ -75,18 +75,18 @@ class DeviceUpdateService {
   /// Queue updates and process them in batches (reduces overhead)
   void queueUpdate(DeviceUpdate update) {
     _pendingUpdates.add(update);
-    
+
     _batchTimer?.cancel();
     _batchTimer = Timer(const Duration(milliseconds: 100), () {
       if (_pendingUpdates.isEmpty) return;
-      
+
       final positions = _pendingUpdates
           .where((u) => u.position != null)
           .map((u) => u.position!)
           .toList();
-      
+
       _pendingUpdates.clear();
-      
+
       if (positions.isNotEmpty) {
         addBatchUpdates(positions);
       }
@@ -143,7 +143,8 @@ enum UpdateType { position, remove, batch }
 // ============================================================================
 
 /// ValueNotifier holding all device positions - used for efficient updates
-final positionsNotifierProvider = Provider<ValueNotifier<Map<int, Position>>>((ref) {
+final positionsNotifierProvider =
+    Provider<ValueNotifier<Map<int, Position>>>((ref) {
   final notifier = ValueNotifier<Map<int, Position>>({});
   ref.onDispose(() => notifier.dispose());
   return notifier;
@@ -153,8 +154,8 @@ final positionsNotifierProvider = Provider<ValueNotifier<Map<int, Position>>>((r
 final deviceUpdateServiceProvider = Provider<DeviceUpdateService>((ref) {
   final positionsNotifier = ref.watch(positionsNotifierProvider);
   final service = DeviceUpdateService(positionsNotifier);
-  
+
   ref.onDispose(() => service.dispose());
-  
+
   return service;
 });

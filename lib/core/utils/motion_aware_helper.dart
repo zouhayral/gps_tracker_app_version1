@@ -3,23 +3,23 @@ import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
 import 'package:my_app_gps/core/sync/adaptive_sync_manager.dart';
 
 /// Helper class for motion-aware sync interval adjustment
-/// 
+///
 /// Analyzes vehicle data updates and notifies AdaptiveSyncManager when vehicles
 /// transition between moving and idle states to optimize sync frequency.
-/// 
+///
 /// **Motion Detection Logic:**
 /// - Moving: `speed > threshold` (default 2 km/h) OR `ignition == true`
 /// - Idle: `speed <= threshold` AND `ignition == false`
-/// 
+///
 /// **Integration:**
 /// Call `analyzeMotion()` when VehicleDataSnapshot is updated in the repository.
-/// 
+///
 /// **Example:**
 /// ```dart
 /// // In VehicleDataRepository:
 /// void _handleWebSocketUpdate(VehicleDataSnapshot snapshot) {
 ///   // ... update cache and notifiers ...
-///   
+///
 ///   // Notify motion changes to adaptive sync
 ///   MotionAwareHelper.analyzeMotion(
 ///     deviceId: snapshot.deviceId,
@@ -34,11 +34,13 @@ class MotionAwareHelper {
   static const Duration stateChangeDebounce = Duration(seconds: 5);
 
   // State tracking
-  static final Map<int, bool> _lastKnownMotionState = {}; // deviceId -> isMoving
-  static final Map<int, DateTime> _lastStateChange = {}; // deviceId -> timestamp
+  static final Map<int, bool> _lastKnownMotionState =
+      {}; // deviceId -> isMoving
+  static final Map<int, DateTime> _lastStateChange =
+      {}; // deviceId -> timestamp
 
   /// Analyze vehicle motion and notify sync manager if state changed
-  /// 
+  ///
   /// Returns true if motion state changed (moving ↔ idle)
   static bool analyzeMotion({
     required int deviceId,
@@ -87,7 +89,7 @@ class MotionAwareHelper {
   }
 
   /// Check if vehicle is currently moving
-  /// 
+  ///
   /// Logic:
   /// 1. If speed > threshold → moving
   /// 2. If ignition == true AND speed > 0 → moving
@@ -157,7 +159,7 @@ class MotionAwareHelper {
 }
 
 /// Enhanced motion detection with historical analysis
-/// 
+///
 /// This class can be used for more sophisticated motion detection
 /// by analyzing velocity trends, acceleration, and GPS accuracy.
 class AdvancedMotionDetector {
@@ -231,8 +233,10 @@ class AdvancedMotionDetector {
     if (history.length < 3) return false;
 
     // Check if last 3 readings show movement
-    final recentSpeeds = history.skip(history.length - 3).map((r) => r.speed).toList();
-    return recentSpeeds.every((speed) => speed > MotionAwareHelper.movingSpeedThreshold);
+    final recentSpeeds =
+        history.skip(history.length - 3).map((r) => r.speed).toList();
+    return recentSpeeds
+        .every((speed) => speed > MotionAwareHelper.movingSpeedThreshold);
   }
 
   static double _calculateConfidence(List<_PositionRecord> history) {

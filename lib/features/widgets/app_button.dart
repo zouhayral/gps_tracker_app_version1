@@ -66,15 +66,15 @@ class AppButton extends StatelessWidget {
     final (bg, fg, border) = switch (variant) {
       ButtonVariant.primary => (cs.primary, Colors.white, null),
       ButtonVariant.secondary => (
-        cs.secondaryContainer,
-        cs.onSecondaryContainer,
-        BorderSide(color: cs.secondary),
-      ),
+          cs.secondaryContainer,
+          cs.onSecondaryContainer,
+          BorderSide(color: cs.secondary),
+        ),
       ButtonVariant.destructive => (
-        const Color(0xFFFF383C),
-        Colors.white,
-        null,
-      ),
+          const Color(0xFFFF383C),
+          Colors.white,
+          null,
+        ),
       ButtonVariant.text => (Colors.transparent, cs.primary, null),
     };
 

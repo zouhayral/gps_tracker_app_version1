@@ -21,8 +21,7 @@ class MapMarkerWidget extends ConsumerWidget {
     ref.scheduleLogRebuild('Marker($deviceId)');
     final device = ref.watch(deviceByIdProvider(deviceId));
     final position = ref.watch(positionByDeviceProvider(deviceId));
-    final hasPos =
-        position != null &&
+    final hasPos = position != null &&
         position.latitude >= -90 &&
         position.latitude <= 90 &&
         position.longitude >= -180 &&

@@ -6,75 +6,77 @@ import 'package:my_app_gps/core/diagnostics/diagnostics_config.dart';
 /// Collects frame timing data and reports slow frames
 class FrameTimingSummarizer {
   FrameTimingSummarizer._();
-  
+
   static final FrameTimingSummarizer instance = FrameTimingSummarizer._();
-  
+
   final List<FrameTiming> _recentFrames = [];
   final int _maxFrameHistory = 120; // 2 seconds at 60fps
-  
+
   bool _isEnabled = false;
   int _slowFrameCount = 0;
   int _totalFrameCount = 0;
-  
+
   // Thresholds (60fps = 16.67ms target)
-  static const Duration _slowFrameThreshold = Duration(milliseconds: 20); // >20ms is considered slow
-  static const Duration _jankyFrameThreshold = Duration(milliseconds: 33); // >33ms is janky (dropped frame)
-  
+  static const Duration _slowFrameThreshold =
+      Duration(milliseconds: 20); // >20ms is considered slow
+  static const Duration _jankyFrameThreshold =
+      Duration(milliseconds: 33); // >33ms is janky (dropped frame)
+
   /// Enable frame timing collection
   void enable() {
     if (_isEnabled) return;
-    
+
     _isEnabled = true;
     _slowFrameCount = 0;
     _totalFrameCount = 0;
     _recentFrames.clear();
-    
+
     // Start listening to frame timings
     SchedulerBinding.instance.addTimingsCallback(_onFrameTiming);
-    
+
     if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
       debugPrint('[FrameTiming] Enabled - monitoring for slow frames');
     }
   }
-  
+
   /// Disable frame timing collection
   void disable() {
     if (!_isEnabled) return;
-    
+
     _isEnabled = false;
     SchedulerBinding.instance.removeTimingsCallback(_onFrameTiming);
-    
+
     if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
       debugPrint('[FrameTiming] Disabled');
     }
   }
-  
+
   /// Frame timing callback
   void _onFrameTiming(List<FrameTiming> timings) {
     if (!_isEnabled) return;
-    
+
     for (final timing in timings) {
       _totalFrameCount++;
-      
+
       // Calculate total frame time
       final buildDuration = timing.buildDuration;
       final rasterDuration = timing.rasterDuration;
       final totalDuration = buildDuration + rasterDuration;
-      
+
       // Track slow frames
       if (totalDuration > _slowFrameThreshold) {
         _slowFrameCount++;
-        
-        if (kDebugMode && DiagnosticsConfig.enablePerfLogs && totalDuration > _jankyFrameThreshold) {
-          debugPrint(
-            '[FrameTiming] JANKY FRAME detected! '
-            'Build: ${buildDuration.inMicroseconds / 1000}ms, '
-            'Raster: ${rasterDuration.inMicroseconds / 1000}ms, '
-            'Total: ${totalDuration.inMicroseconds / 1000}ms'
-          );
+
+        if (kDebugMode &&
+            DiagnosticsConfig.enablePerfLogs &&
+            totalDuration > _jankyFrameThreshold) {
+          debugPrint('[FrameTiming] JANKY FRAME detected! '
+              'Build: ${buildDuration.inMicroseconds / 1000}ms, '
+              'Raster: ${rasterDuration.inMicroseconds / 1000}ms, '
+              'Total: ${totalDuration.inMicroseconds / 1000}ms');
         }
       }
-      
+
       // Keep recent frames
       _recentFrames.add(timing);
       if (_recentFrames.length > _maxFrameHistory) {
@@ -91,31 +93,31 @@ class FrameTimingSummarizer {
       }
     }
   }
-  
+
   /// Get frame timing statistics
   FrameTimingStats getStats() {
     if (_recentFrames.isEmpty) {
       return FrameTimingStats.empty();
     }
-    
+
     final buildTimes = <double>[];
     final rasterTimes = <double>[];
     final totalTimes = <double>[];
-    
+
     for (final timing in _recentFrames) {
       final buildMs = timing.buildDuration.inMicroseconds / 1000;
       final rasterMs = timing.rasterDuration.inMicroseconds / 1000;
       final totalMs = buildMs + rasterMs;
-      
+
       buildTimes.add(buildMs);
       rasterTimes.add(rasterMs);
       totalTimes.add(totalMs);
     }
-    
+
     buildTimes.sort();
     rasterTimes.sort();
     totalTimes.sort();
-    
+
     return FrameTimingStats(
       avgBuildTime: _average(buildTimes),
       avgRasterTime: _average(rasterTimes),
@@ -126,23 +128,23 @@ class FrameTimingSummarizer {
       maxTotalTime: totalTimes.last,
       slowFrameCount: _slowFrameCount,
       totalFrameCount: _totalFrameCount,
-      slowFramePercentage: _totalFrameCount > 0 
-          ? (_slowFrameCount / _totalFrameCount) * 100 
+      slowFramePercentage: _totalFrameCount > 0
+          ? (_slowFrameCount / _totalFrameCount) * 100
           : 0.0,
     );
   }
-  
+
   /// Reset statistics
   void reset() {
     _slowFrameCount = 0;
     _totalFrameCount = 0;
     _recentFrames.clear();
-    
+
     if (kDebugMode) {
       debugPrint('[FrameTiming] Stats reset');
     }
   }
-  
+
   /// Print current statistics
   void printStats() {
     final stats = getStats();
@@ -162,12 +164,12 @@ class FrameTimingSummarizer {
 ''');
     }
   }
-  
+
   double _average(List<double> values) {
     if (values.isEmpty) return 0.0;
     return values.reduce((a, b) => a + b) / values.length;
   }
-  
+
   double _percentile(List<double> sortedValues, double percentile) {
     if (sortedValues.isEmpty) return 0.0;
     final index = (sortedValues.length * percentile).floor();
@@ -189,7 +191,7 @@ class FrameTimingStats {
     required this.totalFrameCount,
     required this.slowFramePercentage,
   });
-  
+
   factory FrameTimingStats.empty() {
     return const FrameTimingStats(
       avgBuildTime: 0.0,
@@ -204,7 +206,7 @@ class FrameTimingStats {
       slowFramePercentage: 0.0,
     );
   }
-  
+
   final double avgBuildTime;
   final double avgRasterTime;
   final double avgTotalTime;
@@ -215,13 +217,13 @@ class FrameTimingStats {
   final int slowFrameCount;
   final int totalFrameCount;
   final double slowFramePercentage;
-  
+
   /// Estimated FPS based on average frame time
   double get estimatedFPS {
     if (avgTotalTime <= 0) return 60.0;
     return 1000.0 / avgTotalTime;
   }
-  
+
   /// Whether performance is acceptable (>90% frames under 16.67ms)
   bool get isPerformanceGood {
     return slowFramePercentage < 10.0 && estimatedFPS >= 55.0;

@@ -7,11 +7,9 @@ import 'package:my_app_gps/services/traccar_socket_service.dart';
 enum ConnectionStatus { connecting, connected, retrying }
 
 /// Exposes current WebSocket connection status for UI (badges, banners) and guards.
-final traccarConnectionStatusProvider =
-    AutoDisposeNotifierProvider<
-      TraccarConnectionStatusNotifier,
-      ConnectionStatus
-    >(TraccarConnectionStatusNotifier.new);
+final traccarConnectionStatusProvider = AutoDisposeNotifierProvider<
+    TraccarConnectionStatusNotifier,
+    ConnectionStatus>(TraccarConnectionStatusNotifier.new);
 
 class TraccarConnectionStatusNotifier
     extends AutoDisposeNotifier<ConnectionStatus> {

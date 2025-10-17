@@ -10,20 +10,21 @@ import 'package:my_app_gps/features/map/data/position_model.dart';
 /// Moves position filtering and marker creation off the main thread
 class MarkerProcessingIsolate {
   MarkerProcessingIsolate._();
-  
+
   static final MarkerProcessingIsolate instance = MarkerProcessingIsolate._();
-  
+
   Isolate? _isolate;
   SendPort? _sendPort;
   final _receivePort = ReceivePort();
-  final _resultStreamController = StreamController<List<MapMarkerData>>.broadcast();
-  
+  final _resultStreamController =
+      StreamController<List<MapMarkerData>>.broadcast();
+
   bool _isInitialized = false;
-  
+
   /// Initialize the background isolate
   Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
     _receivePort.listen((message) {
       if (message is SendPort) {
         _sendPort = message;
@@ -35,17 +36,17 @@ class MarkerProcessingIsolate {
         _resultStreamController.add(message);
       }
     });
-    
+
     _isolate = await Isolate.spawn(
       _isolateEntry,
       _receivePort.sendPort,
       debugName: 'MarkerProcessingIsolate',
     );
-    
+
     // Wait for isolate to be ready
     await Future.delayed(const Duration(milliseconds: 100));
   }
-  
+
   /// Process markers in background isolate
   Future<List<MapMarkerData>> processMarkers(
     Map<int, Position> positions,
@@ -57,10 +58,10 @@ class MarkerProcessingIsolate {
       // Fallback to main thread if isolate not ready
       return _processMarkersSync(positions, devices, selectedIds, query);
     }
-    
+
     try {
       final completer = Completer<List<MapMarkerData>>();
-      
+
       // Listen for result
       StreamSubscription? subscription;
       subscription = _resultStreamController.stream.listen((markers) {
@@ -69,7 +70,7 @@ class MarkerProcessingIsolate {
           subscription?.cancel();
         }
       });
-      
+
       // Send work to isolate
       _sendPort!.send(_MarkerProcessingRequest(
         positions: positions,
@@ -77,7 +78,7 @@ class MarkerProcessingIsolate {
         selectedIds: selectedIds,
         query: query,
       ));
-      
+
       // Timeout after 100ms and fall back to sync
       return await completer.future.timeout(
         const Duration(milliseconds: 100),
@@ -93,7 +94,7 @@ class MarkerProcessingIsolate {
       return _processMarkersSync(positions, devices, selectedIds, query);
     }
   }
-  
+
   /// Dispose the isolate
   void dispose() {
     _isolate?.kill(priority: Isolate.immediate);
@@ -102,7 +103,7 @@ class MarkerProcessingIsolate {
     _resultStreamController.close();
     _isInitialized = false;
   }
-  
+
   /// Isolate entry point
   /// Use vm entry-point pragma so this function remains reachable by the VM
   /// when tree-shaking/minification is used in AOT builds.
@@ -110,7 +111,7 @@ class MarkerProcessingIsolate {
   static void _isolateEntry(SendPort mainSendPort) {
     final isolateReceivePort = ReceivePort();
     mainSendPort.send(isolateReceivePort.sendPort);
-    
+
     isolateReceivePort.listen((message) {
       if (message is _MarkerProcessingRequest) {
         // Perform heavy marker diffing, identity and hashing inside the isolate
@@ -125,7 +126,7 @@ class MarkerProcessingIsolate {
       }
     });
   }
-  
+
   /// Synchronous marker processing (used as fallback and in isolate)
   static List<MapMarkerData> _processMarkersSync(
     Map<int, Position> positions,
@@ -136,21 +137,24 @@ class MarkerProcessingIsolate {
     final markers = <MapMarkerData>[];
     final processedIds = <int>{};
     final q = query.trim().toLowerCase();
-    
+
     // Process devices with positions
     for (final p in positions.values) {
       final deviceId = p.deviceId;
-      final name = devices.firstWhere(
-        (d) => d['id'] == deviceId,
-        orElse: () => <String, Object>{'name': ''},
-      )['name']?.toString() ?? '';
-      
+      final name = devices
+              .firstWhere(
+                (d) => d['id'] == deviceId,
+                orElse: () => <String, Object>{'name': ''},
+              )['name']
+              ?.toString() ??
+          '';
+
       if (q.isNotEmpty &&
           !name.toLowerCase().contains(q) &&
           !selectedIds.contains(deviceId)) {
         continue;
       }
-      
+
       if (_valid(p.latitude, p.longitude)) {
         markers.add(MapMarkerData(
           id: '$deviceId',
@@ -165,19 +169,19 @@ class MarkerProcessingIsolate {
         processedIds.add(deviceId);
       }
     }
-    
+
     // Process devices without positions (use stored lat/lon)
     for (final d in devices) {
       final deviceId = d['id'] as int?;
       if (deviceId == null || processedIds.contains(deviceId)) continue;
-      
+
       final name = d['name']?.toString() ?? '';
       if (q.isNotEmpty &&
           !name.toLowerCase().contains(q) &&
           !selectedIds.contains(deviceId)) {
         continue;
       }
-      
+
       final lat = _asDouble(d['latitude']);
       final lon = _asDouble(d['longitude']);
       if (_valid(lat, lon)) {
@@ -189,12 +193,13 @@ class MarkerProcessingIsolate {
         ));
       }
     }
-    
+
     // Final validation
-    markers.removeWhere((m) => !_valid(m.position.latitude, m.position.longitude));
+    markers
+        .removeWhere((m) => !_valid(m.position.latitude, m.position.longitude));
     return markers;
   }
-  
+
   static bool _valid(double? lat, double? lon) =>
       lat != null &&
       lon != null &&
@@ -202,7 +207,7 @@ class MarkerProcessingIsolate {
       lat <= 90 &&
       lon >= -180 &&
       lon <= 180;
-  
+
   static double? _asDouble(dynamic v) {
     if (v == null) return null;
     if (v is double) return v;
@@ -220,7 +225,7 @@ class _MarkerProcessingRequest {
     required this.selectedIds,
     required this.query,
   });
-  
+
   final Map<int, Position> positions;
   final List<Map<String, dynamic>> devices;
   final Set<int> selectedIds;

@@ -59,8 +59,7 @@ class GeofenceEntity {
       description: description,
       area: area,
       calendarId: calendarId,
-      attributesJson:
-          attributes != null ? _encodeAttributes(attributes) : '{}',
+      attributesJson: attributes != null ? _encodeAttributes(attributes) : '{}',
     );
   }
 

@@ -104,8 +104,7 @@ class TripEntity {
       startPositionId: startPositionId,
       endPositionId: endPositionId,
       spentFuel: spentFuel,
-      attributesJson:
-          attributes != null ? _encodeAttributes(attributes) : '{}',
+      attributesJson: attributes != null ? _encodeAttributes(attributes) : '{}',
     );
   }
 

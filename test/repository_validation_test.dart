@@ -99,12 +99,12 @@ void main() {
       cache.get(1); // Hit
       cache.get(2); // Miss
 
-  // Assert
-  final stats = cache.stats;
-  expect(stats['hits'], 2);
-  expect(stats['misses'], 1);
-  // Use numeric getter for hit ratio
-  expect(cache.hitRatio, closeTo(2 / 3, 0.01));
+      // Assert
+      final stats = cache.stats;
+      expect(stats['hits'], 2);
+      expect(stats['misses'], 1);
+      // Use numeric getter for hit ratio
+      expect(cache.hitRatio, closeTo(2 / 3, 0.01));
 
       if (kDebugMode) {
         debugPrint('✅ Cache stats: $stats');
@@ -274,8 +274,7 @@ void main() {
       expect(stopwatch.elapsedMilliseconds, lessThan(100));
 
       if (kDebugMode) {
-        debugPrint(
-            '✅ Loaded 100 devices in ${stopwatch.elapsedMilliseconds}ms '
+        debugPrint('✅ Loaded 100 devices in ${stopwatch.elapsedMilliseconds}ms '
             '(${(stopwatch.elapsedMilliseconds / 100).toStringAsFixed(2)}ms per device)');
       }
     });

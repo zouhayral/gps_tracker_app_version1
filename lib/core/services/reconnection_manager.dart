@@ -28,7 +28,8 @@ enum ConnectionStatus {
 }
 
 /// Provider for connection status (for UI consumption)
-final connectionStatusProvider = StateNotifierProvider<ConnectionStatusNotifier, ConnectionStatus>((ref) {
+final connectionStatusProvider =
+    StateNotifierProvider<ConnectionStatusNotifier, ConnectionStatus>((ref) {
   return ConnectionStatusNotifier();
 });
 
@@ -46,7 +47,7 @@ class ConnectionStatusNotifier extends StateNotifier<ConnectionStatus> {
 }
 
 /// Manages WebSocket reconnection with exponential backoff and auto-sync
-/// 
+///
 /// Features:
 /// - Monitors WebSocket connection health
 /// - Automatic reconnection with exponential backoff (5s → 10s → 20s → 40s → max 60s)
@@ -95,10 +96,10 @@ class ReconnectionManager {
 
     // Subscribe to socket messages to detect disconnects
     _socketSub = socketService.connect().listen(
-      _handleSocketMessage,
-      onError: _handleSocketError,
-      onDone: _handleSocketDisconnect,
-    );
+          _handleSocketMessage,
+          onError: _handleSocketError,
+          onDone: _handleSocketDisconnect,
+        );
   }
 
   /// Start periodic health check
@@ -113,7 +114,8 @@ class ReconnectionManager {
   void _checkConnectionHealth() {
     if (!_isConnected && !_isReconnecting) {
       if (kDebugMode) {
-        debugPrint('[ReconnectionManager] Health check failed - WebSocket disconnected');
+        debugPrint(
+            '[ReconnectionManager] Health check failed - WebSocket disconnected');
       }
       _handleSocketDisconnect();
     }
@@ -126,7 +128,8 @@ class ReconnectionManager {
     } else if (msg.type == 'error') {
       // Socket error received
       if (kDebugMode) {
-        debugPrint('[ReconnectionManager] Socket error message: ${msg.payload}');
+        debugPrint(
+            '[ReconnectionManager] Socket error message: ${msg.payload}');
       }
     }
   }
@@ -148,7 +151,8 @@ class ReconnectionManager {
     _isReconnecting = true;
 
     if (kDebugMode) {
-      debugPrint('[ReconnectionManager] WebSocket disconnected, attempting reconnect...');
+      debugPrint(
+          '[ReconnectionManager] WebSocket disconnected, attempting reconnect...');
     }
 
     // Update status
@@ -187,9 +191,12 @@ class ReconnectionManager {
     _reconnectTimer?.cancel();
 
     // Calculate backoff delay
-    final backoffSeconds = _initialBackoff.inSeconds * 
-        (_backoffMultiplier * _reconnectAttempts).clamp(1, _maxBackoff.inSeconds ~/ _initialBackoff.inSeconds);
-    final delay = Duration(seconds: backoffSeconds.clamp(_initialBackoff.inSeconds, _maxBackoff.inSeconds));
+    final backoffSeconds = _initialBackoff.inSeconds *
+        (_backoffMultiplier * _reconnectAttempts)
+            .clamp(1, _maxBackoff.inSeconds ~/ _initialBackoff.inSeconds);
+    final delay = Duration(
+        seconds: backoffSeconds.clamp(
+            _initialBackoff.inSeconds, _maxBackoff.inSeconds));
 
     if (kDebugMode) {
       debugPrint(
@@ -215,10 +222,10 @@ class ReconnectionManager {
 
       // Create new connection by resubscribing to the stream
       _socketSub = socketService.connect().listen(
-        _handleSocketMessage,
-        onError: _handleSocketError,
-        onDone: _handleSocketDisconnect,
-      );
+            _handleSocketMessage,
+            onError: _handleSocketError,
+            onDone: _handleSocketDisconnect,
+          );
 
       // Note: Connection success will be confirmed by receiving 'connected' message
     } catch (e) {
@@ -285,14 +292,14 @@ class ReconnectionManager {
 
   /// Get current connection statistics
   Map<String, dynamic> get stats => {
-    'isConnected': _isConnected,
-    'isReconnecting': _isReconnecting,
-    'reconnectAttempts': _reconnectAttempts,
-    'lastDisconnect': _lastDisconnect?.toIso8601String(),
-    'lastReconnect': _lastReconnect?.toIso8601String(),
-    'recentReconnects': _recentReconnects.length,
-    'isUnstable': _recentReconnects.length >= _unstableThreshold,
-  };
+        'isConnected': _isConnected,
+        'isReconnecting': _isReconnecting,
+        'reconnectAttempts': _reconnectAttempts,
+        'lastDisconnect': _lastDisconnect?.toIso8601String(),
+        'lastReconnect': _lastReconnect?.toIso8601String(),
+        'recentReconnects': _recentReconnects.length,
+        'isUnstable': _recentReconnects.length >= _unstableThreshold,
+      };
 
   /// Dispose resources
   void dispose() {
