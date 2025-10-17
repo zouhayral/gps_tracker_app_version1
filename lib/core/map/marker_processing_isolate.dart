@@ -72,12 +72,14 @@ class MarkerProcessingIsolate {
       });
 
       // Send work to isolate
-      _sendPort!.send(_MarkerProcessingRequest(
-        positions: positions,
-        devices: devices,
-        selectedIds: selectedIds,
-        query: query,
-      ));
+      _sendPort!.send(
+        _MarkerProcessingRequest(
+          positions: positions,
+          devices: devices,
+          selectedIds: selectedIds,
+          query: query,
+        ),
+      );
 
       // Timeout after 100ms and fall back to sync
       return await completer.future.timeout(
@@ -156,16 +158,18 @@ class MarkerProcessingIsolate {
       }
 
       if (_valid(p.latitude, p.longitude)) {
-        markers.add(MapMarkerData(
-          id: '$deviceId',
-          position: LatLng(p.latitude, p.longitude),
-          isSelected: selectedIds.contains(deviceId),
-          meta: {
-            'name': name,
-            'speed': p.speed,
-            'course': p.course,
-          },
-        ));
+        markers.add(
+          MapMarkerData(
+            id: '$deviceId',
+            position: LatLng(p.latitude, p.longitude),
+            isSelected: selectedIds.contains(deviceId),
+            meta: {
+              'name': name,
+              'speed': p.speed,
+              'course': p.course,
+            },
+          ),
+        );
         processedIds.add(deviceId);
       }
     }
@@ -185,12 +189,14 @@ class MarkerProcessingIsolate {
       final lat = _asDouble(d['latitude']);
       final lon = _asDouble(d['longitude']);
       if (_valid(lat, lon)) {
-        markers.add(MapMarkerData(
-          id: '$deviceId',
-          position: LatLng(lat!, lon!),
-          isSelected: selectedIds.contains(deviceId),
-          meta: {'name': name},
-        ));
+        markers.add(
+          MapMarkerData(
+            id: '$deviceId',
+            position: LatLng(lat!, lon!),
+            isSelected: selectedIds.contains(deviceId),
+            meta: {'name': name},
+          ),
+        );
       }
     }
 

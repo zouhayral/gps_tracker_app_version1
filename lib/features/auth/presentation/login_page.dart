@@ -25,19 +25,37 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Use Riverpod.select() to watch just the specific fields we need
+    // Watch auth state for different scenarios
+    final authState = ref.watch(authNotifierProvider);
+
     final lastEmail = ref.watch(
       authNotifierProvider.select((state) {
         // Only extract the remembered email from relevant states
         if (state is AuthInitial) return state.lastEmail;
         if (state is AuthUnauthenticated) return state.lastEmail;
+        if (state is AuthSessionExpired) return state.email;
         return null;
       }),
     );
+
     final isLoading = ref.watch(
       // Only rebuild when loading state toggles
-      authNotifierProvider.select((state) => state is AuthAuthenticating),
+      authNotifierProvider.select(
+        (state) =>
+            state is AuthAuthenticating || state is AuthValidatingSession,
+      ),
     );
+
+    final errorMessage = ref.watch(
+      authNotifierProvider.select((state) {
+        if (state is AuthUnauthenticated) return state.message;
+        if (state is AuthSessionExpired) return state.message;
+        return null;
+      }),
+    );
+
+    final isSessionExpired = authState is AuthSessionExpired;
+    final isValidatingSession = authState is AuthValidatingSession;
 
     // Autofill remembered email once without rebuilding on unrelated state changes
     if (lastEmail != null && _emailController.text.isEmpty) {
@@ -53,6 +71,93 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 40),
+
+              // Session Expiration Banner (if session expired)
+              if (isSessionExpired)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.orange.shade300,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.timer_off_outlined,
+                        color: Colors.orange.shade700,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Session Expired',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Please enter your password to continue',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.orange.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Validating Session Indicator
+              if (isValidatingSession)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.blue.shade200,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Validating your session...',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.blue.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               // Welcome text
               const Text(
                 'welcome back',
@@ -254,13 +359,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
               const SizedBox(height: 24),
 
-              // Error message - select only the message to avoid rebuilds on unrelated auth state changes
-              if (ref.watch(
-                    authNotifierProvider.select(
-                      (s) => s is AuthUnauthenticated ? s.message : null,
-                    ),
-                  ) !=
-                  null)
+              // Error message - show for authentication failures
+              if (errorMessage != null && errorMessage.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(top: 16),
                   padding: const EdgeInsets.all(12),
@@ -282,11 +382,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          ref.watch(
-                            authNotifierProvider.select(
-                              (s) => s is AuthUnauthenticated ? s.message! : '',
-                            ),
-                          ),
+                          errorMessage,
                           style: const TextStyle(
                             color: Colors.red,
                             fontSize: 13,

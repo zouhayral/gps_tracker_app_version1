@@ -62,7 +62,8 @@ class FleetMapTelemetryController extends AsyncNotifier<FMTCState> {
         repo.fetchMultipleDevices(deviceIds);
         if (kDebugMode) {
           debugPrint(
-              '[FMTC] Triggered position fetch for ${deviceIds.length} devices');
+            '[FMTC] Triggered position fetch for ${deviceIds.length} devices',
+          );
         }
       }
 

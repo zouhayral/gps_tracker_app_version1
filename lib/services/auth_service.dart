@@ -249,6 +249,47 @@ class AuthService {
     return Map<String, dynamic>.from(data);
   }
 
+  /// Validate if the current session is still active
+  /// Returns user data if session is valid, throws if session is expired/invalid
+  Future<Map<String, dynamic>> validateSession() async {
+    try {
+      // First, rehydrate the session cookie from secure storage
+      await rehydrateSessionCookie();
+
+      // Attempt to get session info from server
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/session',
+        options: Options(
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      // 401/403 means session is invalid/expired
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw Exception('Session expired or invalid');
+      }
+
+      // 200 means session is valid
+      if (response.statusCode == 200 && response.data is Map) {
+        return Map<String, dynamic>.from(response.data! as Map);
+      }
+
+      throw Exception('Unexpected response: ${response.statusCode}');
+    } on DioException catch (e) {
+      // Network errors, 401, 403, etc.
+      if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+        throw Exception('Session expired or invalid');
+      }
+      throw Exception('Session validation failed: ${_shortErr(e)}');
+    }
+  }
+
+  /// Check if we have a stored session token
+  Future<bool> hasStoredSession() async {
+    final token = await _secure.read(key: _sessionKey);
+    return token != null && token.isNotEmpty;
+  }
+
   /// Debug helper: perform raw GET /api/session returning status & type without throwing
   Future<Map<String, dynamic>> debugRawSessionGet() async {
     try {

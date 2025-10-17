@@ -32,7 +32,7 @@ class _RepositoryValidationPageState
 
   // Metrics
   Duration? _coldStartDelay;
-  double _avgFrameTime = 0.0;
+  double _avgFrameTime = 0;
   Map<String, dynamic> _cacheStats = {};
   Map<String, int> _rebuildCounts = {};
 
@@ -146,7 +146,8 @@ class _RepositoryValidationPageState
     });
 
     _addLog(
-        '  ⏱️ Loaded ${deviceIds.length} devices in ${testStopwatch.elapsedMilliseconds}ms');
+      '  ⏱️ Loaded ${deviceIds.length} devices in ${testStopwatch.elapsedMilliseconds}ms',
+    );
 
     if (testStopwatch.elapsedMilliseconds < 1000) {
       _addLog('  ✅ PASS: < 1 second (target met)');
@@ -209,7 +210,8 @@ class _RepositoryValidationPageState
     final avgPerDevice = testStopwatch.elapsedMilliseconds / deviceIds.length;
 
     _addLog(
-        '  ⏱️ Fetched ${deviceIds.length} devices in ${testStopwatch.elapsedMilliseconds}ms');
+      '  ⏱️ Fetched ${deviceIds.length} devices in ${testStopwatch.elapsedMilliseconds}ms',
+    );
     _addLog('  ⏱️ Average: ${avgPerDevice.toStringAsFixed(1)}ms per device');
 
     if (avgPerDevice < 50) {
@@ -248,7 +250,8 @@ class _RepositoryValidationPageState
 
       _addLog('  📈 Total syncs: ${stats.totalSyncs}');
       _addLog(
-          '  📈 Foreground: ${stats.foregroundSyncs} | Background: ${stats.backgroundSyncs}');
+        '  📈 Foreground: ${stats.foregroundSyncs} | Background: ${stats.backgroundSyncs}',
+      );
 
       if (stats.averageInterval != null) {
         _addLog('  ⏱️ Average interval: ${stats.averageInterval!.inSeconds}s');
@@ -263,7 +266,8 @@ class _RepositoryValidationPageState
       final motionStats = MotionAwareHelper.getStatistics();
       _addLog('  🚗 Motion tracking: ${motionStats['totalTracked']} vehicles');
       _addLog(
-          '  🚗 Moving: ${motionStats['moving']} | Idle: ${motionStats['idle']}');
+        '  🚗 Moving: ${motionStats['moving']} | Idle: ${motionStats['idle']}',
+      );
 
       // Check background sync
       try {
@@ -271,7 +275,8 @@ class _RepositoryValidationPageState
         final bgStats = backgroundSync.stats;
         _addLog('  🔄 Background syncs: ${bgStats.totalExecutions}');
         _addLog(
-            '  ✅ Success: ${bgStats.successfulExecutions} | ❌ Failed: ${bgStats.failedExecutions}');
+          '  ✅ Success: ${bgStats.successfulExecutions} | ❌ Failed: ${bgStats.failedExecutions}',
+        );
       } catch (_) {
         _addLog('  ℹ️ Background sync not enabled');
       }
@@ -410,7 +415,7 @@ class _RepositoryValidationPageState
 
           // Logs
           Expanded(
-            child: Container(
+            child: ColoredBox(
               color: Colors.black,
               child: ListView.builder(
                 padding: const EdgeInsets.all(8),

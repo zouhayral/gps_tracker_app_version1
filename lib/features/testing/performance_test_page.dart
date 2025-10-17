@@ -247,8 +247,10 @@ class _PerformanceTestPageState extends ConsumerState<PerformanceTestPage> {
               onPressed: _isTestRunning
                   ? null
                   : () {
-                      _startTest('Static Rendering',
-                          MockDeviceScenarios.staticDevices());
+                      _startTest(
+                        'Static Rendering',
+                        MockDeviceScenarios.staticDevices(),
+                      );
                     },
             ),
 

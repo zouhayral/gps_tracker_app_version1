@@ -53,12 +53,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 final parts = deviceParam.split(',');
                 preselected = {
                   for (final p in parts)
-                    if (int.tryParse(p.trim()) != null) int.parse(p.trim())
+                    if (int.tryParse(p.trim()) != null) int.parse(p.trim()),
                 };
                 if (preselected.isEmpty) preselected = null; // ignore invalid
               }
               return NoTransitionPage(
-                  child: MapPage(preselectedIds: preselected));
+                child: MapPage(preselectedIds: preselected),
+              );
             },
           ),
           GoRoute(

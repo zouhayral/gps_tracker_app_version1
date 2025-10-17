@@ -30,7 +30,7 @@ import 'package:my_app_gps/core/sync/adaptive_sync_manager.dart';
 /// ```
 class MotionAwareHelper {
   // Configuration
-  static const double movingSpeedThreshold = 2.0; // km/h
+  static const double movingSpeedThreshold = 2; // km/h
   static const Duration stateChangeDebounce = Duration(seconds: 5);
 
   // State tracking

@@ -73,7 +73,7 @@ class _PerformanceOverlayWidgetState
               (fpsVal is num) ? fpsVal.toStringAsFixed(1) : fpsVal.toString();
           final memVal = metrics['mem_mb'];
           final mem = (memVal is num)
-              ? '${(memVal.toDouble()).toStringAsFixed(0)} MB'
+              ? '${memVal.toDouble().toStringAsFixed(0)} MB'
               : 'N/A';
           final markers = metrics['marker_count']?.toString() ?? '-';
           return Material(
@@ -85,15 +85,23 @@ class _PerformanceOverlayWidgetState
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('FPS: $fps',
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text(
+                    'FPS: $fps',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Text('Mem: $mem',
-                      style: const TextStyle(color: Colors.white)),
+                  Text(
+                    'Mem: $mem',
+                    style: const TextStyle(color: Colors.white),
+                  ),
                   const SizedBox(width: 12),
-                  Text('Markers: $markers',
-                      style: const TextStyle(color: Colors.white)),
+                  Text(
+                    'Markers: $markers',
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ],
               ),
             ),

@@ -13,7 +13,8 @@ Future<void> main() async {
 
   if (kDebugMode || kProfileMode) {
     debugPrint(
-        '[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}');
+      '[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}',
+    );
   }
 
   // Initialize SharedPreferences for vehicle data cache
@@ -105,13 +106,15 @@ Future<void> main() async {
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       // Ensure performance overlay is disabled unless explicitly enabled by the user
-      child: Builder(builder: (context) {
-        WidgetsApp.showPerformanceOverlayOverride = false;
-        return const MaterialApp(
+      child: Builder(
+        builder: (context) {
+          WidgetsApp.showPerformanceOverlayOverride = false;
+          return const MaterialApp(
             home: AppRoot(),
             debugShowCheckedModeBanner: false,
-            showPerformanceOverlay: false);
-      }),
+          );
+        },
+      ),
     ),
   );
 }

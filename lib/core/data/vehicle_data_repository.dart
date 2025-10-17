@@ -6,12 +6,12 @@ import 'package:my_app_gps/core/data/vehicle_data_cache.dart';
 import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 
 /// Provider for the vehicle data repository singleton
 final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
@@ -120,7 +120,8 @@ class VehicleDataRepository {
 
       if (kDebugMode) {
         debugPrint(
-            '[VehicleRepo] Initialized with deferred WebSocket connection');
+          '[VehicleRepo] Initialized with deferred WebSocket connection',
+        );
       }
     });
   }
@@ -132,7 +133,8 @@ class VehicleDataRepository {
       await telemetryDao.deleteOlderThan(cutoff);
       if (kDebugMode) {
         debugPrint(
-            '[VehicleRepo] Telemetry retention applied. Cutoff: $cutoff');
+          '[VehicleRepo] Telemetry retention applied. Cutoff: $cutoff',
+        );
       }
     } catch (e) {
       if (kDebugMode) {
@@ -164,7 +166,8 @@ class VehicleDataRepository {
 
       if (kDebugMode) {
         debugPrint(
-            '[VehicleRepo] ✅ Pre-warmed cache with ${allCached.length} devices');
+          '[VehicleRepo] ✅ Pre-warmed cache with ${allCached.length} devices',
+        );
       }
     } catch (e) {
       if (kDebugMode) {
@@ -192,32 +195,39 @@ class VehicleDataRepository {
     // Events payload: may include positionId or deviceId and attributes (e.g., ignition)
     if (msg.type == 'events' && msg.payload != null) {
       try {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('[VehicleRepo][WS] events payload: ${msg.payload}');
+        }
         final payload = msg.payload;
-        final List<dynamic> events =
+        final events =
             payload is List ? List<dynamic>.from(payload) : <dynamic>[payload];
         for (final e in events) {
           if (e is Map<String, dynamic>) {
             final posId = e['positionId'] as int?;
             final deviceId = e['deviceId'] as int?;
-            if (kDebugMode)
+            if (kDebugMode) {
               debugPrint(
-                  '[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId');
+                '[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId',
+              );
+            }
             // If event contains a positionId, fetch that position (likely contains attributes)
             if (posId != null) {
               try {
                 final p = await positionsService.latestByPositionId(posId);
                 if (p != null) {
-                  if (kDebugMode)
+                  if (kDebugMode) {
                     debugPrint(
-                        '[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}');
+                      '[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}',
+                    );
+                  }
                   _handlePositionUpdates([p]);
                 }
               } catch (e) {
-                if (kDebugMode)
+                if (kDebugMode) {
                   debugPrint(
-                      '[VehicleRepo] Failed to fetch position for positionId=$posId: $e');
+                    '[VehicleRepo] Failed to fetch position for positionId=$posId: $e',
+                  );
+                }
               }
             }
 
@@ -249,17 +259,13 @@ class VehicleDataRepository {
                   final partial = VehicleDataSnapshot(
                     deviceId: deviceId,
                     timestamp: ts,
-                    position: null,
                     engineState: engineState,
-                    speed: null,
-                    distance: null,
                     lastUpdate: ts,
-                    batteryLevel: null,
-                    fuelLevel: null,
                   );
                   if (kDebugMode) {
                     debugPrint(
-                        '[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts');
+                      '[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts',
+                    );
                   }
                   _updateDeviceSnapshot(partial);
                 }
@@ -268,9 +274,11 @@ class VehicleDataRepository {
               // Also refresh device data if no positionId to keep other fields fresh
               if (posId == null) {
                 _lastFetchTime.remove(deviceId);
-                if (kDebugMode)
+                if (kDebugMode) {
                   debugPrint(
-                      '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)');
+                    '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)',
+                  );
+                }
                 _fetchDeviceData(deviceId);
               }
             }
@@ -285,31 +293,38 @@ class VehicleDataRepository {
     // Devices payload: updated device metadata or positionId may be present
     if (msg.type == 'devices' && msg.payload != null) {
       try {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('[VehicleRepo][WS] devices payload: ${msg.payload}');
+        }
         final payload = msg.payload;
-        final List<dynamic> devices =
+        final devices =
             payload is List ? List<dynamic>.from(payload) : <dynamic>[payload];
         for (final d in devices) {
           if (d is Map<String, dynamic>) {
             final posId = d['positionId'] as int?;
             final deviceId = d['id'] as int?;
-            if (kDebugMode)
+            if (kDebugMode) {
               debugPrint(
-                  '[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
+                '[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId',
+              );
+            }
             if (posId != null) {
               try {
                 final p = await positionsService.latestByPositionId(posId);
                 if (p != null) {
-                  if (kDebugMode)
+                  if (kDebugMode) {
                     debugPrint(
-                        '[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}');
+                      '[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}',
+                    );
+                  }
                   _handlePositionUpdates([p]);
                 }
               } catch (e) {
-                if (kDebugMode)
+                if (kDebugMode) {
                   debugPrint(
-                      '[VehicleRepo] Failed to fetch position for device update posId=$posId: $e');
+                    '[VehicleRepo] Failed to fetch position for device update posId=$posId: $e',
+                  );
+                }
               }
             }
 
@@ -331,17 +346,13 @@ class VehicleDataRepository {
                   final partial = VehicleDataSnapshot(
                     deviceId: deviceId,
                     timestamp: ts,
-                    position: null,
                     engineState: engineState,
-                    speed: null,
-                    distance: null,
                     lastUpdate: ts,
-                    batteryLevel: null,
-                    fuelLevel: null,
                   );
                   if (kDebugMode) {
                     debugPrint(
-                        '[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts');
+                      '[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts',
+                    );
                   }
                   _updateDeviceSnapshot(partial);
                 }
@@ -349,9 +360,11 @@ class VehicleDataRepository {
 
               // Refresh device data if no positionId to keep other fields fresh
               if (posId == null) {
-                if (kDebugMode)
+                if (kDebugMode) {
                   debugPrint(
-                      '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)');
+                    '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)',
+                  );
+                }
                 _lastFetchTime.remove(deviceId);
                 _fetchDeviceData(deviceId);
               }
@@ -381,7 +394,8 @@ class VehicleDataRepository {
 
     if (kDebugMode) {
       debugPrint(
-          '[VehicleRepo] Processed ${positions.length} position updates');
+        '[VehicleRepo] Processed ${positions.length} position updates',
+      );
     }
   }
 
@@ -390,15 +404,17 @@ class VehicleDataRepository {
     if (kDebugMode) {
       final existing = _notifiers[snapshot.deviceId]?.value;
       debugPrint(
-          '[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}');
-      debugPrint('[VehicleRepo]   incoming: ${snapshot}');
-      debugPrint('[VehicleRepo]   existing: ${existing}');
+        '[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}',
+      );
+      debugPrint('[VehicleRepo]   incoming: $snapshot');
+      debugPrint('[VehicleRepo]   existing: $existing');
 
       // Log engine state changes explicitly
       if (snapshot.engineState != null &&
           snapshot.engineState != existing?.engineState) {
         debugPrint(
-            '[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}');
+          '[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}',
+        );
       }
     }
 
@@ -434,9 +450,10 @@ class VehicleDataRepository {
       notifier.value = merged;
 
       if (kDebugMode) {
-        debugPrint('[VehicleRepo]   merged: ${merged}');
+        debugPrint('[VehicleRepo]   merged: $merged');
         debugPrint(
-            '[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
+          '[VehicleRepo]   ✅ Notifier updated - listeners will be notified',
+        );
       }
     } else {
       // Create new notifier if it doesn't exist
@@ -444,7 +461,8 @@ class VehicleDataRepository {
           ValueNotifier<VehicleDataSnapshot?>(snapshot);
       if (kDebugMode) {
         debugPrint(
-            '[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}');
+          '[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}',
+        );
       }
     }
   }
@@ -473,7 +491,8 @@ class VehicleDataRepository {
         DateTime.now().difference(lastFetch) < _minFetchInterval) {
       if (kDebugMode) {
         debugPrint(
-            '[VehicleRepo] Skipping fetch for device $deviceId (fetched recently)');
+          '[VehicleRepo] Skipping fetch for device $deviceId (fetched recently)',
+        );
       }
       return;
     }
@@ -507,7 +526,6 @@ class VehicleDataRepository {
       if (position == null) {
         final recent = await positionsService.fetchLatestPositions(
           deviceIds: [deviceId],
-          fallbackMinutes: 30,
         );
         if (recent.isNotEmpty) {
           position = recent.first;
@@ -542,7 +560,8 @@ class VehicleDataRepository {
           );
           if (kDebugMode) {
             debugPrint(
-                '[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState');
+              '[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState',
+            );
           }
         }
         _updateDeviceSnapshot(snapshot);
@@ -561,16 +580,17 @@ class VehicleDataRepository {
     try {
       if (kDebugMode) {
         debugPrint(
-            '[VehicleRepo] Fetching ${deviceIds.length} devices in parallel');
+          '[VehicleRepo] Fetching ${deviceIds.length} devices in parallel',
+        );
       }
 
       // Fetch all devices
       final devices = await deviceService.fetchDevices();
-      final deviceMap = {for (var d in devices) d['id']: d};
+      final deviceMap = {for (final d in devices) d['id']: d};
 
       // Fetch positions using latestForDevices (already optimized)
       final deviceList = deviceIds
-          .where((id) => deviceMap.containsKey(id))
+          .where(deviceMap.containsKey)
           .map((id) => deviceMap[id]!)
           .toList();
 
@@ -598,7 +618,8 @@ class VehicleDataRepository {
       if (!_isWebSocketConnected && _notifiers.isNotEmpty) {
         if (kDebugMode) {
           debugPrint(
-              '[VehicleRepo] WebSocket disconnected, using REST fallback');
+            '[VehicleRepo] WebSocket disconnected, using REST fallback',
+          );
         }
         final deviceIds = _notifiers.keys.toList();
         fetchMultipleDevices(deviceIds);

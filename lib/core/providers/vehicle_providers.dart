@@ -68,7 +68,8 @@ final vehicleEngineProvider =
 
   if (kDebugMode) {
     debugPrint(
-        '[VehicleProvider] Initial engine state for device $deviceId: ${notifier.value?.engineState}');
+      '[VehicleProvider] Initial engine state for device $deviceId: ${notifier.value?.engineState}',
+    );
   }
 
   // Listen to ValueNotifier changes
@@ -77,7 +78,8 @@ final vehicleEngineProvider =
     final engineState = notifier.value?.engineState;
     if (kDebugMode) {
       debugPrint(
-          '[VehicleProvider] 🔄 Engine state updated for device $deviceId: $engineState');
+        '[VehicleProvider] 🔄 Engine state updated for device $deviceId: $engineState',
+      );
     }
     streamController.add(engineState);
   }

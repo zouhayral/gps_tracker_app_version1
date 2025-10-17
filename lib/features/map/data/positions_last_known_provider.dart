@@ -68,7 +68,8 @@ class PositionsLastKnownNotifier
         if (kDebugMode) {
           // ignore: avoid_print
           print(
-              '[positionsLastKnown] DAO prefill: ${prefill.length} positions');
+            '[positionsLastKnown] DAO prefill: ${prefill.length} positions',
+          );
         }
         // Emit prefill immediately
         state = AsyncData(Map<int, Position>.unmodifiable(prefill));
@@ -86,7 +87,8 @@ class PositionsLastKnownNotifier
     if (kDebugMode) {
       // ignore: avoid_print
       print(
-          '[positionsLastKnown] ✅ REST fetch complete: ${map.length} positions');
+        '[positionsLastKnown] ✅ REST fetch complete: ${map.length} positions',
+      );
     }
 
     // After successful REST fetch, upsert into DAO and emit

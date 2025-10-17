@@ -28,10 +28,10 @@ void main(List<String> args) {
   print('');
   print('   // In your main navigation file (e.g., main.dart or routes.dart)');
   print(
-      '   import \'package:my_app_gps/features/testing/performance_test_page.dart\';');
+      "   import 'package:my_app_gps/features/testing/performance_test_page.dart';",);
   print('');
   print('   // Add route:');
-  print('   \'/performance-test\': (context) => const PerformanceTestPage(),');
+  print("   '/performance-test': (context) => const PerformanceTestPage(),");
   print('');
   print('   // OR add debug button to map page:');
   print('   if (kDebugMode)');
@@ -39,7 +39,7 @@ void main(List<String> args) {
   print('       onPressed: () => Navigator.push(');
   print('         context,');
   print(
-      '         MaterialPageRoute(builder: (_) => const PerformanceTestPage()),');
+      '         MaterialPageRoute(builder: (_) => const PerformanceTestPage()),',);
   print('       ),');
   print('       child: const Icon(Icons.speed),');
   print('     ),');
@@ -48,7 +48,7 @@ void main(List<String> args) {
   print('2. Enable rebuild tracking in main.dart:');
   print('');
   print(
-      '   import \'package:my_app_gps/core/diagnostics/rebuild_tracker.dart\';');
+      "   import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';",);
   print('');
   print('   void main() {');
   print('     if (kDebugMode) {');
@@ -116,7 +116,7 @@ void main(List<String> args) {
 
   print('🔧 Troubleshooting:');
   print(
-      '   - If FlutterMapAdapter rebuilds > 0: Check markersNotifier is passed');
+      '   - If FlutterMapAdapter rebuilds > 0: Check markersNotifier is passed',);
   print('   - If high frame times: Check DevTools Timeline');
   print('   - If high jank: Verify background service is working');
   print('');

@@ -60,8 +60,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             final filtered = q.isEmpty
                 ? devices
                 : devices
-                    .where((d) =>
-                        (d['name']?.toString().toLowerCase() ?? '').contains(q))
+                    .where(
+                      (d) => (d['name']?.toString().toLowerCase() ?? '')
+                          .contains(q),
+                    )
                     .toList();
             return Column(
               children: [

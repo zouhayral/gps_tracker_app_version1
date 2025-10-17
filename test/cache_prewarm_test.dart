@@ -21,7 +21,7 @@ void main() {
       // Pre-populate cache with test data (use recent timestamps to avoid staleness)
       final now = DateTime.now();
       final snapshots = <int, Map<String, dynamic>>{};
-      for (int i = 1; i <= 50; i++) {
+      for (var i = 1; i <= 50; i++) {
         final pos = Position(
           id: 100 + i,
           deviceId: i,
@@ -30,10 +30,10 @@ void main() {
           serverTime: now.subtract(Duration(seconds: i)),
           latitude: 45.0 + i * 0.01,
           longitude: -73.0 + i * 0.01,
-          altitude: 100.0,
-          speed: 50.0,
-          course: 180.0,
-          accuracy: 10.0,
+          altitude: 100,
+          speed: 50,
+          course: 180,
+          accuracy: 10,
           attributes: const {'ignition': true},
         );
 
@@ -46,7 +46,9 @@ void main() {
 
         snapshots[i] = snapshot.toJson();
         await prefs.setString(
-            'vehicle_cache_$i', jsonEncode(snapshot.toJson()));
+          'vehicle_cache_$i',
+          jsonEncode(snapshot.toJson()),
+        );
       }
 
       // Measure load time (happens in constructor)
@@ -55,8 +57,11 @@ void main() {
       final allSnapshots = cache.loadAll();
       stopwatch.stop();
 
-      expect(stopwatch.elapsedMilliseconds, lessThan(100),
-          reason: 'Cache pre-warming must complete in under 100ms');
+      expect(
+        stopwatch.elapsedMilliseconds,
+        lessThan(100),
+        reason: 'Cache pre-warming must complete in under 100ms',
+      );
       expect(allSnapshots.length, equals(50));
       expect(cache.get(1), isNotNull);
       expect(cache.get(50), isNotNull);
@@ -74,18 +79,18 @@ void main() {
     });
 
     test('cache entry count matches saved data', () async {
-      for (int i = 1; i <= 15; i++) {
+      for (var i = 1; i <= 15; i++) {
         final pos = Position(
           id: 200 + i,
           deviceId: i,
           deviceTime: DateTime.now(),
           serverTime: DateTime.now(),
-          latitude: 45.0,
-          longitude: -73.0,
-          altitude: 0.0,
-          speed: 0.0,
-          course: 0.0,
-          accuracy: 10.0,
+          latitude: 45,
+          longitude: -73,
+          altitude: 0,
+          speed: 0,
+          course: 0,
+          accuracy: 10,
           attributes: const {},
         );
 
@@ -97,7 +102,9 @@ void main() {
         );
 
         await prefs.setString(
-            'vehicle_cache_$i', jsonEncode(snapshot.toJson()));
+          'vehicle_cache_$i',
+          jsonEncode(snapshot.toJson()),
+        );
       }
 
       final cache = VehicleDataCache(prefs: prefs);
@@ -129,12 +136,12 @@ void main() {
         deviceId: 1,
         deviceTime: now.subtract(const Duration(minutes: 1)),
         serverTime: now.subtract(const Duration(minutes: 1)),
-        latitude: 45.0,
-        longitude: -73.0,
-        altitude: 0.0,
-        speed: 0.0,
-        course: 0.0,
-        accuracy: 10.0,
+        latitude: 45,
+        longitude: -73,
+        altitude: 0,
+        speed: 0,
+        course: 0,
+        accuracy: 10,
         attributes: const {},
       );
 
@@ -146,7 +153,9 @@ void main() {
       );
 
       await prefs.setString(
-          'vehicle_cache_1', jsonEncode(freshSnapshot.toJson()));
+        'vehicle_cache_1',
+        jsonEncode(freshSnapshot.toJson()),
+      );
 
       // Stale position (>30 minutes old)
       final stalePos = Position(
@@ -154,12 +163,12 @@ void main() {
         deviceId: 2,
         deviceTime: now.subtract(const Duration(hours: 2)),
         serverTime: now.subtract(const Duration(hours: 2)),
-        latitude: 46.0,
-        longitude: -74.0,
-        altitude: 0.0,
-        speed: 0.0,
-        course: 0.0,
-        accuracy: 10.0,
+        latitude: 46,
+        longitude: -74,
+        altitude: 0,
+        speed: 0,
+        course: 0,
+        accuracy: 10,
         attributes: const {},
       );
 
@@ -171,7 +180,9 @@ void main() {
       );
 
       await prefs.setString(
-          'vehicle_cache_2', jsonEncode(staleSnapshot.toJson()));
+        'vehicle_cache_2',
+        jsonEncode(staleSnapshot.toJson()),
+      );
 
       final cache = VehicleDataCache(prefs: prefs);
 
@@ -186,7 +197,7 @@ void main() {
     });
 
     test('large dataset pre-warming performance (100 devices)', () async {
-      for (int i = 1; i <= 100; i++) {
+      for (var i = 1; i <= 100; i++) {
         final pos = Position(
           id: 400 + i,
           deviceId: i,
@@ -194,10 +205,10 @@ void main() {
           serverTime: DateTime.now().subtract(Duration(seconds: i)),
           latitude: 45.0 + i * 0.001,
           longitude: -73.0 + i * 0.001,
-          altitude: 100.0,
-          speed: 40.0,
-          course: 180.0,
-          accuracy: 10.0,
+          altitude: 100,
+          speed: 40,
+          course: 180,
+          accuracy: 10,
           attributes: const {'ignition': true},
         );
 
@@ -209,7 +220,9 @@ void main() {
         );
 
         await prefs.setString(
-            'vehicle_cache_$i', jsonEncode(snapshot.toJson()));
+          'vehicle_cache_$i',
+          jsonEncode(snapshot.toJson()),
+        );
       }
 
       final stopwatch = Stopwatch()..start();
@@ -218,8 +231,11 @@ void main() {
       stopwatch.stop();
 
       // Even with 100 devices, should load quickly
-      expect(stopwatch.elapsedMilliseconds, lessThan(200),
-          reason: '100 device cache should pre-warm in under 200ms');
+      expect(
+        stopwatch.elapsedMilliseconds,
+        lessThan(200),
+        reason: '100 device cache should pre-warm in under 200ms',
+      );
 
       expect(allSnapshots.length, equals(100));
       expect(cache.get(1), isNotNull);
@@ -228,18 +244,18 @@ void main() {
     });
 
     test('cache hit ratio tracking after pre-warm', () async {
-      for (int i = 1; i <= 10; i++) {
+      for (var i = 1; i <= 10; i++) {
         final pos = Position(
           id: 500 + i,
           deviceId: i,
           deviceTime: DateTime.now(),
           serverTime: DateTime.now(),
-          latitude: 45.0,
-          longitude: -73.0,
-          altitude: 0.0,
-          speed: 0.0,
-          course: 0.0,
-          accuracy: 10.0,
+          latitude: 45,
+          longitude: -73,
+          altitude: 0,
+          speed: 0,
+          course: 0,
+          accuracy: 10,
           attributes: const {},
         );
 
@@ -251,14 +267,16 @@ void main() {
         );
 
         await prefs.setString(
-            'vehicle_cache_$i', jsonEncode(snapshot.toJson()));
+          'vehicle_cache_$i',
+          jsonEncode(snapshot.toJson()),
+        );
       }
 
       final cache = VehicleDataCache(prefs: prefs);
       cache.resetMetrics();
 
       // All should hit
-      for (int i = 1; i <= 10; i++) {
+      for (var i = 1; i <= 10; i++) {
         expect(cache.get(i), isNotNull);
       }
 

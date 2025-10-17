@@ -1,11 +1,11 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_provider.dart';
 
 class TelemetryHistoryPage extends ConsumerWidget {
-  const TelemetryHistoryPage({super.key, required this.deviceId});
+  const TelemetryHistoryPage({required this.deviceId, super.key});
 
   final int deviceId;
 
@@ -19,7 +19,7 @@ class TelemetryHistoryPage extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, st) => Center(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16),
             child: Text('Failed to load history: $e'),
           ),
         ),
@@ -39,10 +39,10 @@ class TelemetryHistoryPage extends ConsumerWidget {
               final x = (r.timestampMs.toDouble() - firstTs) /
                   1000.0; // seconds since start
               if (r.battery != null) {
-                batterySpots.add(FlSpot(x, r.battery!.toDouble()));
+                batterySpots.add(FlSpot(x, r.battery!));
               }
               if (r.signal != null) {
-                signalSpots.add(FlSpot(x, r.signal!.toDouble()));
+                signalSpots.add(FlSpot(x, r.signal!));
               }
             }
           }
@@ -50,7 +50,7 @@ class TelemetryHistoryPage extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _SectionTitle(title: 'Battery (%)'),
+              const _SectionTitle(title: 'Battery (%)'),
               SizedBox(
                 height: 220,
                 child: batterySpots.isEmpty
@@ -66,7 +66,7 @@ class TelemetryHistoryPage extends ConsumerWidget {
                       ),
               ),
               const SizedBox(height: 24),
-              _SectionTitle(title: 'Signal strength'),
+              const _SectionTitle(title: 'Signal strength'),
               SizedBox(
                 height: 220,
                 child: signalSpots.isEmpty
@@ -101,20 +101,18 @@ class TelemetryHistoryPage extends ConsumerWidget {
       minY: yMin,
       maxY: yMax,
       borderData: FlBorderData(show: false),
-      gridData: const FlGridData(show: true, drawVerticalLine: false),
+      gridData: const FlGridData(drawVerticalLine: false),
       titlesData: const FlTitlesData(
-        bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        bottomTitles: AxisTitles(),
+        rightTitles: AxisTitles(),
+        topTitles: AxisTitles(),
       ),
       lineBarsData: [
         LineChartBarData(
           spots: spots,
-          isCurved: false,
           color: color,
-          barWidth: 2,
           dotData: const FlDotData(show: false),
-        )
+        ),
       ],
     );
   }
@@ -156,12 +154,13 @@ class _StatsSummary extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [Text('Samples: ${records.length}')]..addAll([
-          if (avgBattery != null)
-            Text('Avg battery: ${avgBattery.toStringAsFixed(1)}%'),
-          if (avgSignal != null)
-            Text('Avg signal: ${avgSignal.toStringAsFixed(1)}'),
-        ]),
+      children: [
+        Text('Samples: ${records.length}'),
+        if (avgBattery != null)
+          Text('Avg battery: ${avgBattery.toStringAsFixed(1)}%'),
+        if (avgSignal != null)
+          Text('Avg signal: ${avgSignal.toStringAsFixed(1)}'),
+      ],
     );
   }
 }

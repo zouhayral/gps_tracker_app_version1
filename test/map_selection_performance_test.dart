@@ -50,8 +50,10 @@ void main() {
       const targetResponseTime = Duration(milliseconds: 100);
 
       // Immediate moves should not wait for throttle duration
-      expect(targetResponseTime.inMilliseconds,
-          lessThan(throttleDuration.inMilliseconds));
+      expect(
+        targetResponseTime.inMilliseconds,
+        lessThan(throttleDuration.inMilliseconds),
+      );
     });
   });
 

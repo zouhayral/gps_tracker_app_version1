@@ -80,7 +80,9 @@ class EventsDaoObjectBox implements EventsDaoBase {
 
   @override
   Future<List<EventEntity>> getByDeviceAndType(
-      int deviceId, String eventType) async {
+    int deviceId,
+    String eventType,
+  ) async {
     final query = _box
         .query(
           EventEntity_.deviceId.equals(deviceId) &

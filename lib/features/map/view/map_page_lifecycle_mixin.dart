@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/vehicle_data_repository.dart';
-import '../../../services/websocket_manager_enhanced.dart';
+import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
 
 /// Mixin that handles lifecycle events for MapPage to ensure:
 /// 1. WebSocket reconnection when app resumes
@@ -40,10 +40,8 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
     switch (state) {
       case AppLifecycleState.resumed:
         _onAppResumed();
-        break;
       case AppLifecycleState.paused:
         _onAppPaused();
-        break;
       default:
         break;
     }
@@ -53,7 +51,8 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
   void _onAppResumed() {
     if (kDebugMode) {
       debugPrint(
-          '[LIFECYCLE] Resumed → reconnecting WebSocket and refreshing data');
+        '[LIFECYCLE] Resumed → reconnecting WebSocket and refreshing data',
+      );
     }
 
     // 1. Force WebSocket reconnection
@@ -102,7 +101,8 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
 
         if (kDebugMode) {
           debugPrint(
-              '[LIFECYCLE] First open → fetching fresh data from server');
+            '[LIFECYCLE] First open → fetching fresh data from server',
+          );
         }
 
         // Force WebSocket health check
@@ -152,10 +152,12 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
         if (kDebugMode) {
           if (wsState.status != WebSocketStatus.connected) {
             debugPrint(
-                '[FALLBACK] WebSocket not connected → using REST refresh');
+              '[FALLBACK] WebSocket not connected → using REST refresh',
+            );
           } else {
             debugPrint(
-                '[FALLBACK] WebSocket silent for 20s → using REST refresh');
+              '[FALLBACK] WebSocket silent for 20s → using REST refresh',
+            );
           }
         }
 
@@ -173,7 +175,8 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
 
     if (kDebugMode) {
       debugPrint(
-          '[FALLBACK] Started periodic refresh every ${refreshInterval.inSeconds}s');
+        '[FALLBACK] Started periodic refresh every ${refreshInterval.inSeconds}s',
+      );
     }
   }
 

@@ -9,7 +9,8 @@ final positionsLiveProvider =
     StreamProvider.autoDispose<Map<int, Position>>((ref) {
   final wsManager = ref.read(webSocketProvider.notifier);
   ref.watch(
-      devicesNotifierProvider); // Ensure devices are loaded for downstream consumers
+    devicesNotifierProvider,
+  ); // Ensure devices are loaded for downstream consumers
 
   // Listen to the unified WebSocket stream and map incoming position updates
   return wsManager.stream

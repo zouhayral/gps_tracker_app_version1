@@ -1,19 +1,24 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_provider.dart';
-import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 
 class _FakeDao implements TelemetryDaoBase {
   List<TelemetryRecord> data = [];
   @override
   Future<List<TelemetryRecord>> byDeviceInRange(
-      int deviceId, DateTime start, DateTime end) async {
+    int deviceId,
+    DateTime start,
+    DateTime end,
+  ) async {
     return data
-        .where((r) =>
-            r.deviceId == deviceId &&
-            r.timestampMs >= start.toUtc().millisecondsSinceEpoch &&
-            r.timestampMs <= end.toUtc().millisecondsSinceEpoch)
+        .where(
+          (r) =>
+              r.deviceId == deviceId &&
+              r.timestampMs >= start.toUtc().millisecondsSinceEpoch &&
+              r.timestampMs <= end.toUtc().millisecondsSinceEpoch,
+        )
         .toList()
       ..sort((a, b) => a.timestampMs.compareTo(b.timestampMs));
   }
@@ -38,28 +43,39 @@ void main() {
   test('telemetryHistoryProvider returns last 24h ordered', () async {
     final dao = _FakeDao();
     final now = DateTime.now().toUtc();
-    final deviceId = 1;
+    const deviceId = 1;
     // 25h ago (should be filtered out)
-    dao.data.add(TelemetryRecord(
+    dao.data.add(
+      TelemetryRecord(
         deviceId: deviceId,
         timestampMs:
             now.subtract(const Duration(hours: 25)).millisecondsSinceEpoch,
-        battery: 50));
+        battery: 50,
+      ),
+    );
     // 23h ago
-    dao.data.add(TelemetryRecord(
+    dao.data.add(
+      TelemetryRecord(
         deviceId: deviceId,
         timestampMs:
             now.subtract(const Duration(hours: 23)).millisecondsSinceEpoch,
-        battery: 70));
+        battery: 70,
+      ),
+    );
     // now
-    dao.data.add(TelemetryRecord(
+    dao.data.add(
+      TelemetryRecord(
         deviceId: deviceId,
         timestampMs: now.millisecondsSinceEpoch,
-        battery: 80));
+        battery: 80,
+      ),
+    );
 
-    final container = ProviderContainer(overrides: [
-      telemetryDaoProvider.overrideWithValue(dao),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        telemetryDaoProvider.overrideWithValue(dao),
+      ],
+    );
 
     final result =
         await container.read(telemetryHistoryProvider(deviceId).future);

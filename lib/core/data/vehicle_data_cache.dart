@@ -38,8 +38,8 @@ class VehicleDataCache {
   void _loadFromDisk() {
     try {
       final keys = _prefs.getKeys().where((k) => k.startsWith(_keyPrefix));
-      int loaded = 0;
-      int skipped = 0;
+      var loaded = 0;
+      var skipped = 0;
 
       for (final key in keys) {
         final deviceId = int.tryParse(key.replaceFirst(_keyPrefix, ''));
@@ -71,7 +71,8 @@ class VehicleDataCache {
 
       if (kDebugMode) {
         debugPrint(
-            '[VehicleCache] Loaded $loaded snapshots from disk, skipped $skipped stale entries');
+          '[VehicleCache] Loaded $loaded snapshots from disk, skipped $skipped stale entries',
+        );
       }
     } catch (e) {
       if (kDebugMode) {
@@ -99,7 +100,8 @@ class VehicleDataCache {
       _hits++;
       if (kDebugMode) {
         debugPrint(
-            '[VehicleCache] HIT device=$deviceId (hits=$_hits misses=$_misses)');
+          '[VehicleCache] HIT device=$deviceId (hits=$_hits misses=$_misses)',
+        );
       }
       return snapshot;
     }
@@ -107,7 +109,8 @@ class VehicleDataCache {
     _misses++;
     if (kDebugMode) {
       debugPrint(
-          '[VehicleCache] MISS device=$deviceId (hits=$_hits misses=$_misses)');
+        '[VehicleCache] MISS device=$deviceId (hits=$_hits misses=$_misses)',
+      );
     }
     return null;
   }
@@ -124,7 +127,8 @@ class VehicleDataCache {
     } catch (e) {
       if (kDebugMode) {
         debugPrint(
-            '[VehicleCache] Put error for device ${snapshot.deviceId}: $e');
+          '[VehicleCache] Put error for device ${snapshot.deviceId}: $e',
+        );
       }
     }
   }
@@ -193,7 +197,7 @@ class VehicleDataCache {
         'hot_cache_size': _hotCache.length,
         'hits': _hits,
         'misses': _misses,
-        'hit_ratio': (hitRatio * 100).toStringAsFixed(1) + '%',
+        'hit_ratio': '${(hitRatio * 100).toStringAsFixed(1)}%',
       };
 
   /// Reset metrics

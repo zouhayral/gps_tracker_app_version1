@@ -5,8 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:my_app_gps/core/diagnostics/frame_metrics_logger.dart';
 import 'package:my_app_gps/core/diagnostics/diagnostics_config.dart';
+import 'package:my_app_gps/core/diagnostics/frame_metrics_logger.dart';
 
 /// Provider to toggle overlay visibility/logging
 final performanceOverlayEnabledProvider = StateProvider<bool>((ref) => true);
@@ -32,9 +32,10 @@ class PerformanceMetricsService {
   int Function()? _markerCountSupplier;
 
   /// Start sampling metrics. Updates latestMetrics frequently and writes CSV every 5s
-  void start(
-      {Duration sampleInterval = const Duration(seconds: 1),
-      Duration csvInterval = const Duration(seconds: 5)}) {
+  void start({
+    Duration sampleInterval = const Duration(seconds: 1),
+    Duration csvInterval = const Duration(seconds: 5),
+  }) {
     if (_isRunning) return;
     _isRunning = true;
 
@@ -64,7 +65,8 @@ class PerformanceMetricsService {
           } else {
             if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
               debugPrint(
-                  '[PerfMetrics] Skipping CSV export on mobile (sandboxed FS)');
+                '[PerfMetrics] Skipping CSV export on mobile (sandboxed FS)',
+              );
             }
           }
         } catch (e) {
@@ -141,9 +143,9 @@ class PerformanceMetricsService {
       final file = await _openLogFile();
       final exists = await file.exists();
       if (!exists) {
-        await file.writeAsString(_csvHeader() + '\n');
+        await file.writeAsString('${_csvHeader()}\n');
       }
-      await file.writeAsString(csvLine + '\n', mode: FileMode.append);
+      await file.writeAsString('$csvLine\n', mode: FileMode.append);
       if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
         debugPrint('[PerfMetrics] CSV row appended');
       }
@@ -185,7 +187,7 @@ class PerformanceMetricsService {
     Directory dir;
     try {
       // Prefer application documents directory if available
-      dir = Directory('${Directory.current.path}');
+      dir = Directory(Directory.current.path);
     } catch (_) {
       dir = Directory.systemTemp;
     }

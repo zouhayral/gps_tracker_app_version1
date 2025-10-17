@@ -10,9 +10,7 @@ final backgroundSyncServiceProvider = Provider<BackgroundSyncService>((ref) {
 
   final service = BackgroundSyncService(repository: repository);
 
-  ref.onDispose(() {
-    service.dispose();
-  });
+  ref.onDispose(service.dispose);
 
   return service;
 });
@@ -211,7 +209,7 @@ class BackgroundSyncService {
       return false;
     }
 
-    return await _executeSync();
+    return _executeSync();
   }
 
   // ---------- Internal Methods ----------

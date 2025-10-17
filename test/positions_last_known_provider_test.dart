@@ -25,7 +25,8 @@ class _FakeService extends PositionsService {
   final Map<int, Position> map;
   @override
   Future<Map<int, Position>> latestForDevices(
-      List<Map<String, dynamic>> _) async {
+    List<Map<String, dynamic>> _,
+  ) async {
     // Simulate network latency so that DAO prefill is emitted first in tests.
     await Future<void>.delayed(const Duration(milliseconds: 50));
     return map;
@@ -51,11 +52,13 @@ void main() {
       ),
     };
     final fakeDevices = DevicesNotifierFake();
-    final container = ProviderContainer(overrides: [
-      positionsDaoProvider.overrideWith((ref) async => _FakeDao()),
-      devicesNotifierProvider.overrideWith((ref) => fakeDevices),
-      positionsServiceProvider.overrideWith((ref) => _FakeService(restMap)),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        positionsDaoProvider.overrideWith((ref) async => _FakeDao()),
+        devicesNotifierProvider.overrideWith((ref) => fakeDevices),
+        positionsServiceProvider.overrideWith((ref) => _FakeService(restMap)),
+      ],
+    );
     addTearDown(container.dispose);
     // Prime devices
     fakeDevices.setDevices([device]);
@@ -92,11 +95,13 @@ void main() {
       ),
     };
     final fakeDevices = DevicesNotifierFake();
-    final container = ProviderContainer(overrides: [
-      positionsDaoProvider.overrideWith((ref) async => dao),
-      devicesNotifierProvider.overrideWith((ref) => fakeDevices),
-      positionsServiceProvider.overrideWith((ref) => _FakeService(restMap)),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        positionsDaoProvider.overrideWith((ref) async => dao),
+        devicesNotifierProvider.overrideWith((ref) => fakeDevices),
+        positionsServiceProvider.overrideWith((ref) => _FakeService(restMap)),
+      ],
+    );
     addTearDown(container.dispose);
     fakeDevices.setDevices([device]);
 

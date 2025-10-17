@@ -21,27 +21,27 @@ class TelemetryDashboard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Engine & Motion Section
-          _SectionHeader('Engine & Motion'),
+          const _SectionHeader('Engine & Motion'),
           _EngineMotionCard(deviceId: deviceId),
           const SizedBox(height: 16),
 
           // Power & Battery Section
-          _SectionHeader('Power & Battery'),
+          const _SectionHeader('Power & Battery'),
           _PowerBatteryCard(deviceId: deviceId),
           const SizedBox(height: 16),
 
           // GPS & Connectivity Section
-          _SectionHeader('GPS & Connectivity'),
+          const _SectionHeader('GPS & Connectivity'),
           _GpsConnectivityCard(deviceId: deviceId),
           const SizedBox(height: 16),
 
           // Usage & Distance Section
-          _SectionHeader('Usage & Distance'),
+          const _SectionHeader('Usage & Distance'),
           _UsageCard(deviceId: deviceId),
           const SizedBox(height: 16),
 
           // Status & Alerts Section
-          _SectionHeader('Status & Alerts'),
+          const _SectionHeader('Status & Alerts'),
           _StatusCard(deviceId: deviceId),
         ],
       ),
@@ -80,7 +80,7 @@ class _EngineMotionCard extends ConsumerWidget {
     final speed = ref.watchSpeed(deviceId);
 
     final isRunning = engine == EngineState.on;
-    final isMoving = motion == true && (speed ?? 0) > 0;
+    final isMoving = motion ?? false && (speed ?? 0) > 0;
 
     return Card(
       child: Padding(
@@ -97,12 +97,12 @@ class _EngineMotionCard extends ConsumerWidget {
             _MetricRow(
               icon: Icons.directions_walk,
               label: 'Motion Sensor',
-              value: motion == true
+              value: motion ?? false
                   ? 'DETECTED'
                   : motion == false
                       ? 'IDLE'
                       : '--',
-              color: motion == true ? Colors.blue : Colors.grey,
+              color: motion ?? false ? Colors.blue : Colors.grey,
             ),
             const Divider(),
             _MetricRow(
@@ -302,7 +302,7 @@ class _StatusCard extends ConsumerWidget {
     final alarm = ref.watchAlarm(deviceId);
     final lastUpdate = ref.watchLastUpdate(deviceId);
 
-    final hasAlert = blocked == true || alarm != null;
+    final hasAlert = blocked ?? false || alarm != null;
 
     return Card(
       color: hasAlert ? Colors.orange.shade50 : null,
@@ -313,12 +313,12 @@ class _StatusCard extends ConsumerWidget {
             _MetricRow(
               icon: Icons.block,
               label: 'Blocked',
-              value: blocked == true
+              value: blocked ?? false
                   ? 'YES'
                   : blocked == false
                       ? 'NO'
                       : '--',
-              color: blocked == true ? Colors.red : Colors.green,
+              color: blocked ?? false ? Colors.red : Colors.green,
             ),
             if (alarm != null) ...[
               const Divider(),

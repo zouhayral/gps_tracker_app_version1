@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app_gps/services/auth_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
-import 'package:my_app_gps/services/auth_service.dart';
 
 // Fake TraccarSocketService that implements only the bits our tests need.
 class FakeTraccarSocketService implements TraccarSocketService {
@@ -33,10 +33,12 @@ class FakeTraccarSocketService implements TraccarSocketService {
 
 void main() {
   test('lastEventAt updates when messages arrive and isSilent works', () async {
-    final container = ProviderContainer(overrides: [
-      traccarSocketServiceProvider
-          .overrideWith((ref) => FakeTraccarSocketService()),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        traccarSocketServiceProvider
+            .overrideWith((ref) => FakeTraccarSocketService()),
+      ],
+    );
 
     addTearDown(container.dispose);
 
@@ -65,17 +67,20 @@ void main() {
 
     // isSilent should be false for a small threshold (1s)
     expect(
-        container
-            .read(webSocketManagerProvider)
-            .isSilent(const Duration(seconds: 1)),
-        isFalse);
+      container
+          .read(webSocketManagerProvider)
+          .isSilent(const Duration(seconds: 1)),
+      isFalse,
+    );
   });
 
   test('reconnection scheduling increases retry count (basic)', () async {
     final fake = FakeTraccarSocketService();
-    final container = ProviderContainer(overrides: [
-      traccarSocketServiceProvider.overrideWith((ref) => fake),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        traccarSocketServiceProvider.overrideWith((ref) => fake),
+      ],
+    );
     addTearDown(container.dispose);
 
     final manager = container.read(webSocketManagerProvider.notifier);
@@ -88,7 +93,9 @@ void main() {
 
     final state = container.read(webSocketManagerProvider);
     // Manager should be in retrying state or have incremented retry count
-    expect(state.status == WebSocketStatus.retrying || state.retryCount >= 1,
-        isTrue);
+    expect(
+      state.status == WebSocketStatus.retrying || state.retryCount >= 1,
+      isTrue,
+    );
   });
 }

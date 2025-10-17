@@ -32,9 +32,13 @@ class _BottomNavShellState extends State<BottomNavShell> {
             NavigationDestination(icon: Icon(Icons.map), label: 'Map'),
             NavigationDestination(icon: Icon(Icons.alt_route), label: 'Trips'),
             NavigationDestination(
-                icon: Icon(Icons.notifications), label: 'Alerts'),
+              icon: Icon(Icons.notifications),
+              label: 'Alerts',
+            ),
             NavigationDestination(
-                icon: Icon(Icons.settings), label: 'Settings'),
+              icon: Icon(Icons.settings),
+              label: 'Settings',
+            ),
           ],
           onDestinationSelected: (i) {
             switch (i) {

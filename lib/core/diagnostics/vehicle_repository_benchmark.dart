@@ -43,7 +43,8 @@ class VehicleRepositoryBenchmark {
 
     if (kDebugMode) {
       debugPrint(
-          '[Benchmark] Position update latency for device $deviceId: ${latency}ms');
+        '[Benchmark] Position update latency for device $deviceId: ${latency}ms',
+      );
     }
 
     return latency;
@@ -61,7 +62,8 @@ class VehicleRepositoryBenchmark {
 
     if (kDebugMode) {
       debugPrint(
-          '[Benchmark] Engine state extraction for device $deviceId: ${latency}μs');
+        '[Benchmark] Engine state extraction for device $deviceId: $latencyμs',
+      );
     }
 
     return latency;
@@ -81,7 +83,8 @@ class VehicleRepositoryBenchmark {
   Future<void> benchmarkParallelFetch(List<int> deviceIds) async {
     if (kDebugMode) {
       debugPrint(
-          '[Benchmark] Testing parallel fetch for ${deviceIds.length} devices');
+        '[Benchmark] Testing parallel fetch for ${deviceIds.length} devices',
+      );
     }
 
     final stopwatch = Stopwatch()..start();
@@ -93,16 +96,20 @@ class VehicleRepositoryBenchmark {
     if (kDebugMode) {
       debugPrint('[Benchmark] Parallel fetch completed in ${totalTime}ms');
       debugPrint(
-          '[Benchmark] Average time per device: ${totalTime / deviceIds.length}ms');
+        '[Benchmark] Average time per device: ${totalTime / deviceIds.length}ms',
+      );
     }
   }
 
   /// Test cache hit ratio with repeated accesses
-  Future<void> benchmarkCacheEfficiency(List<int> deviceIds,
-      {int iterations = 10}) async {
+  Future<void> benchmarkCacheEfficiency(
+    List<int> deviceIds, {
+    int iterations = 10,
+  }) async {
     if (kDebugMode) {
       debugPrint(
-          '[Benchmark] Testing cache efficiency with $iterations iterations');
+        '[Benchmark] Testing cache efficiency with $iterations iterations',
+      );
     }
 
     for (var i = 0; i < iterations; i++) {
@@ -192,14 +199,15 @@ class VehicleRepositoryBenchmark {
   void printReport() {
     final report = generateReport();
 
-    debugPrint('\n' + '=' * 60);
+    debugPrint('\n${'=' * 60}');
     debugPrint('VEHICLE REPOSITORY BENCHMARK REPORT');
     debugPrint('=' * 60);
 
     debugPrint('\n📊 Position Update Latency:');
     final posLatency = report['position_latency'] as Map;
     debugPrint(
-        '  Average: ${posLatency['average_ms']}ms (target: <${posLatency['target_ms']}ms)');
+      '  Average: ${posLatency['average_ms']}ms (target: <${posLatency['target_ms']}ms)',
+    );
     debugPrint('  P95: ${posLatency['p95_ms']}ms');
     debugPrint('  Max: ${posLatency['max_ms']}ms');
     debugPrint('  Status: ${posLatency['pass'] == true ? '✅ PASS' : '❌ FAIL'}');
@@ -213,22 +221,25 @@ class VehicleRepositoryBenchmark {
     final apiCalls = report['api_calls'] as Map;
     debugPrint('  Total: ${apiCalls['total']}');
     debugPrint(
-        '  Estimated Reduction: ${apiCalls['estimated_reduction_pct']}%');
+      '  Estimated Reduction: ${apiCalls['estimated_reduction_pct']}%',
+    );
     final apiReduction = apiCalls['estimated_reduction_pct'] as double;
     debugPrint('  Status: ${apiReduction >= 70 ? '✅ PASS' : '⚠️  CHECK'}');
 
     debugPrint('\n💾 Cache Performance:');
     final cache = report['cache'] as Map;
     debugPrint(
-        '  Hit Ratio: ${cache['hit_ratio_pct']}% (target: >${cache['target_hit_ratio_pct']}%)');
+      '  Hit Ratio: ${cache['hit_ratio_pct']}% (target: >${cache['target_hit_ratio_pct']}%)',
+    );
     debugPrint('  Hits: ${cache['hits']}');
     debugPrint('  Misses: ${cache['misses']}');
     debugPrint('  Hot Cache Size: ${cache['hot_cache_size']}');
     debugPrint('  Status: ${cache['pass'] == true ? '✅ PASS' : '❌ FAIL'}');
 
-    debugPrint('\n' + '=' * 60);
+    debugPrint('\n${'=' * 60}');
     debugPrint(
-        'Overall: ${_allTestsPass(report) ? '✅ ALL TESTS PASSED' : '⚠️  SOME TESTS FAILED'}');
+      'Overall: ${_allTestsPass(report) ? '✅ ALL TESTS PASSED' : '⚠️  SOME TESTS FAILED'}',
+    );
     debugPrint('=' * 60 + '\n');
   }
 
@@ -237,10 +248,10 @@ class VehicleRepositoryBenchmark {
     // Without optimization: ~1 API call per device per 10s
     // With optimization: Cache + memoization reduces to ~1 per 5s + WebSocket (0 API)
     // Assuming 80% cache hit ratio and WebSocket active 90% of time
-    final cacheReduction = 0.8; // 80% cache hits
-    final wsUptime = 0.9; // 90% WebSocket uptime
+    const cacheReduction = 0.8; // 80% cache hits
+    const wsUptime = 0.9; // 90% WebSocket uptime
 
-    final totalReduction =
+    const totalReduction =
         (cacheReduction + wsUptime * (1 - cacheReduction)) * 100;
     return totalReduction.clamp(0, 100);
   }
@@ -293,8 +304,9 @@ class VehicleRepositoryBenchmarkRunner {
 
     // Test 4: Cache efficiency
     debugPrint('[Benchmark] Test 4: Cache efficiency');
-    await benchmark.benchmarkCacheEfficiency(deviceIds.take(10).toList(),
-        iterations: 10);
+    await benchmark.benchmarkCacheEfficiency(
+      deviceIds.take(10).toList(),
+    );
 
     // Generate and print report
     await Future<void>.delayed(const Duration(milliseconds: 500));

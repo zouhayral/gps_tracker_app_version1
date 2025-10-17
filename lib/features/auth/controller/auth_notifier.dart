@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:my_app_gps/core/network/forced_cache_interceptor.dart';
 import 'package:my_app_gps/core/network/http_cache_interceptor.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
@@ -20,7 +21,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   final AuthService _service;
   final Ref _ref;
+  static const _secure = FlutterSecureStorage();
   static const _lastEmailKey = 'last_email';
+  static const _storedEmailKey = 'stored_email';
+  // REMOVED: _storedPasswordKey - we no longer store passwords!
 
   /// Clear all cached data when switching accounts
   Future<void> _clearAllCaches() async {
@@ -38,13 +42,55 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // since device IDs differ between accounts
   }
 
+  /// Bootstrap: Auto-login with stored session token if available
   Future<void> _bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
     final lastEmail = prefs.getString(_lastEmailKey);
-    state = AuthInitial(lastEmail: lastEmail);
-    // Don't automatically rehydrate session - require explicit login
-    // This prevents logging in as the wrong user after app restart
-    // Users need to login again for security and to ensure correct user context
+
+    // Try to retrieve stored email (for display purposes)
+    final storedEmail = await _secure.read(key: _storedEmailKey);
+
+    // Check if we have a stored session token
+    final hasSession = await _service.hasStoredSession();
+
+    // If we have a stored session token, attempt to validate it
+    if (hasSession && storedEmail != null && storedEmail.isNotEmpty) {
+      state = AuthValidatingSession(storedEmail);
+
+      try {
+        // Validate the session token with the server
+        final user = await _service.validateSession();
+
+        state = AuthAuthenticated(
+          email: storedEmail,
+          userId: user['id'] as int,
+          userJson: user,
+        );
+
+        // Fetch devices immediately after successful session validation
+        await _ref.read(devicesNotifierProvider.notifier).refresh();
+        return;
+      } catch (e) {
+        // Session validation failed - token is expired or invalid
+        await _clearStoredCredentials();
+        state = AuthSessionExpired(
+          email: storedEmail,
+          message: 'Your session has expired. Please login again.',
+        );
+        return;
+      }
+    }
+
+    // No stored session - show login screen with last email
+    state = AuthInitial(lastEmail: lastEmail ?? storedEmail);
+  }
+
+  /// Clear stored credentials from secure storage
+  /// Note: We only store email now, not passwords. Session token is managed by AuthService.
+  Future<void> _clearStoredCredentials() async {
+    await _secure.delete(key: _storedEmailKey);
+    // Clear the session token as well
+    await _service.clearStoredSession();
   }
 
   Future<void> login(String email, String password) async {
@@ -56,9 +102,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // CRITICAL: Clear all caches to prevent serving old user's data
       await _clearAllCaches();
 
+      // Login and get user data - session token is automatically stored by AuthService
       final user = await _service.login(email, password);
+
+      // Store only the email securely (NOT the password!)
+      await _secure.write(key: _storedEmailKey, value: email);
+
+      // Store last email in SharedPreferences (for UI convenience)
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_lastEmailKey, email);
+
       state = AuthAuthenticated(
         email: email,
         userId: user['id'] as int,
@@ -68,6 +121,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Fetch devices immediately - caches are already cleared
       await _ref.read(devicesNotifierProvider.notifier).refresh();
     } catch (e) {
+      // Clear any partially stored data on login failure
+      await _clearStoredCredentials();
+
       state = AuthUnauthenticated(
         message: 'Login failed: $e',
         lastEmail: email,
@@ -94,6 +150,47 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Re-authenticate after session expiry
+  /// Used when session expires and user needs to login again
+  Future<void> reAuthenticate(String password) async {
+    final current = state;
+    String? email;
+
+    if (current is AuthSessionExpired) {
+      email = current.email;
+    } else if (current is AuthUnauthenticated && current.lastEmail != null) {
+      email = current.lastEmail;
+    }
+
+    if (email == null || email.isEmpty) {
+      state = const AuthUnauthenticated(
+        message: 'Email not found. Please login again.',
+      );
+      return;
+    }
+
+    // Use the regular login flow
+    await login(email, password);
+  }
+
+  /// Validate current session (useful for checking before critical operations)
+  Future<bool> validateCurrentSession() async {
+    try {
+      await _service.validateSession();
+      return true;
+    } catch (_) {
+      // Session is invalid - transition to expired state
+      final current = state;
+      if (current is AuthAuthenticated) {
+        state = AuthSessionExpired(
+          email: current.email,
+          message: 'Your session has expired. Please login again.',
+        );
+      }
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     try {
       await _service.logout();
@@ -101,6 +198,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? lastEmail;
     final current = state;
     if (current is AuthAuthenticated) lastEmail = current.email;
+
+    // Clear stored credentials to prevent auto-login
+    await _clearStoredCredentials();
 
     // CRITICAL: Clear all caches to prevent next user seeing old data
     await _clearAllCaches();

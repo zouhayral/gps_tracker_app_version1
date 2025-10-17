@@ -114,7 +114,7 @@ class _RebuildProfilerOverlayState extends State<RebuildProfilerOverlay> {
 class _PerformanceStats {
   final List<double> _frameTimes = [];
   int _droppedFrames = 0;
-  final notifier = ValueNotifier(_StatsSnapshot(0, 0, 0));
+  final notifier = ValueNotifier(const _StatsSnapshot(0, 0, 0));
 
   void addFrameTiming(double frameTimeMs) {
     _frameTimes.add(frameTimeMs);

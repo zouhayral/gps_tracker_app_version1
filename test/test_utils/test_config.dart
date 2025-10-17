@@ -20,21 +20,21 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart' as hive;
+import 'package:my_app_gps/core/data/vehicle_data_repository.dart' as repo;
+import 'package:my_app_gps/core/services/network_connectivity_monitor.dart'
+    as netmon;
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 // Adapter import for toggling tiles
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
 // ObjectBox imports to check availability
 import 'package:my_app_gps/objectbox.g.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart'
+    as ws_enhanced;
 // Including this ensures native libs are bundled for Flutter tests when available.
 // ignore: unused_import
 import 'package:objectbox_flutter_libs/objectbox_flutter_libs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
-import 'package:my_app_gps/services/websocket_manager.dart';
-import 'package:my_app_gps/services/websocket_manager_enhanced.dart'
-    as ws_enhanced;
-import 'package:my_app_gps/core/services/network_connectivity_monitor.dart'
-    as netmon;
-import 'package:my_app_gps/core/data/vehicle_data_repository.dart' as repo;
 
 /// Disable map tiles/network in widget tests to prevent HTTP traffic and flakiness.
 void disableMapTilesForTests() {

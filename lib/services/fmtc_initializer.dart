@@ -19,7 +19,8 @@ class FMTCInitializer {
     } finally {
       stopwatch.stop();
       debugPrint(
-          '[FMTC][WARMUP] Completed in ${stopwatch.elapsedMilliseconds}ms (attempted)');
+        '[FMTC][WARMUP] Completed in ${stopwatch.elapsedMilliseconds}ms (attempted)',
+      );
     }
   }
 }

@@ -54,7 +54,8 @@ class TraccarSocketService {
       print('[SOCKET] Port: ${uri.port}');
       print('[SOCKET] Scheme: ${uri.scheme}');
       print(
-          '[SOCKET] Cookie: ${cookie != null ? 'present (${cookie.substring(0, 10)}...)' : 'MISSING'}');
+        '[SOCKET] Cookie: ${cookie != null ? 'present (${cookie.substring(0, 10)}...)' : 'MISSING'}',
+      );
       print('[SOCKET] ═══════════════════════════════════════');
     }
     try {
@@ -120,7 +121,8 @@ class TraccarSocketService {
         // ignore: avoid_print
         print('[SOCKET] 📨 RAW WebSocket message received:');
         print(
-            '[SOCKET] ${text.length > 500 ? '${text.substring(0, 500)}...' : text}');
+          '[SOCKET] ${text.length > 500 ? '${text.substring(0, 500)}...' : text}',
+        );
       }
 
       final jsonObj = jsonDecode(text);
@@ -135,10 +137,12 @@ class TraccarSocketService {
           if (kDebugMode) {
             // ignore: avoid_print
             print(
-                '[SOCKET] 📍 Received ${positions.length} positions from WebSocket');
+              '[SOCKET] 📍 Received ${positions.length} positions from WebSocket',
+            );
             for (final pos in positions) {
               print(
-                  '[SOCKET]   Device ${pos.deviceId}: ignition=${pos.attributes['ignition']}, speed=${pos.speed}');
+                '[SOCKET]   Device ${pos.deviceId}: ignition=${pos.attributes['ignition']}, speed=${pos.speed}',
+              );
             }
           }
           _controller?.add(TraccarSocketMessage.positions(positions));

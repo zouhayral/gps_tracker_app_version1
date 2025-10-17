@@ -139,7 +139,8 @@ class NetworkConnectivityMonitor {
       // Transition from offline to online - trigger sync
       if (kDebugMode) {
         debugPrint(
-            '[NetworkMonitor] ✅ Network restored - triggering data sync');
+          '[NetworkMonitor] ✅ Network restored - triggering data sync',
+        );
       }
 
       _syncAfterReconnection();

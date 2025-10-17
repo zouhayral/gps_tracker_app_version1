@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao_objectbox.dart';
+import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 
 /// Abstraction for telemetry persistence to enable test fakes.
 abstract class TelemetryDaoBase {
@@ -46,6 +46,6 @@ final telemetryDaoProvider = Provider<TelemetryDaoBase>((ref) {
   final asyncObj = ref.watch(telemetryDaoObjectBoxProvider);
   return asyncObj.maybeWhen(
     data: (dao) => dao,
-    orElse: () => TelemetryDaoNoop(),
+    orElse: TelemetryDaoNoop.new,
   );
 });

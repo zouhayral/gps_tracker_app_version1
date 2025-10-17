@@ -21,9 +21,7 @@ final adaptiveSyncManagerProvider = Provider<AdaptiveSyncManager>((ref) {
   // Start monitoring
   manager.start();
 
-  ref.onDispose(() {
-    manager.dispose();
-  });
+  ref.onDispose(manager.dispose);
 
   return manager;
 });
@@ -140,7 +138,8 @@ class AdaptiveSyncManager {
 
     if (kDebugMode) {
       debugPrint(
-          '[AdaptiveSync] 🚀 Starting with interval: ${_currentInterval.inSeconds}s');
+        '[AdaptiveSync] 🚀 Starting with interval: ${_currentInterval.inSeconds}s',
+      );
     }
 
     // Subscribe to network state changes
@@ -178,7 +177,8 @@ class AdaptiveSyncManager {
 
     if (kDebugMode) {
       debugPrint(
-          '[AdaptiveSync] 🛑 Stopped. Total syncs: ${_stats.totalSyncs}');
+        '[AdaptiveSync] 🛑 Stopped. Total syncs: ${_stats.totalSyncs}',
+      );
     }
   }
 
@@ -225,7 +225,8 @@ class AdaptiveSyncManager {
     if (wasMoving != isMoving) {
       if (kDebugMode) {
         debugPrint(
-            '[AdaptiveSync] 🚗 Device $deviceId: ${isMoving ? "MOVING" : "IDLE"}');
+          '[AdaptiveSync] 🚗 Device $deviceId: ${isMoving ? "MOVING" : "IDLE"}',
+        );
       }
       _updateSyncContext();
     }
@@ -238,7 +239,8 @@ class AdaptiveSyncManager {
       _currentInterval = _intervalBackgroundSuspended;
       if (kDebugMode) {
         debugPrint(
-            '[AdaptiveSync] 🔋 Low battery - reduced sync: ${_currentInterval.inSeconds}s');
+          '[AdaptiveSync] 🔋 Low battery - reduced sync: ${_currentInterval.inSeconds}s',
+        );
       }
       _rescheduleSyncTimer();
     }

@@ -25,8 +25,9 @@ class _FpsMonitorState extends State<FpsMonitor> {
 
   @override
   void dispose() {
-    if (_callback != null)
+    if (_callback != null) {
       SchedulerBinding.instance.removeTimingsCallback(_callback!);
+    }
     super.dispose();
   }
 
@@ -36,11 +37,15 @@ class _FpsMonitorState extends State<FpsMonitor> {
         right: 12,
         child: DecoratedBox(
           decoration: BoxDecoration(
-              color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(8),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(6),
-            child: Text('FPS: ${_fps.toStringAsFixed(1)}',
-                style: const TextStyle(color: Colors.white, fontSize: 12)),
+            child: Text(
+              'FPS: ${_fps.toStringAsFixed(1)}',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
           ),
         ),
       );

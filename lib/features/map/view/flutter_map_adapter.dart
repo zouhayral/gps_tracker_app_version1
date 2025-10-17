@@ -182,7 +182,9 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
             child: Text(
               markers.length.toString(),
               style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold),
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           );
         },
@@ -212,68 +214,77 @@ class FlutterMapAdapterState extends State<FlutterMapAdapter>
         }
       }
     }
-    return FlutterMap(
-      mapController: mapController,
-      options: MapOptions(
-        initialCenter: const LatLng(0, 0),
-        initialZoom: 2,
-        onTap: (_, __) => widget.onMapTap?.call(),
-      ),
-      children: [
-        if (!kDisableTilesForTests)
-          TileLayer(
-            // Use canonical single-host URL per OSM operations guidance (avoid {s} subdomains).
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.example.my_app_gps',
-            maxZoom: 19,
-            // Requirement: TileLayer uses FMTC provider by default
-            tileProvider: tileProvider,
-          ),
-        // Defensive: only build cluster layer when we have valid markers
-        // OPTIMIZATION: Use ValueListenableBuilder to rebuild only markers, not entire map
-        if (widget.markersNotifier != null)
-          ValueListenableBuilder<List<MapMarkerData>>(
-            valueListenable: widget.markersNotifier!,
-            builder: (ctx, markers, _) {
-              final validMarkers = markers
-                  .where((m) => _validLatLng(m.position))
-                  .toList(growable: false);
-              if (validMarkers.isEmpty) {
-                debugPrint(
-                    '[MAP] Skipping cluster render – no valid markers yet');
-                return const SizedBox.shrink();
-              }
-              return _buildMarkerLayer(validMarkers);
-            },
-          )
-        else
-          Builder(builder: (ctx) {
-            final validMarkers = widget.markers
-                .where((m) => _validLatLng(m.position))
-                .toList(growable: false);
-            if (validMarkers.isEmpty) {
-              debugPrint(
-                  '[MAP] Skipping cluster render – no valid markers yet');
-              return const SizedBox.shrink();
-            }
-            return _buildMarkerLayer(validMarkers);
-          }),
-        Positioned(
-          right: 8,
-          bottom: 8,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Text(
-              '© OpenStreetMap contributors',
-              style: TextStyle(color: Colors.white, fontSize: 11),
-            ),
-          ),
+
+    // OPTIMIZATION: Wrap FlutterMap in RepaintBoundary to isolate render pipeline
+    // This prevents map tiles from repainting when markers update
+    return RepaintBoundary(
+      child: FlutterMap(
+        mapController: mapController,
+        options: MapOptions(
+          initialCenter: const LatLng(0, 0),
+          initialZoom: 2,
+          onTap: (_, __) => widget.onMapTap?.call(),
         ),
-      ],
+        children: [
+          if (!kDisableTilesForTests)
+            TileLayer(
+              // Use canonical single-host URL per OSM operations guidance (avoid {s} subdomains).
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.my_app_gps',
+              maxZoom: 19,
+              // Requirement: TileLayer uses FMTC provider by default
+              tileProvider: tileProvider,
+            ),
+          // Defensive: only build cluster layer when we have valid markers
+          // OPTIMIZATION: Use ValueListenableBuilder to rebuild only markers, not entire map
+          if (widget.markersNotifier != null)
+            ValueListenableBuilder<List<MapMarkerData>>(
+              valueListenable: widget.markersNotifier!,
+              builder: (ctx, markers, _) {
+                final validMarkers = markers
+                    .where((m) => _validLatLng(m.position))
+                    .toList(growable: false);
+                if (validMarkers.isEmpty) {
+                  debugPrint(
+                    '[MAP] Skipping cluster render – no valid markers yet',
+                  );
+                  return const SizedBox.shrink();
+                }
+                return _buildMarkerLayer(validMarkers);
+              },
+            )
+          else
+            Builder(
+              builder: (ctx) {
+                final validMarkers = widget.markers
+                    .where((m) => _validLatLng(m.position))
+                    .toList(growable: false);
+                if (validMarkers.isEmpty) {
+                  debugPrint(
+                    '[MAP] Skipping cluster render – no valid markers yet',
+                  );
+                  return const SizedBox.shrink();
+                }
+                return _buildMarkerLayer(validMarkers);
+              },
+            ),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                '© OpenStreetMap contributors',
+                style: TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

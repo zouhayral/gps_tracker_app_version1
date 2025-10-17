@@ -1,8 +1,8 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
-import 'package:my_app_gps/services/websocket_manager.dart' as ws_manager;
+import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
+import 'package:my_app_gps/services/websocket_manager.dart' as ws_manager;
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
 
 /// Tests to verify provider initialization doesn't crash
 /// Regression test for: "Bad state: Tried to read the state of an uninitialized provider"
@@ -71,10 +71,13 @@ void main() {
 
       // Read multiple providers in quick succession
       // Should not crash with uninitialized provider error
-      expect(() {
-        container.read(webSocketManagerProvider);
-        container.read(ws_manager.webSocketProvider);
-      }, returnsNormally);
+      expect(
+        () {
+          container.read(webSocketManagerProvider);
+          container.read(ws_manager.webSocketProvider);
+        },
+        returnsNormally,
+      );
 
       await Future.microtask(() {});
 

@@ -35,10 +35,10 @@ void main() {
         serverTime: DateTime.now().subtract(const Duration(minutes: 5)),
         latitude: 48.8566,
         longitude: 2.3522,
-        altitude: 35.0,
-        speed: 0.0,
-        course: 0.0,
-        accuracy: 10.0,
+        altitude: 35,
+        speed: 0,
+        course: 0,
+        accuracy: 10,
         attributes: const {'ignition': false},
       );
 
@@ -78,10 +78,10 @@ void main() {
         serverTime: DateTime.now(),
         latitude: 48.8566,
         longitude: 2.3522,
-        altitude: 35.0,
-        speed: 0.0,
-        course: 0.0,
-        accuracy: 10.0,
+        altitude: 35,
+        speed: 0,
+        course: 0,
+        accuracy: 10,
         attributes: const {},
       );
 
@@ -120,10 +120,10 @@ void main() {
         serverTime: DateTime.now().subtract(const Duration(minutes: 35)),
         latitude: 48.8566,
         longitude: 2.3522,
-        altitude: 35.0,
-        speed: 0.0,
-        course: 0.0,
-        accuracy: 10.0,
+        altitude: 35,
+        speed: 0,
+        course: 0,
+        accuracy: 10,
         attributes: const {},
       );
 
@@ -161,10 +161,10 @@ void main() {
         serverTime: DateTime.now().subtract(const Duration(minutes: 10)),
         latitude: 48.8566,
         longitude: 2.3522,
-        altitude: 35.0,
-        speed: 50.0,
-        course: 0.0,
-        accuracy: 10.0,
+        altitude: 35,
+        speed: 50,
+        course: 0,
+        accuracy: 10,
         attributes: const {'ignition': true, 'distance': 1000},
       );
 
@@ -182,10 +182,10 @@ void main() {
         serverTime: DateTime.now(),
         latitude: 48.8600,
         longitude: 2.3550,
-        altitude: 40.0,
-        speed: 60.0,
-        course: 45.0,
-        accuracy: 8.0,
+        altitude: 40,
+        speed: 60,
+        course: 45,
+        accuracy: 8,
         attributes: const {'ignition': true, 'distance': 1500},
       );
 
@@ -241,10 +241,10 @@ void main() {
           serverTime: DateTime.now(),
           latitude: 48.8566 + i * 0.01,
           longitude: 2.3522 + i * 0.01,
-          altitude: 35.0,
-          speed: 0.0,
-          course: 0.0,
-          accuracy: 10.0,
+          altitude: 35,
+          speed: 0,
+          course: 0,
+          accuracy: 10,
           attributes: const {},
         );
 
@@ -262,7 +262,7 @@ void main() {
       final newCache = VehicleDataCache(prefs: prefs);
       final stopwatch = Stopwatch()..start();
 
-      int loaded = 0;
+      var loaded = 0;
       for (var i = 1; i <= 100; i++) {
         if (newCache.get(i) != null) loaded++;
       }

@@ -36,10 +36,8 @@ class DeviceUpdateService {
         if (update.position != null) {
           currentPositions[update.deviceId] = update.position!;
         }
-        break;
       case UpdateType.remove:
         currentPositions.remove(update.deviceId);
-        break;
       case UpdateType.batch:
         // Handled in _processBatchUpdate
         break;
@@ -146,7 +144,7 @@ enum UpdateType { position, remove, batch }
 final positionsNotifierProvider =
     Provider<ValueNotifier<Map<int, Position>>>((ref) {
   final notifier = ValueNotifier<Map<int, Position>>({});
-  ref.onDispose(() => notifier.dispose());
+  ref.onDispose(notifier.dispose);
   return notifier;
 });
 
@@ -155,7 +153,7 @@ final deviceUpdateServiceProvider = Provider<DeviceUpdateService>((ref) {
   final positionsNotifier = ref.watch(positionsNotifierProvider);
   final service = DeviceUpdateService(positionsNotifier);
 
-  ref.onDispose(() => service.dispose());
+  ref.onDispose(service.dispose);
 
   return service;
 });

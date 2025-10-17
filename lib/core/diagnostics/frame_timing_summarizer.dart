@@ -166,12 +166,12 @@ class FrameTimingSummarizer {
   }
 
   double _average(List<double> values) {
-    if (values.isEmpty) return 0.0;
+    if (values.isEmpty) return 0;
     return values.reduce((a, b) => a + b) / values.length;
   }
 
   double _percentile(List<double> sortedValues, double percentile) {
-    if (sortedValues.isEmpty) return 0.0;
+    if (sortedValues.isEmpty) return 0;
     final index = (sortedValues.length * percentile).floor();
     return sortedValues[index.clamp(0, sortedValues.length - 1)];
   }
@@ -194,16 +194,16 @@ class FrameTimingStats {
 
   factory FrameTimingStats.empty() {
     return const FrameTimingStats(
-      avgBuildTime: 0.0,
-      avgRasterTime: 0.0,
-      avgTotalTime: 0.0,
-      p50TotalTime: 0.0,
-      p90TotalTime: 0.0,
-      p99TotalTime: 0.0,
-      maxTotalTime: 0.0,
+      avgBuildTime: 0,
+      avgRasterTime: 0,
+      avgTotalTime: 0,
+      p50TotalTime: 0,
+      p90TotalTime: 0,
+      p99TotalTime: 0,
+      maxTotalTime: 0,
       slowFrameCount: 0,
       totalFrameCount: 0,
-      slowFramePercentage: 0.0,
+      slowFramePercentage: 0,
     );
   }
 
@@ -220,7 +220,7 @@ class FrameTimingStats {
 
   /// Estimated FPS based on average frame time
   double get estimatedFPS {
-    if (avgTotalTime <= 0) return 60.0;
+    if (avgTotalTime <= 0) return 60;
     return 1000.0 / avgTotalTime;
   }
 

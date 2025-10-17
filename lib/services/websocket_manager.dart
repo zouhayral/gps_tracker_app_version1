@@ -136,12 +136,14 @@ class WebSocketManager extends Notifier<WebSocketState> {
     if (_disposed) return;
     _retryCount++;
     state = state.copyWith(
-        status: WebSocketStatus.retrying,
-        retryCount: _retryCount,
-        error: error);
+      status: WebSocketStatus.retrying,
+      retryCount: _retryCount,
+      error: error,
+    );
     if (_retryCount > _maxRetries) {
       _log(
-          '[WS][CIRCUIT BREAKER] Too many retries, pausing for ${_circuitBreakerTimeout.inMinutes}m');
+        '[WS][CIRCUIT BREAKER] Too many retries, pausing for ${_circuitBreakerTimeout.inMinutes}m',
+      );
       _circuitBreakerTimer = Timer(_circuitBreakerTimeout, () {
         _retryCount = 0;
         _connect();

@@ -121,17 +121,23 @@ class VehicleDataSnapshot {
     // Debug log for attribute extraction
     if (kDebugMode) {
       debugPrint(
-          '[VehicleSnapshot] Creating snapshot for device ${position.deviceId}:');
+        '[VehicleSnapshot] Creating snapshot for device ${position.deviceId}:',
+      );
       debugPrint(
-          '[VehicleSnapshot]   ignition: $ignition → engineState: $engineState');
+        '[VehicleSnapshot]   ignition: $ignition → engineState: $engineState',
+      );
       debugPrint(
-          '[VehicleSnapshot]   speed: ${position.speed} km/h, motion: $motion');
+        '[VehicleSnapshot]   speed: ${position.speed} km/h, motion: $motion',
+      );
       debugPrint(
-          '[VehicleSnapshot]   battery: $batteryLevel%, power: $power V');
+        '[VehicleSnapshot]   battery: $batteryLevel%, power: $power V',
+      );
       debugPrint(
-          '[VehicleSnapshot]   signal: $signal, rssi: $rssi dBm, sat: $sat, hdop: $hdop');
+        '[VehicleSnapshot]   signal: $signal, rssi: $rssi dBm, sat: $sat, hdop: $hdop',
+      );
       debugPrint(
-          '[VehicleSnapshot]   all attributes: ${attrs.keys.join(', ')}');
+        '[VehicleSnapshot]   all attributes: ${attrs.keys.join(', ')}',
+      );
     }
 
     return VehicleDataSnapshot(
@@ -177,11 +183,13 @@ class VehicleDataSnapshot {
     if (kDebugMode) {
       if (newer.batteryLevel != null && newer.batteryLevel != batteryLevel) {
         debugPrint(
-            '[VehicleSnapshot] 🔋 Battery change for device $deviceId: $batteryLevel% → ${newer.batteryLevel}%');
+          '[VehicleSnapshot] 🔋 Battery change for device $deviceId: $batteryLevel% → ${newer.batteryLevel}%',
+        );
       }
       if (newer.signal != null && newer.signal != signal) {
         debugPrint(
-            '[VehicleSnapshot] 📶 Signal change for device $deviceId: $signal → ${newer.signal}');
+          '[VehicleSnapshot] 📶 Signal change for device $deviceId: $signal → ${newer.signal}',
+        );
       }
     }
 
