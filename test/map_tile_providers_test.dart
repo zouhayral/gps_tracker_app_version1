@@ -6,9 +6,12 @@ void main() {
     test('provides OpenStreetMap source', () {
       expect(MapTileProviders.openStreetMap.id, 'osm');
       expect(MapTileProviders.openStreetMap.name, 'OpenStreetMap');
+      // Accept either the primary OSM hostname or the HOT mirror used in app
+      final url = MapTileProviders.openStreetMap.urlTemplate;
       expect(
-        MapTileProviders.openStreetMap.urlTemplate,
-        contains('openstreetmap.org'),
+        url.contains('openstreetmap.org') ||
+            url.contains('openstreetmap.fr'),
+        isTrue,
       );
     });
 
@@ -21,8 +24,9 @@ void main() {
       );
     });
 
-    test('all sources list contains both providers', () {
-      expect(MapTileProviders.all.length, 2);
+    test('all sources list contains expected providers', () {
+      // We currently ship 2 providers (OSM, Esri Satellite)
+      expect(MapTileProviders.all.length, equals(2));
       expect(MapTileProviders.all, contains(MapTileProviders.openStreetMap));
       expect(MapTileProviders.all, contains(MapTileProviders.esriSatellite));
     });

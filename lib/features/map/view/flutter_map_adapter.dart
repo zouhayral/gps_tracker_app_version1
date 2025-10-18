@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/io_client.dart'; // IOClient for FMTC HTTP/1.1 compatibility
@@ -58,6 +57,25 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   // - Short timeouts for fast failure
   late final IOClient _httpClient;
 
+  // Cache tile providers per (layer, source) to avoid recreating on every build,
+  // which can cause visible blinking. We still separate base/overlay providers
+  // to avoid any internal URL caching cross-talk.
+  final Map<String, TileProvider> _tileProviderCache = {};
+  String? _lastProviderId;
+
+  TileProvider _getCachedProvider(String key, {String? storeName}) {
+    final existing = _tileProviderCache[key];
+    if (existing != null) return existing;
+    // Use a dedicated FMTC store per map source to prevent cross-source cache collisions.
+    final created = kForceDisableFMTC
+        ? NetworkTileProvider(httpClient: _httpClient)
+        : FMTCStore(storeName ?? 'main').getTileProvider(
+            httpClient: _httpClient,
+          );
+    _tileProviderCache[key] = created;
+    return created;
+  }
+
   @override
   void didUpdateWidget(covariant FlutterMapAdapter oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -69,7 +87,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   void initState() {
     super.initState();
     // Initialize dedicated HTTP/1.1 client for reliable FMTC tile loading
-    _httpClient = TileNetworkClient.create();
+    _httpClient = TileNetworkClient.shared();
     // CRITICAL FIX: Initial camera fit must be IMMEDIATE to show selected devices
     // Without this, map shows (0,0) for 300ms+ while throttler delays the fit
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFit(immediate: true));
@@ -77,7 +95,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
 
   @override
   void dispose() {
-    _httpClient.close(); // Clean up HTTP client
+    // Do not close the shared client here; it may be reused elsewhere.
     mapController.dispose();
     super.dispose();
   }
@@ -242,58 +260,54 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
       debugPrint('[FlutterMapAdapter] ⚠️ Filtered out ${validMarkers.length - safeMarkers.length} markers with invalid coordinates');
     }
 
+    // CRITICAL: Deduplicate markers by identity (id + selection state) to avoid duplicate keys
+    final dedup = <String>{};
+    final dedupMarkers = <MapMarkerData>[];
+    for (final m in safeMarkers) {
+      final k = '${m.id}_${m.isSelected}';
+      if (dedup.add(k)) {
+        dedupMarkers.add(m);
+      } else if (kDebugMode) {
+        debugPrint('[FlutterMapAdapter] ⚠️ Dropping duplicate marker key marker_$k');
+      }
+    }
+
     // Use cached marker layer options to avoid rebuilding identical layers
     final cachedMarkers =
-        MarkerLayerOptionsCache.instance.getCachedMarkers(safeMarkers);
+        MarkerLayerOptionsCache.instance.getCachedMarkers(dedupMarkers);
 
-    return MarkerClusterLayerWidget(
-      options: MarkerClusterLayerOptions(
-        maxClusterRadius: 45,
-        size: const Size(40, 40), // Cluster circle size
-        // Reuse cached markers if available to preserve widget identity
-        markers: cachedMarkers ??
-            [
-              for (final m in safeMarkers)
-                Marker(
-                  key: ValueKey('marker_${m.id}_${m.isSelected}'),
-                  point: m.position,
-                  width: 56, // Modern circular marker size
-                  height: 56,
-                  child: Consumer(
-                    builder: (context, ref, _) {
-                      return GestureDetector(
-                        key: ValueKey('tap_${m.id}'),
-                        onTap: () => widget.onMarkerTap?.call(m.id),
-                        child: MapMarkerWidget(
-                          deviceId: int.tryParse(m.id) ?? -1,
-                          isSelected: m.isSelected,
-                          zoomLevel: mapController.camera.zoom,
-                          key:
-                              ValueKey('marker_widget_${m.id}_${m.isSelected}'),
-                        ),
-                      );
-                    },
-                  ),
+    // Use plain MarkerLayer to ensure visibility while we stabilize clustering.
+    final markersList = cachedMarkers ?? [
+      for (final m in dedupMarkers)
+        Marker(
+          key: ValueKey('marker_${m.id}_${m.isSelected}'),
+          point: m.position,
+          width: 56, // Modern marker visual size
+          height: 56,
+          child: Consumer(
+            builder: (context, ref, _) {
+              return GestureDetector(
+                key: ValueKey('tap_${m.id}'),
+                onTap: () => widget.onMarkerTap?.call(m.id),
+                child: MapMarkerWidget(
+                  deviceId: int.tryParse(m.id) ?? -1,
+                  isSelected: m.isSelected,
+                  zoomLevel: mapController.camera.zoom,
+                  // Fallbacks from MapMarkerData.meta allow immediate render
+                  fallbackName: (m.meta?['name']?.toString()),
+                  fallbackSpeed: (m.meta?['speed'] is num)
+                      ? (m.meta?['speed'] as num).toDouble()
+                      : null,
+                  fallbackEngineOn: m.meta?['engineOn'] as bool?,
+                  key: ValueKey('marker_widget_${m.id}_${m.isSelected}'),
                 ),
-            ],
-        builder: (context, markers) {
-          return Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFA6CD27).withValues(alpha: 0.9), // App seed color
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              markers.length.toString(),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          );
-        },
-      ),
-    );
+              );
+            },
+          ),
+        ),
+    ];
+
+    return MarkerLayer(markers: markersList);
   }
 
   @override
@@ -307,23 +321,34 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     // This ensures each layer gets a fresh provider with the correct URL
     // See the Consumer blocks below for tile provider creation
 
-    // CRITICAL FIX: Wrap entire FlutterMap in Consumer to force rebuild on provider change
-    // This ensures the map completely rebuilds when switching between OSM, Satellite, and Hybrid
+  // CRITICAL FIX: Wrap entire FlutterMap in Consumer to force rebuild on provider change
+  // This ensures the map completely rebuilds when switching between OSM and Satellite
     return Consumer(
       builder: (context, ref, _) {
         final provider = ref.watch(mapTileSourceProvider);
+        final lastSwitchTs = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
         
         if (kDebugMode) {
-          debugPrint('[MAP] 🧭 Active provider: ${provider.id}');
+          debugPrint('[MAP] 🧭 Active provider: ${provider.id} (ts=$lastSwitchTs)');
+        }
+
+        // If provider id changed, clear cached tile providers to force fresh instances
+        if (_lastProviderId != provider.id) {
+          if (kDebugMode) {
+            debugPrint('[MAP] 🔁 Provider changed ${_lastProviderId ?? 'null'} → ${provider.id}; clearing tile provider cache');
+          }
+          _tileProviderCache.clear();
+          _lastProviderId = provider.id;
         }
         
         // OPTIMIZATION: Wrap FlutterMap in RepaintBoundary to isolate render pipeline
         // This prevents map tiles from repainting when markers update
         return RepaintBoundary(
           child: FlutterMap(
-            // CRITICAL: Timestamp-based key forces complete FlutterMap reconstruction
-            // This breaks all tile cache reuse and ensures fresh tiles on every provider switch
-            key: ValueKey('map_${provider.id}_${DateTime.now().millisecondsSinceEpoch}'),
+            // Stable key that only changes when the tile source changes.
+            // This avoids frequent full reconstructions that cause blinking.
+            // Include lastSwitchTs to guarantee a hard refresh when toggling
+            key: ValueKey('map_${provider.id}_$lastSwitchTs'),
             mapController: mapController,
             options: MapOptions(
               initialCenter: const LatLng(0, 0),
@@ -338,65 +363,58 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
             Consumer(
               builder: (context, ref, _) {
                 final tileSource = ref.watch(mapTileSourceProvider);
+                final ts = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
                 // Debug: Log provider switches
                 if (kDebugMode) {
-                  debugPrint('[MAP] Switching to provider: ${tileSource.id} (${tileSource.name})');
+                  debugPrint('[MAP] Switching to provider: ${tileSource.id} (${tileSource.name}), ts=$ts');
                   debugPrint('[MAP] Base URL: ${tileSource.urlTemplate}');
                 }
                 
-                // CRITICAL FIX: Create tile provider per layer to avoid URL caching
-                // Use widget provider if available, otherwise create FMTC/Network provider
-                final layerTileProvider = widget.tileProvider ?? 
-                  (kForceDisableFMTC 
-                    ? NetworkTileProvider(httpClient: _httpClient)
-                    : FMTCTileProvider(
-                        stores: const {'main': null}, // 'main' store initialized in main.dart
-                        httpClient: _httpClient,
-                      ));
+                // CRITICAL: Use cached per-layer provider to avoid blink,
+                // still unique per map source to prevent URL caching issues.
+        final layerTileProvider = widget.tileProvider ??
+          _getCachedProvider('base_${tileSource.id}_$ts', storeName: 'tiles_${tileSource.id}');
+
+                // Cache-busting: append timestamp query to force fresh tiles on toggle
+                final sep = tileSource.urlTemplate.contains('?') ? '&' : '?';
+                final effectiveUrl = '${tileSource.urlTemplate}${sep}_v=$ts';
                 
-                // HYBRID MODE: Render both Esri satellite base + Carto labels overlay
-                if (tileSource.id == 'hybrid' || tileSource.id == 'esri_sat_hybrid') {
-                  const hybridUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-                  // Return base layer here, overlay added separately below
-                  return TileLayer(
-                    // REBUILD KEY: URL hash + provider ID forces fresh tile rendering
-                    key: ValueKey('tiles_esri_sat_hybrid_${hybridUrl.hashCode}'),
-                    urlTemplate: hybridUrl,
-                    // CRITICAL: User-Agent required for CDN compliance
-                    userAgentPackageName: TileNetworkClient.userAgent,
-                    maxZoom: 19,
-                    minZoom: 0,
-                    tileProvider: layerTileProvider,
-                  );
+                if (kDebugMode && layerTileProvider.runtimeType.toString().contains('FMTC')) {
+                  debugPrint('[FMTC][CLIENT] Base layer using shared IOClient for ${tileSource.id}');
                 }
+                
+                // No hybrid mode anymore: render single base layer for the active source
                 
                 // STANDARD MODES: Single base tile layer (OSM, Satellite)
                 return TileLayer(
                   // REBUILD KEY: URL hash + provider ID breaks tile cache on switch
-                  key: ValueKey('tiles_${tileSource.id}_${tileSource.urlTemplate.hashCode}'),
-                  urlTemplate: tileSource.urlTemplate,
+                  // Include ts to force reinit if same id is toggled quickly
+                  key: ValueKey('tiles_${tileSource.id}_${effectiveUrl.hashCode}_$ts'),
+                  urlTemplate: effectiveUrl,
                   // CRITICAL: User-Agent required for OpenStreetMap and CDN compliance
                   userAgentPackageName: TileNetworkClient.userAgent,
                   maxZoom: tileSource.maxZoom.toDouble(),
                   minZoom: tileSource.minZoom.toDouble(),
                   tileProvider: layerTileProvider,
+                  errorTileCallback: (tile, error, stack) {
+                    if (kDebugMode) {
+                      debugPrint('[FMTC][ERROR] Base tile ${tileSource.id} ${tile.toString()}: ${error.runtimeType} -> $error');
+                    }
+                  },
                 );
               },
             ),
-          // HYBRID OVERLAY: Carto labels layer for hybrid mode
-          // KEY FIX: Separate overlay layer with unique key to force rebuild
+          // Overlay layer support (only when overlayUrlTemplate is set)
           if (!kDisableTilesForTests)
             Consumer(
               builder: (context, ref, _) {
                 final tileSource = ref.watch(mapTileSourceProvider);
+                final ts = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
                 
-                // Check if hybrid mode OR has overlay URL
-                final isHybrid = tileSource.id == 'hybrid' || tileSource.id == 'esri_sat_hybrid';
                 final hasOverlay = tileSource.overlayUrlTemplate != null;
-                
-                if (!isHybrid && !hasOverlay) {
+                if (!hasOverlay) {
                   if (kDebugMode) {
-                    debugPrint('[MAP] No overlay layer for provider: ${tileSource.id}');
+                    debugPrint('[MAP] No overlay layer for provider: ${tileSource.id} (ts=$ts)');
                   }
                   return const SizedBox.shrink(); // No overlay
                 }
@@ -404,49 +422,27 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                 // Debug: Log overlay activation
                 if (kDebugMode) {
                   debugPrint('[MAP] Overlay enabled for provider: ${tileSource.id}');
-                  if (isHybrid) {
-                    debugPrint('[MAP] Overlay URL: https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png');
-                    debugPrint('[MAP] Overlay opacity: 0.6');
-                  } else {
-                    debugPrint('[MAP] Overlay URL: ${tileSource.overlayUrlTemplate}');
-                    debugPrint('[MAP] Overlay opacity: ${tileSource.overlayOpacity}');
-                  }
+                  debugPrint('[MAP] Overlay URL: ${tileSource.overlayUrlTemplate}');
+                  debugPrint('[MAP] Overlay opacity: ${tileSource.overlayOpacity}');
                 }
                 
-                // CRITICAL FIX: Create tile provider per overlay layer
-                // Overlay uses FMTC with httpClient for caching + offline support
-                final overlayTileProvider = kForceDisableFMTC
-                    ? NetworkTileProvider(httpClient: _httpClient)
-                    : FMTCTileProvider(
-                        stores: const {'main': null}, // 'main' store initialized in main.dart
-                        httpClient: _httpClient,
-                      );
+                // Overlay provider cached per source to avoid flicker
+                final overlayTileProvider = _getCachedProvider('overlay_${tileSource.id}_$ts', storeName: 'overlay_${tileSource.id}');
                 
-                // HYBRID MODE: Render Carto labels overlay
-                if (isHybrid) {
-                  const cartoUrl = 'https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png';
-                  return Opacity(
-                    opacity: 0.6, // Semi-transparent labels
-                    child: TileLayer(
-                      // REBUILD KEY: URL hash ensures fresh overlay rendering in hybrid mode
-                      key: const ValueKey('overlay_carto_labels'),
-                      urlTemplate: cartoUrl,
-                      // CRITICAL: User-Agent required for Carto CDN compliance
-                      userAgentPackageName: TileNetworkClient.userAgent,
-                      maxZoom: 19,
-                      minZoom: 0,
-                      tileProvider: overlayTileProvider,
-                    ),
-                  );
+                if (kDebugMode && overlayTileProvider.runtimeType.toString().contains('FMTC')) {
+                  debugPrint('[FMTC][CLIENT] Overlay layer using shared IOClient');
                 }
                 
-                // STANDARD OVERLAY: Use overlay from MapTileSource
-                final overlayUrl = tileSource.overlayUrlTemplate!;
+                // Use overlay from MapTileSource
+                final overlayUrlRaw = tileSource.overlayUrlTemplate!;
+                // Cache-busting for overlay as well
+                final overlaySep = overlayUrlRaw.contains('?') ? '&' : '?';
+                final overlayUrl = '$overlayUrlRaw${overlaySep}_v=$ts';
                 return Opacity(
                   opacity: tileSource.overlayOpacity,
                   child: TileLayer(
                     // REBUILD KEY: URL hash + provider ID forces overlay refresh
-                    key: ValueKey('overlay_${tileSource.id}_${overlayUrl.hashCode}'),
+                    key: ValueKey('overlay_${tileSource.id}_${overlayUrl.hashCode}_$ts'),
                     urlTemplate: overlayUrl,
                     // CRITICAL: User-Agent required for CDN compliance
                     userAgentPackageName: TileNetworkClient.userAgent,
@@ -463,13 +459,16 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
             ValueListenableBuilder<List<MapMarkerData>>(
               valueListenable: widget.markersNotifier!,
               builder: (ctx, markers, _) {
+                if (kDebugMode) {
+                  debugPrint('[MAP] Marker notifier emitted: ${markers.length} markers');
+                }
                 final validMarkers = markers
                     .where((m) => _validLatLng(m.position))
                     .toList(growable: false);
                 if (validMarkers.isEmpty) {
-                  debugPrint(
-                    '[MAP] Skipping cluster render – no valid markers yet',
-                  );
+                  if (kDebugMode) {
+                    debugPrint('[MAP] Skipping cluster render – no valid markers yet');
+                  }
                   return const SizedBox.shrink();
                 }
                 return _buildMarkerLayer(validMarkers);
@@ -478,13 +477,16 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
           else
             Builder(
               builder: (ctx) {
+                if (kDebugMode) {
+                  debugPrint('[MAP] Using direct markers list: ${widget.markers.length} markers');
+                }
                 final validMarkers = widget.markers
                     .where((m) => _validLatLng(m.position))
                     .toList(growable: false);
                 if (validMarkers.isEmpty) {
-                  debugPrint(
-                    '[MAP] Skipping cluster render – no valid markers yet',
-                  );
+                  if (kDebugMode) {
+                    debugPrint('[MAP] Skipping cluster render – no valid markers yet');
+                  }
                   return const SizedBox.shrink();
                 }
                 return _buildMarkerLayer(validMarkers);

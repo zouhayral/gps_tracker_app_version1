@@ -19,8 +19,7 @@ import 'package:http/io_client.dart';
 /// **Usage:**
 /// ```dart
 /// final client = TileNetworkClient.create();
-/// final tileProvider = FMTCTileProvider(
-///   stores: const {'main': null}, // 'main' store initialized in main.dart
+/// final tileProvider = const FMTCStore('main').getTileProvider(
 ///   httpClient: client,
 /// );
 /// ```
@@ -29,13 +28,19 @@ class TileNetworkClient {
 
   /// User-Agent string identifying this app to tile servers
   /// OpenStreetMap and some CDNs require a valid User-Agent
-  static const String userAgent = 'GPS_Tracker_App/1.0 Flutter';
+  static const String userAgent = 'FleetTracker/1.0 (contact@yourdomain.com)';
 
   /// Connection timeout for tile requests (fail fast)
   static const Duration connectionTimeout = Duration(seconds: 10);
 
   /// Idle timeout for keeping connections alive
   static const Duration idleTimeout = Duration(seconds: 15);
+
+  static IOClient? _sharedInstance;
+
+  /// Get a shared IOClient instance for reuse across all FMTC providers
+  /// This avoids creating multiple clients and ensures consistent behavior.
+  static IOClient shared() => _sharedInstance ??= create();
 
   /// Create a properly configured IOClient for FMTC tile loading
   ///
@@ -51,10 +56,17 @@ class TileNetworkClient {
       // CRITICAL: Short timeout prevents grey tiles on slow networks
       ..connectionTimeout = connectionTimeout
       ..idleTimeout = idleTimeout
-      
-      // CRITICAL: Allow self-signed certs for development/testing
-      // Remove in production if all tile servers use valid certificates
-      ..badCertificateCallback = (cert, host, port) => true;
+      // Limit parallel connections to be friendly to tile servers
+      ..maxConnectionsPerHost = 8
+      // Ensure gzip responses are transparently decompressed
+      ..autoUncompress = true
+      // Ensure all requests carry a compliant User-Agent
+      ..userAgent = userAgent;
+
+    // Allow self-signed certs only in debug/profile for development/testing
+    if (kDebugMode || kProfileMode) {
+      httpClient.badCertificateCallback = (cert, host, port) => true;
+    }
 
     // Wrap in IOClient to ensure HTTP/1.1 protocol
     final ioClient = IOClient(httpClient);
@@ -63,6 +75,9 @@ class TileNetworkClient {
       debugPrint('[TileNetworkClient] 🌐 Created HTTP/1.1 client');
       debugPrint('[TileNetworkClient] ⏱️  Connection timeout: $connectionTimeout');
       debugPrint('[TileNetworkClient] 🏷️  User-Agent: $userAgent');
+      debugPrint('[TileNetworkClient] 🔗  maxConnectionsPerHost: ${httpClient.maxConnectionsPerHost}');
+      debugPrint('[TileNetworkClient] ✅ HTTP/1.1 enforced via IOClient wrapper');
+      debugPrint('[TileNetworkClient] 📦 gzip compression: ${httpClient.autoUncompress}');
     }
 
     return ioClient;
@@ -77,7 +92,18 @@ class TileNetworkClient {
   ///   headers: TileNetworkClient.getUserAgentHeader(),
   /// );
   /// ```
-  static Map<String, String> getUserAgentHeader() {
-    return {'User-Agent': userAgent};
+  static Map<String, String> getUserAgentHeader({bool isEsri = false}) {
+    final headers = {
+      'User-Agent': userAgent,
+      // HttpClient already advertises gzip, but include here for completeness
+      'Accept-Encoding': 'gzip, deflate',
+    };
+    
+    // Esri ArcGIS services may need explicit Accept header to avoid negotiation issues
+    if (isEsri) {
+      headers['Accept'] = 'image/png, image/jpeg, */*';
+    }
+    
+    return headers;
   }
 }

@@ -41,7 +41,9 @@ class EnhancedMarkerCache {
     final now = DateTime.now();
 
     // Throttle updates (skip if <300ms since last update, unless forced)
-    if (!forceUpdate &&
+    // Never throttle the very first render (when cache is empty).
+    final isFirstRender = _cache.isEmpty && _snapshots.isEmpty;
+    if (!forceUpdate && !isFirstRender &&
         _lastUpdate != null &&
         now.difference(_lastUpdate!) < _minUpdateInterval) {
       if (kDebugMode) {
@@ -64,10 +66,11 @@ class EnhancedMarkerCache {
     _lastUpdate = now;
     final stopwatch = Stopwatch()..start();
 
-    final updated = <MapMarkerData>[];
+  final updated = <MapMarkerData>[];
     final created = <String>[];
     final reused = <String>[];
     final removed = <String>[];
+  int modified = 0; // updates where snapshot changed but marker already existed
     final processedIds = <String>{};
     final q = query.trim().toLowerCase();
 
@@ -103,9 +106,10 @@ class EnhancedMarkerCache {
         final existingMarker = _cache[markerId];
 
         // Check if marker needs update
-        if (existingSnapshot == null ||
-            existingMarker == null ||
-            existingSnapshot != snapshot) {
+    final needsUpdate = existingSnapshot == null ||
+      existingMarker == null ||
+      existingSnapshot != snapshot;
+    if (needsUpdate) {
           // Create or update marker
           final marker = MapMarkerData(
             id: markerId,
@@ -116,6 +120,10 @@ class EnhancedMarkerCache {
               'name': name,
               'speed': p.speed,
               'course': p.course,
+              // Provide engineOn boolean when present in attributes
+              'engineOn': _asTrue(p.attributes['ignition']) ||
+                  _asTrue(p.attributes['engineOn']) ||
+                  _asTrue(p.attributes['engine_on']),
             },
           );
 
@@ -125,6 +133,8 @@ class EnhancedMarkerCache {
 
           if (existingSnapshot == null) {
             created.add(markerId);
+          } else {
+            modified++;
           }
         } else {
           // Reuse existing marker
@@ -169,15 +179,22 @@ class EnhancedMarkerCache {
         final existingMarker = _cache[markerId];
 
         // Check if marker needs update
-        if (existingSnapshot == null ||
-            existingMarker == null ||
-            existingSnapshot != snapshot) {
+    final needsUpdate = existingSnapshot == null ||
+      existingMarker == null ||
+      existingSnapshot != snapshot;
+    if (needsUpdate) {
           // Create or update marker
           final marker = MapMarkerData(
             id: markerId,
             position: LatLng(lat, lon),
             isSelected: selectedIds.contains(deviceId),
-            meta: {'name': name},
+            meta: {
+              'name': name,
+              // Try to infer engine state from device fields when available
+              'engineOn': _asTrue(d['ignition']) ||
+                  _asTrue(d['engineOn']) ||
+                  _asTrue(d['engine_on']),
+            },
           );
 
           _cache[markerId] = marker;
@@ -186,6 +203,8 @@ class EnhancedMarkerCache {
 
           if (existingSnapshot == null) {
             created.add(markerId);
+          } else {
+            modified++;
           }
         } else {
           // Reuse existing marker
@@ -212,10 +231,17 @@ class EnhancedMarkerCache {
     final result = MarkerDiffResult(
       markers: updated,
       created: created.length,
+      modified: modified,
       reused: reused.length,
       removed: removed.length,
       totalCached: _cache.length,
     );
+
+    if (kDebugMode && result.markers.isEmpty) {
+      final deviceCount = devices.length;
+      final posCount = positions.length;
+      debugPrint('[EnhancedMarkerCache] ⚠️ Produced 0 markers (devices=$deviceCount, positions=$posCount).');
+    }
 
     // Record performance metrics
     MarkerPerformanceMonitor.instance.recordUpdate(
@@ -233,6 +259,7 @@ class EnhancedMarkerCache {
         '[EnhancedMarkerCache] 📊 Update: '
         'total=${result.markers.length}, '
         'created=${result.created}, '
+        'modified=${result.modified}, '
         'reused=${result.reused}, '
         'removed=${result.removed}, '
         'reuse=$reusePercent%, '
@@ -284,6 +311,14 @@ class EnhancedMarkerCache {
     if (v is String) return double.tryParse(v);
     return null;
   }
+
+  bool _asTrue(dynamic v) {
+    if (v == null) return false;
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    final s = v.toString().toLowerCase().trim();
+    return s == 'true' || s == '1' || s == 'on' || s == 'yes';
+  }
 }
 
 /// Result of marker diff operation
@@ -291,6 +326,7 @@ class MarkerDiffResult {
   const MarkerDiffResult({
     required this.markers,
     required this.created,
+    this.modified = 0,
     required this.reused,
     required this.removed,
     required this.totalCached,
@@ -298,6 +334,7 @@ class MarkerDiffResult {
 
   final List<MapMarkerData> markers;
   final int created;
+  final int modified;
   final int reused;
   final int removed;
   final int totalCached;

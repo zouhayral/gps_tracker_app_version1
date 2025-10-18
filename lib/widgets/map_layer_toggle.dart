@@ -13,10 +13,6 @@ class MapLayerToggleButton extends StatelessWidget {
   }) : super(key: key);
 
   IconData _iconFor(MapTileSource s) {
-    // Hybrid mode: show layered icon
-    if (s.id == MapTileProviders.esriSatelliteHybrid.id || s.id == 'hybrid') {
-      return Icons.layers_outlined;
-    }
     // Satellite mode: show satellite icon
     if (s.id == MapTileProviders.esriSatellite.id) {
       return Icons.satellite_alt;

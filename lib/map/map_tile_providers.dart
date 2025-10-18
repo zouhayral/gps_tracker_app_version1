@@ -14,7 +14,7 @@ class MapTileSource {
   /// Use {z}, {x}, {y} placeholders for zoom, x-coordinate, y-coordinate
   final String urlTemplate;
 
-  /// Optional overlay URL template for hybrid mode (e.g., roads on satellite)
+  /// Optional overlay URL template for rendering an additional roads/labels layer
   /// When provided, renders as a semi-transparent layer over the base layer
   final String? overlayUrlTemplate;
 
@@ -64,8 +64,9 @@ class MapTileProviders {
   static const openStreetMap = MapTileSource(
     id: 'osm',
     name: 'OpenStreetMap',
-    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '© OpenStreetMap contributors',
+    // Use a community mirror suitable for app traffic (verify availability/policy)
+    urlTemplate: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+    attribution: '© OpenStreetMap contributors | Tiles: HOT OSM',
     maxZoom: 19,
   );
 
@@ -80,36 +81,10 @@ class MapTileProviders {
     maxZoom: 19,
   );
 
-  /// Hybrid mode: Esri Satellite + Carto Light road labels overlay
-  /// Combines satellite imagery with transparent road/label layer
-  static const esriSatelliteHybrid = MapTileSource(
-    id: 'esri_sat_hybrid',
-    name: 'Satellite + Roads',
-    urlTemplate:
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    overlayUrlTemplate:
-        'https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
-    overlayOpacity: 0.8,
-    attribution: '© Esri – Maxar | © CARTO',
-    maxZoom: 19,
-  );
-
-  /// Hybrid mode (simplified ID for consistency)
-  /// Same as esriSatelliteHybrid but with simpler 'hybrid' ID
-  static const hybrid = MapTileSource(
-    id: 'hybrid',
-    name: 'Satellite + Roads',
-    urlTemplate:
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '© Esri, Maxar, Earthstar Geographics + Carto Labels',
-    maxZoom: 19,
-  );
-
   /// All available tile sources
   static final List<MapTileSource> all = [
     openStreetMap,
     esriSatellite,
-    esriSatelliteHybrid,
   ];
 
   /// Get a tile source by ID
