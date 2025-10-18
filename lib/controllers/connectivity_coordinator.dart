@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 
 /// Unified connectivity state combining network and backend reachability
 ///
@@ -105,6 +105,8 @@ class ConnectivityState {
 /// });
 /// ```
 class ConnectivityCoordinator {
+  /// Test toggle: when true, skip platform plugin calls and timers.
+  static bool testMode = false;
   /// Callback to check backend reachability
   /// Should return true if backend is responsive, false otherwise
   final Future<bool> Function() onBackendPing;
@@ -143,6 +145,18 @@ class ConnectivityCoordinator {
   Future<void> initialize() async {
     if (kDebugMode) {
       debugPrint('[CONNECTIVITY] 🎬 Initializing coordinator');
+    }
+
+    if (testMode) {
+      if (kDebugMode) {
+        debugPrint('[CONNECTIVITY][TEST] Skipping plugin calls and timers');
+      }
+      _currentState = const ConnectivityState(
+        networkAvailable: true,
+        backendReachable: true,
+      );
+      _notifyStateChange();
+      return;
     }
 
     // Check initial network state
@@ -192,7 +206,7 @@ class ConnectivityCoordinator {
     if (_isDisposed) return;
 
     final wasReachable = _currentState.backendReachable;
-    bool isReachable = false;
+    var isReachable = false;
 
     try {
       isReachable = await onBackendPing();
