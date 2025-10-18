@@ -1,6 +1,6 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_provider.dart';
 

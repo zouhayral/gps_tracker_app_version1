@@ -7,9 +7,7 @@ class MapLayerToggleButton extends StatelessWidget {
   final ValueChanged<MapTileSource> onChanged;
 
   const MapLayerToggleButton({
-    super.key,
-    required this.current,
-    required this.onChanged,
+    required this.current, required this.onChanged, super.key,
   });
 
   IconData _iconFor(MapTileSource s) {

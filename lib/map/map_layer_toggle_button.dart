@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/map/map_tile_providers.dart';
+import 'package:my_app_gps/map/map_tile_source_provider.dart';
 
 /// Floating action button to toggle between map tile sources
 /// Shows current map type (Street/Satellite) and allows quick switching

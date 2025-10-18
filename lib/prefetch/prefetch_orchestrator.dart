@@ -168,7 +168,7 @@ class PrefetchOrchestrator {
 
       // Simulate tile downloads with proper throttling
       // In a real implementation, this would trigger actual FMTC downloads
-      int processed = 0;
+      var processed = 0;
       for (final range in tileRanges) {
         if (_isCancelled) break;
 
@@ -255,7 +255,7 @@ class PrefetchOrchestrator {
   List<_TileRange> _calculateTileRanges(LatLng center, PrefetchProfile profile) {
     final ranges = <_TileRange>[];
 
-    for (int zoom = profile.zoomMin; zoom <= profile.zoomMax; zoom++) {
+    for (var zoom = profile.zoomMin; zoom <= profile.zoomMax; zoom++) {
       // Calculate tile bounds at this zoom
       final tiles = _getTilesInRadius(center, profile.radiusKm, zoom);
       ranges.add(_TileRange(zoom: zoom, tiles: tiles));
@@ -277,8 +277,8 @@ class PrefetchOrchestrator {
 
     // Generate square of tiles around center
     final tiles = <_TileCoord>[];
-    for (int dx = -tileRadius; dx <= tileRadius; dx++) {
-      for (int dy = -tileRadius; dy <= tileRadius; dy++) {
+    for (var dx = -tileRadius; dx <= tileRadius; dx++) {
+      for (var dy = -tileRadius; dy <= tileRadius; dy++) {
         final x = centerTile.x + dx;
         final y = centerTile.y + dy;
 

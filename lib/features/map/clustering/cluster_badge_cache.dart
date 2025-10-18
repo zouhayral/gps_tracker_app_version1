@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:typed_data';
 
 /// Simple in-memory LRU-ish cache for cluster badge PNG bytes.
@@ -6,7 +5,7 @@ import 'dart:typed_data';
 class ClusterBadgeCache {
   ClusterBadgeCache._();
   
-  static final _cache = LinkedHashMap<String, Uint8List>();
+  static final _cache = <String, Uint8List>{};
   static int hits = 0;
   static int misses = 0;
 

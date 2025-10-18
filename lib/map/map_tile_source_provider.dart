@@ -8,7 +8,7 @@ import 'package:my_app_gps/providers/map_rebuild_provider.dart';
 /// Persists user selection using SharedPreferences
 final mapTileSourceProvider =
     StateNotifierProvider<MapTileSourceNotifier, MapTileSource>(
-  (ref) => MapTileSourceNotifier(ref),
+  MapTileSourceNotifier.new,
 );
 
 /// Notifier that manages the selected map tile source

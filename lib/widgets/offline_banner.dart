@@ -48,7 +48,7 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner>
     ).animate(CurvedAnimation(
       parent: _animationController,
       curve: Curves.easeOut,
-    ));
+    ),);
   }
 
   @override

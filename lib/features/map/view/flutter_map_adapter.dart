@@ -57,7 +57,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   OverlayEntry? _connectivityBannerEntry;
   
   // ZOOM CLAMP: Maximum zoom level to prevent tile loading flicker
-  static const double kMaxZoom = 18.0;
+  static const double kMaxZoom = 18;
   
   // Toggle to force-disable FMTC for troubleshooting
   static const bool kForceDisableFMTC =
@@ -186,15 +186,13 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     );
 
     // Insert overlay at the top-most Overlay
-    final overlay = Overlay.of(context, rootOverlay: true)!;
+    final overlay = Overlay.of(context, rootOverlay: true);
     overlay.insert(_connectivityBannerEntry!);
     if (kDebugMode) debugPrint('[BANNER] Inserted overlay banner: "$message"');
 
     if (!persistent) {
       // Auto-dismiss after 3 seconds
-      _overlayTimer = Timer(const Duration(seconds: 3), () {
-        _removeOverlayBanner();
-      });
+      _overlayTimer = Timer(const Duration(seconds: 3), _removeOverlayBanner);
     }
   }
 
@@ -509,7 +507,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
               debugPrint('[NETWORK] 🟢 Reconnected → triggering map rebuild for fresh tiles');
             }
             // Show transient green overlay banner above all widgets
-            _showOverlayBanner('🟢 Back online – syncing updates', Colors.green.shade700, persistent: false);
+            _showOverlayBanner('🟢 Back online – syncing updates', Colors.green.shade700);
             // Trigger full map rebuild to refresh tiles and resume live markers
             ref.read(mapRebuildProvider.notifier).trigger();
           } else if (!wasOffline && nowOffline) {
@@ -590,9 +588,9 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                 
                 // CRITICAL: Use cached per-layer provider to avoid blink,
                 // still unique per map source to prevent URL caching issues.
-        final _mode = _isOffline ? 'offline' : 'online';
+        final mode = _isOffline ? 'offline' : 'online';
         final layerTileProvider = widget.tileProvider ??
-          _getCachedProvider('base_${tileSource.id}_${ts}_$_mode', storeName: 'tiles_${tileSource.id}');
+          _getCachedProvider('base_${tileSource.id}_${ts}_$mode', storeName: 'tiles_${tileSource.id}');
 
                 // Cache-busting: append timestamp query to force fresh tiles on toggle
                 final sep = tileSource.urlTemplate.contains('?') ? '&' : '?';
@@ -618,7 +616,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                   // Error tiles are logged; offline watermark overlay will indicate state
                   errorTileCallback: (tile, error, stack) {
                     if (kDebugMode) {
-                      debugPrint('[FMTC][ERROR] Base tile ${tileSource.id} ${tile}: ${error.runtimeType} -> $error');
+                      debugPrint('[FMTC][ERROR] Base tile ${tileSource.id} $tile: ${error.runtimeType} -> $error');
                     }
                   },
                 );
@@ -647,8 +645,8 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                 }
                 
                 // Overlay provider cached per source to avoid flicker
-                final _mode = _isOffline ? 'offline' : 'online';
-                final overlayTileProvider = _getCachedProvider('overlay_${tileSource.id}_${ts}_$_mode', storeName: 'overlay_${tileSource.id}');
+                final mode = _isOffline ? 'offline' : 'online';
+                final overlayTileProvider = _getCachedProvider('overlay_${tileSource.id}_${ts}_$mode', storeName: 'overlay_${tileSource.id}');
                 
                 if (kDebugMode && overlayTileProvider.runtimeType.toString().contains('FMTC')) {
                   debugPrint('[FMTC][CLIENT] Overlay layer using shared IOClient');
@@ -740,7 +738,6 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
           if (_isOffline)
             Positioned.fill(
               child: IgnorePointer(
-                ignoring: true,
                 child: CustomPaint(
                   painter: _NoInternetWatermarkPainter(),
                 ),
@@ -816,7 +813,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     // Single device: zoom directly
     if (selectedMarkers.length == 1) {
       final target = selectedMarkers.first.position;
-      safeZoomTo(target, 16.0);
+      safeZoomTo(target, 16);
       if (kDebugMode) {
         debugPrint('[AUTO_ZOOM] AutoZoom → Single device zoom to (${target.latitude.toStringAsFixed(4)}, ${target.longitude.toStringAsFixed(4)}) @ zoom 16');
       }
@@ -843,10 +840,10 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     }
 
     // Calculate bounds
-    double minLat = positions.first.latitude;
-    double maxLat = positions.first.latitude;
-    double minLng = positions.first.longitude;
-    double maxLng = positions.first.longitude;
+    var minLat = positions.first.latitude;
+    var maxLat = positions.first.latitude;
+    var minLng = positions.first.longitude;
+    var maxLng = positions.first.longitude;
 
     for (final pos in positions) {
       if (pos.latitude < minLat) minLat = pos.latitude;
@@ -867,7 +864,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
       CameraFit.bounds(
         bounds: bounds,
         padding: const EdgeInsets.all(50),
-        maxZoom: 16.0, // Don't zoom in too much even if markers are close
+        maxZoom: 16, // Don't zoom in too much even if markers are close
       ),
     );
 
@@ -897,14 +894,14 @@ class _NoInternetWatermarkPainter extends CustomPainter {
     canvas.translate(-size.width / 2, -size.height / 2);
 
     const spacing = 140.0;
-    for (double y = -spacing; y < size.height + spacing; y += spacing) {
-      for (double x = -spacing; x < size.width + spacing; x += spacing) {
+    for (var y = -spacing; y < size.height + spacing; y += spacing) {
+      for (var x = -spacing; x < size.width + spacing; x += spacing) {
         final span = TextSpan(text: text, style: textStyle);
         final tp = TextPainter(
           text: span,
           textAlign: TextAlign.center,
           textDirection: TextDirection.ltr,
-        )..layout(minWidth: 0, maxWidth: spacing);
+        )..layout(maxWidth: spacing);
         tp.paint(canvas, Offset(x, y));
       }
     }

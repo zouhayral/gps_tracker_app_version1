@@ -131,7 +131,7 @@ class ClusterConfig {
 
     // Find closest zoom level in map
     int? closestZoom;
-    double minDiff = double.infinity;
+    var minDiff = double.infinity;
 
     for (final z in pixelDistanceByZoom.keys) {
       final diff = (z - zoomInt).abs().toDouble();
@@ -163,11 +163,9 @@ class ClusterState {
 
   const ClusterState({
     required this.results,
-    this.isLoading = false,
+    required this.markerCount, required this.clusterCount, this.isLoading = false,
     this.error,
     this.lastComputed,
-    required this.markerCount,
-    required this.clusterCount,
     this.usedIsolate = false,
   });
 

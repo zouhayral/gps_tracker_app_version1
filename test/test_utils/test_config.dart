@@ -23,6 +23,8 @@ import 'package:hive/hive.dart' as hive;
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart' as repo;
 import 'package:my_app_gps/core/services/network_connectivity_monitor.dart'
     as netmon;
+import 'package:my_app_gps/controllers/connectivity_coordinator.dart'
+  as coordinator;
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 // Adapter import for toggling tiles
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
@@ -91,5 +93,6 @@ Future<void> setupTestEnvironment() async {
   ws_enhanced.WebSocketManagerEnhanced.testMode = true;
   // Disable background timers that cause pending timers in widget tests
   netmon.NetworkConnectivityMonitor.testMode = true;
+  coordinator.ConnectivityCoordinator.testMode = true;
   repo.VehicleDataRepository.testMode = true;
 }

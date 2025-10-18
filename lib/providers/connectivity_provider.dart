@@ -36,7 +36,7 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
       : super(const ConnectivityState(
           networkAvailable: true,
           backendReachable: true,
-        )) {
+        ),) {
     _initialize();
   }
 
@@ -47,8 +47,6 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
 
     _coordinator = ConnectivityCoordinator(
       onBackendPing: _checkBackendHealth,
-      pingInterval: const Duration(seconds: 30),
-      offlinePingInterval: const Duration(seconds: 10),
     );
 
     // Subscribe to coordinator state changes
@@ -97,7 +95,7 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(seconds: 5),
         responseType: ResponseType.plain, // Parse as string to avoid FormatException
-      ));
+      ),);
 
       // Try a lightweight endpoint (adjust URL to match your backend)
       // Example: GET /api/session (Traccar's session check)

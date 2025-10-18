@@ -18,7 +18,7 @@ void main() {
   });
 
   test('ClusterEngine forms clusters when enough nearby markers', () {
-    final engine = ClusterEngine(config: const ClusterConfig(minClusterSize: 2));
+    final engine = ClusterEngine(config: const ClusterConfig());
     final markers = [
       const ClusterableMarker(id: 'a', position: LatLng(0, 0), metadata: {}),
       const ClusterableMarker(id: 'b', position: LatLng(0.00005, 0.00005), metadata: {}),

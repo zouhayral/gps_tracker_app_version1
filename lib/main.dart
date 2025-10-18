@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -6,6 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_app_gps/app/app_root.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/map/fmtc_config.dart';
+import 'package:my_app_gps/map/tile_http_overrides.dart';
+import 'package:my_app_gps/map/tile_network_client.dart';
+import 'package:my_app_gps/map/tile_probe.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
@@ -13,8 +19,17 @@ Future<void> main() async {
 
   if (kDebugMode || kProfileMode) {
     debugPrint(
-      '[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}',
-    );
+        '[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}',);
+  }
+
+  // Apply global HTTP overrides to stabilise DNS/SSL/socket stack for FMTC & others
+  try {
+    HttpOverrides.global = TileHttpOverrides();
+    // ignore: avoid_print
+    print('[NET] [TileHttpOverrides] Global override active');
+  } catch (e) {
+    // ignore: avoid_print
+    print('[NET][WARN] Failed to set HttpOverrides: $e');
   }
 
   // Initialize SharedPreferences for vehicle data cache
@@ -65,11 +80,43 @@ Future<void> main() async {
         "[FMTC][INIT] Web platform detected; using FMTC's default web backend",
       );
     }
+    // Optionally clear FMTC store if previous cache was built with a bad client
+    if (FmtcConfig.kClearFMTCOnStartup) {
+      try {
+        await const FMTCStore('main').manage.delete();
+        // ignore: avoid_print
+        print("[FMTC][INIT] Store 'main' deleted by config");
+      } catch (e) {
+        // ignore: avoid_print
+        print('[FMTC][INIT][WARN] Failed to delete store: $e');
+      }
+    }
+
     await const FMTCStore('main').manage.create();
     // ignore: avoid_print
     print("[FMTC][INIT] Store 'main' created and ready");
+    
+    // CRITICAL: Inject shared HTTP/1.1 client into FMTC for isolate use
+    // This ensures FMTC's internal tile fetcher uses our configured client
+    try {
+      // Note: FMTC 10.x doesn't have a global client registration API,
+      // but getTileProvider(httpClient: ...) passes it per-provider.
+      // Verify injection by checking getTileProvider logs in map adapter.
+      if (kDebugMode) {
+        debugPrint('[FMTC][CLIENT] Shared IOClient will be injected via getTileProvider()');
+        debugPrint('[FMTC][CLIENT] HTTP/1.1 enforced, User-Agent: ${TileNetworkClient.userAgent}');
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[FMTC][CLIENT][WARN] Client injection note failed: $e');
+    }
+    
     // Confirm global init for diagnostic clarity
     debugPrint('[FMTC][INIT] Initialized globally in main.dart');
+    if (kDebugMode) {
+      // ignore: unawaited_futures
+      TileProbe.run();
+    }
   } catch (e) {
     // ignore: avoid_print
     print('[FMTC][ERROR] FMTC init failed (${e.runtimeType}): $e');
@@ -106,15 +153,12 @@ Future<void> main() async {
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       // Ensure performance overlay is disabled unless explicitly enabled by the user
-      child: Builder(
-        builder: (context) {
-          WidgetsApp.showPerformanceOverlayOverride = false;
-          return const MaterialApp(
+      child: Builder(builder: (context) {
+        WidgetsApp.showPerformanceOverlayOverride = false;
+        return const MaterialApp(
             home: AppRoot(),
-            debugShowCheckedModeBanner: false,
-          );
-        },
-      ),
+            debugShowCheckedModeBanner: false,);
+      },),
     ),
   );
 }

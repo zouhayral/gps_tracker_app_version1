@@ -95,7 +95,7 @@ class PrefetchProgress {
 
   /// Percentage complete (0-100)
   double get progressPercent {
-    if (queuedCount == 0) return 0.0;
+    if (queuedCount == 0) return 0;
     final processed = completedCount + failedCount + skippedCount;
     return (processed / queuedCount * 100).clamp(0, 100);
   }
@@ -138,9 +138,9 @@ class PrefetchProgress {
 
   /// Download rate in tiles per second
   double get tilesPerSecond {
-    if (startTime == null || completedCount == 0) return 0.0;
+    if (startTime == null || completedCount == 0) return 0;
     final elapsed = elapsedTime!;
-    if (elapsed.inMilliseconds == 0) return 0.0;
+    if (elapsed.inMilliseconds == 0) return 0;
     return completedCount / (elapsed.inMilliseconds / 1000);
   }
 

@@ -116,6 +116,38 @@ class VehicleDataRepository {
   // Set from test setup: VehicleDataRepository.testMode = true;
   static bool testMode = false;
 
+  // === Deduplication state ===
+  // Stores last processed payload hash for positions per device
+  final Map<int, String> _lastPositionHash = <int, String>{};
+  // Stores last processed payload hash for device updates per device
+  final Map<int, String> _lastDevicePayloadHash = <int, String>{};
+
+  // Compute a stable hash string for a Position
+  String _hashPosition(Position p) {
+    // Prefer unique position id when available
+    if (p.id != null) return 'pid:${p.id}';
+    // Otherwise derive from key fields rounded to avoid noisy float jitter
+    final lat = p.latitude.toStringAsFixed(6);
+    final lon = p.longitude.toStringAsFixed(6);
+    final spd = p.speed.toStringAsFixed(1);
+    final ts = p.deviceTime.toUtc().millisecondsSinceEpoch;
+    return 'd:${p.deviceId}|t:$ts|lat:$lat|lon:$lon|s:$spd';
+    }
+
+  // Compute a stable hash for device JSON payloads
+  String _hashDevicePayload(Map<String, dynamic> m) {
+    final deviceId = m['id'] ?? m['deviceId'] ?? '';
+    final posId = m['positionId'] ?? '';
+    final status = m['status'] ?? '';
+    final lastUpdate = m['lastUpdate'] ?? m['lastUpdateDt']?.toString() ?? '';
+    final attrs = (m['attributes'] is Map<String, dynamic>)
+        ? (m['attributes'] as Map<String, dynamic>)
+        : const <String, dynamic>{};
+    final ign = attrs['ignition'];
+    final motion = attrs['motion'];
+    return 'd:$deviceId|p:$posId|s:$status|lu:$lastUpdate|i:$ign|m:$motion';
+  }
+
   void _init() {
     // Pre-warm cache synchronously (safe - only reads SharedPreferences)
     _prewarmCache();
@@ -313,6 +345,19 @@ class VehicleDataRepository {
             if (kDebugMode) {
               debugPrint('[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
             }
+
+            // Deduplicate identical device payloads
+            if (deviceId != null) {
+              final hash = _hashDevicePayload(d);
+              final prev = _lastDevicePayloadHash[deviceId];
+              if (prev != null && prev == hash) {
+                if (kDebugMode) {
+                  debugPrint('[WS] 🔁 Duplicate skipped for deviceId=$deviceId');
+                }
+                continue; // Skip processing identical payload
+              }
+              _lastDevicePayloadHash[deviceId] = hash;
+            }
             if (posId != null) {
               try {
                 final p = await positionsService.latestByPositionId(posId);
@@ -378,6 +423,17 @@ class VehicleDataRepository {
     if (positions.isEmpty) return;
 
     for (final pos in positions) {
+      // Deduplicate identical position updates per device
+      final hash = _hashPosition(pos);
+      final prev = _lastPositionHash[pos.deviceId];
+      if (prev != null && prev == hash) {
+        if (kDebugMode) {
+          debugPrint('[WS] 🔁 Duplicate skipped for deviceId=${pos.deviceId}');
+        }
+        continue; // Skip duplicate
+      }
+      _lastPositionHash[pos.deviceId] = hash;
+
       final snapshot = VehicleDataSnapshot.fromPosition(pos);
 
       // Debounce: Delay emitting to notifier to avoid flooding

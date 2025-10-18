@@ -101,7 +101,7 @@ class ClusterMarkerGenerator {
     // Draw outer glow (for depth)
     final glowPaint = Paint()
       ..color = colors.primary.withValues(alpha: 0.3)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
 
     canvas.drawCircle(center, radius, glowPaint);
 
@@ -190,11 +190,11 @@ class ClusterMarkerGenerator {
   static double _getDiameterForSize(ClusterMarkerSize size) {
     switch (size) {
       case ClusterMarkerSize.small:
-        return 40.0;
+        return 40;
       case ClusterMarkerSize.medium:
-        return 56.0;
+        return 56;
       case ClusterMarkerSize.large:
-        return 70.0;
+        return 70;
     }
   }
 

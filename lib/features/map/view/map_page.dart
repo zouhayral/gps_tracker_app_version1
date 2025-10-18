@@ -37,8 +37,7 @@ import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
-import 'package:my_app_gps/services/websocket_manager.dart';
-import 'package:my_app_gps/widgets/map_layer_toggle.dart';
+// import 'package:my_app_gps/services/websocket_manager.dart';
 
 // Clean rebuilt MapPage implementation
 // Features:
@@ -794,6 +793,51 @@ class _MapPageState extends ConsumerState<MapPage>
     if (changed) setState(() {});
   }
 
+  /// Show layer selection menu
+  void _showLayerMenu(BuildContext context, MapTileSource activeLayer) {
+    final notifier = ref.read(mapTileSourceProvider.notifier);
+    final button = context.findRenderObject()! as RenderBox;
+    final overlay = Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu<MapTileSource>(
+      context: context,
+      position: position,
+      items: MapTileProviders.all.map((source) {
+        return PopupMenuItem<MapTileSource>(
+          value: source,
+          child: Row(
+            children: [
+              Icon(
+                source.id == MapTileProviders.esriSatellite.id
+                    ? Icons.satellite_alt
+                    : Icons.map,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(source.name)),
+              if (source.id == activeLayer.id)
+                const Icon(Icons.check, size: 18, color: Color(0xFFA6CD27)),
+            ],
+          ),
+        );
+      }).toList(),
+    ).then((selectedSource) {
+      if (selectedSource != null) {
+        if (kDebugMode) {
+          debugPrint('[TOGGLE] User switched to ${selectedSource.id} (${selectedSource.name})');
+        }
+        notifier.setSource(selectedSource);
+      }
+    });
+  }
+
   // Ensure we have last-known positions for the given selected devices by
   // asking the PositionsService for latest positions. This supplements
   // WebSocket and DAO data when they are unavailable.
@@ -956,16 +1000,6 @@ class _MapPageState extends ConsumerState<MapPage>
     // Note: markerCache not used directly anymore - background isolate handles it
 
     return Scaffold(
-      floatingActionButton: Builder(
-        builder: (context) {
-          final activeLayer = ref.watch(mapTileSourceProvider);
-          final notifier = ref.read(mapTileSourceProvider.notifier);
-          return MapLayerToggleButton(
-            current: activeLayer,
-            onChanged: notifier.setSource,
-          );
-        },
-      ),
       body: SafeArea(
         child: devicesAsync.when(
           data: (devices) {
@@ -1140,7 +1174,7 @@ class _MapPageState extends ConsumerState<MapPage>
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.7),
+                                color: Colors.black.withValues(alpha: 0.7),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Row(
@@ -1177,12 +1211,6 @@ class _MapPageState extends ConsumerState<MapPage>
                     top: 56,
                     left: 16,
                     child: _RebuildBadge(label: 'MapPage'),
-                  ),
-                if (MapDebugFlags.showMarkerPerformance)
-                  const Positioned(
-                    top: 56,
-                    right: 16,
-                    child: _MarkerPerformanceOverlay(),
                   ),
                 // Search + suggestions
                 Positioned(
@@ -1475,6 +1503,20 @@ class _MapPageState extends ConsumerState<MapPage>
                         onTap: () {
                           // Call the public auto-zoom method on FlutterMapAdapter
                           _mapKey.currentState?.autoZoomToSelected();
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      // Layer toggle button
+                      Builder(
+                        builder: (context) {
+                          final activeLayer = ref.watch(mapTileSourceProvider);
+                          return _ActionButton(
+                            icon: Icons.layers,
+                            tooltip: 'Map layer: ${activeLayer.name}',
+                            onTap: () {
+                              _showLayerMenu(context, activeLayer);
+                            },
+                          );
                         },
                       ),
                     ],
@@ -1850,7 +1892,7 @@ class _MapPageState extends ConsumerState<MapPage>
                       gaplessPlayback: true,
                     ),
                   ),
-                // TODO: Add full UI overlay (search bar, bottom panel, etc.)
+                // TODO(my_app): Add full UI overlay (search bar, bottom panel, etc.)
                 // For now, this shows the map with markers
               ],
             ),
@@ -1973,17 +2015,16 @@ class _ActionButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     this.onTap,
-    this.disabled = false,
     this.isLoading = false,
   });
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
-  final bool disabled;
   final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
+  final disabled = onTap == null || isLoading;
     final bg = disabled ? Colors.white.withValues(alpha: 0.6) : Colors.white;
     final fg = disabled ? Colors.black26 : Colors.black87;
     return Material(
@@ -1991,7 +2032,7 @@ class _ActionButton extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 4,
       child: InkWell(
-        onTap: disabled || isLoading ? null : onTap,
+        onTap: disabled ? null : onTap,
         borderRadius: BorderRadius.circular(18),
         child: Tooltip(
           message: tooltip,
@@ -2377,70 +2418,6 @@ class _StatusStat extends StatelessWidget {
               ),
         ),
       );
-}
-
-class _ConnectionStatusBadge extends StatelessWidget {
-  const _ConnectionStatusBadge({
-    required this.connectionStatus,
-    required this.positionsCount,
-  });
-  final WebSocketStatus connectionStatus;
-  final int positionsCount;
-
-  @override
-  Widget build(BuildContext context) {
-    Color color = Colors.grey;
-    var icon = Icons.wifi_off;
-    var tooltip = 'Disconnected';
-    switch (connectionStatus) {
-      case WebSocketStatus.connected:
-        color = const Color(0xFFA6CD27); // Green
-        icon = Icons.wifi;
-        tooltip = 'Connected • $positionsCount positions';
-      case WebSocketStatus.connecting:
-        color = Colors.orange;
-        icon = Icons.wifi_find;
-        tooltip = 'Connecting...';
-      case WebSocketStatus.retrying:
-        color = Colors.orange;
-        icon = Icons.wifi_off;
-        tooltip = 'Reconnecting...';
-      case WebSocketStatus.disconnected:
-        color = Colors.grey;
-        icon = Icons.wifi_off;
-        tooltip = 'Disconnected';
-    }
-
-    return Material(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      elevation: 4,
-      child: Tooltip(
-        message: tooltip,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: color),
-              if (positionsCount > 0 &&
-                  connectionStatus == WebSocketStatus.connected) ...[
-                const SizedBox(width: 4),
-                Text(
-                  '$positionsCount',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Offline banner widget that appears when network is unavailable
