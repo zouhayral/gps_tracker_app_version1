@@ -1407,13 +1407,6 @@ class _MapPageState extends ConsumerState<MapPage>
                   right: 16,
                   child: Column(
                     children: [
-                      // Connection status indicator
-                      _ConnectionStatusBadge(
-                        connectionStatus: ref
-                            .watch(webSocketProvider.select((s) => s.status)),
-                        positionsCount: positions.length,
-                      ),
-                      const SizedBox(height: 10),
                       _ActionButton(
                         icon: Icons.refresh,
                         tooltip: 'Refresh data',
@@ -1473,14 +1466,16 @@ class _MapPageState extends ConsumerState<MapPage>
                           }
                         },
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       _ActionButton(
                         icon: Icons.center_focus_strong,
                         tooltip: _selectedIds.isNotEmpty
-                            ? 'Focus selected'
-                            : 'Select a device first',
-                        onTap: _selectedIds.isNotEmpty ? _focusSelected : null,
-                        disabled: _selectedIds.isEmpty,
+                            ? 'Auto-zoom to selected'
+                            : 'Auto-zoom (all devices)',
+                        onTap: () {
+                          // Call the public auto-zoom method on FlutterMapAdapter
+                          _mapKey.currentState?.autoZoomToSelected();
+                        },
                       ),
                     ],
                   ),

@@ -109,8 +109,7 @@ class RebuildTracker {
     final total = _rebuildCounts.values.reduce((a, b) => a + b);
     final widgetCount = _rebuildCounts.length;
     debugPrint(
-      '[RebuildTracker] Total: $total rebuilds across $widgetCount widgets',
-    );
+        '[RebuildTracker] Total: $total rebuilds across $widgetCount widgets',);
   }
 
   /// Reset tracking data

@@ -11,6 +11,7 @@ import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 import 'package:my_app_gps/core/map/marker_layer_cache.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
+import 'package:my_app_gps/features/map/providers/map_state_providers.dart';
 import 'package:my_app_gps/features/map/view/map_marker.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/map/tile_network_client.dart';
@@ -751,6 +752,128 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     );
       }, // End of outer Consumer builder
     ); // End of outer Consumer
+  }
+
+  /// 🎯 Auto-zoom to selected device(s) (Public API)
+  /// 
+  /// Zooms to selected device(s):
+  /// - Single device: centers and zooms to that device at zoom level 16
+  /// - Multiple devices: fits all devices in viewport with padding
+  /// 
+  /// Call this from external widgets (e.g., action buttons in MapPage)
+  void autoZoomToSelected() {
+    if (!_mapReady) {
+      if (kDebugMode) {
+        debugPrint('[AUTO_ZOOM] ⚠️ Map not ready yet');
+      }
+      return;
+    }
+
+    // Get selected devices from Riverpod providers
+    final singleSelection = ref.read(selectedDeviceIdProvider);
+    final multiSelection = ref.read(selectedDeviceIdsProvider);
+    final multiMode = ref.read(multiSelectionModeProvider);
+
+    // Determine which devices are selected
+    Set<int> selectedIds;
+    if (multiMode && multiSelection.isNotEmpty) {
+      selectedIds = multiSelection;
+    } else if (singleSelection != null) {
+      selectedIds = {singleSelection};
+    } else {
+      // No selection - show all devices
+      final allMarkers = widget.markersNotifier?.value ?? widget.markers;
+      selectedIds = allMarkers
+          .map((m) => int.tryParse(m.id))
+          .whereType<int>()
+          .toSet();
+    }
+
+    if (selectedIds.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('[AUTO_ZOOM] ⚠️ No devices to zoom to');
+      }
+      return;
+    }
+
+    // Get positions for selected devices
+    final allMarkers = widget.markersNotifier?.value ?? widget.markers;
+    final selectedMarkers = allMarkers
+        .where((m) {
+          final id = int.tryParse(m.id);
+          return id != null && selectedIds.contains(id);
+        })
+        .where((m) => _validLatLng(m.position))
+        .toList();
+
+    if (selectedMarkers.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('[AUTO_ZOOM] ⚠️ No valid positions for selected devices');
+      }
+      return;
+    }
+
+    // Single device: zoom directly
+    if (selectedMarkers.length == 1) {
+      final target = selectedMarkers.first.position;
+      safeZoomTo(target, 16.0);
+      if (kDebugMode) {
+        debugPrint('[AUTO_ZOOM] AutoZoom → Single device zoom to (${target.latitude.toStringAsFixed(4)}, ${target.longitude.toStringAsFixed(4)}) @ zoom 16');
+      }
+      return;
+    }
+
+    // Multiple devices: fit bounds
+    final positions = selectedMarkers.map((m) => m.position).toList();
+    _fitBounds(positions);
+    if (kDebugMode) {
+      debugPrint('[AUTO_ZOOM] AutoZoom → Fit bounds for ${positions.length} devices');
+    }
+  }
+
+  /// 🎯 Fit camera to show all given positions with padding
+  /// 
+  /// Calculates bounds from positions and uses mapController.fitCamera()
+  /// to zoom out so all markers are visible.
+  void _fitBounds(List<LatLng> positions) {
+    if (positions.isEmpty) return;
+    if (!_mapReady) {
+      _enqueueWhenReady(() => _fitBounds(positions));
+      return;
+    }
+
+    // Calculate bounds
+    double minLat = positions.first.latitude;
+    double maxLat = positions.first.latitude;
+    double minLng = positions.first.longitude;
+    double maxLng = positions.first.longitude;
+
+    for (final pos in positions) {
+      if (pos.latitude < minLat) minLat = pos.latitude;
+      if (pos.latitude > maxLat) maxLat = pos.latitude;
+      if (pos.longitude < minLng) minLng = pos.longitude;
+      if (pos.longitude > maxLng) maxLng = pos.longitude;
+    }
+
+    // Create bounds
+    final bounds = LatLngBounds(
+      LatLng(minLat, minLng),
+      LatLng(maxLat, maxLng),
+    );
+
+    // Fit camera with padding and max zoom constraint
+    // Use CameraFit.bounds() with padding and maxZoom
+    mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(50),
+        maxZoom: 16.0, // Don't zoom in too much even if markers are close
+      ),
+    );
+
+    if (kDebugMode) {
+      debugPrint('[AUTO_ZOOM] 📐 Fitted bounds: (${minLat.toStringAsFixed(4)}, ${minLng.toStringAsFixed(4)}) to (${maxLat.toStringAsFixed(4)}, ${maxLng.toStringAsFixed(4)})');
+    }
   }
 }
 

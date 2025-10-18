@@ -32,10 +32,9 @@ class PerformanceMetricsService {
   int Function()? _markerCountSupplier;
 
   /// Start sampling metrics. Updates latestMetrics frequently and writes CSV every 5s
-  void start({
-    Duration sampleInterval = const Duration(seconds: 1),
-    Duration csvInterval = const Duration(seconds: 5),
-  }) {
+  void start(
+      {Duration sampleInterval = const Duration(seconds: 1),
+      Duration csvInterval = const Duration(seconds: 5),}) {
     if (_isRunning) return;
     _isRunning = true;
 
@@ -65,8 +64,7 @@ class PerformanceMetricsService {
           } else {
             if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {
               debugPrint(
-                '[PerfMetrics] Skipping CSV export on mobile (sandboxed FS)',
-              );
+                  '[PerfMetrics] Skipping CSV export on mobile (sandboxed FS)',);
             }
           }
         } catch (e) {

@@ -31,21 +31,19 @@ class MarkerCache {
         continue;
       }
       if (_valid(p.latitude, p.longitude)) {
-        markers.add(
-          _cache.putIfAbsent(
-            deviceId,
-            () => MapMarkerData(
-              id: '$deviceId',
-              position: LatLng(p.latitude, p.longitude),
-              isSelected: selectedIds.contains(deviceId),
-              meta: {
-                'name': name,
-                'speed': p.speed,
-                'course': p.course,
-              },
-            ),
+        markers.add(_cache.putIfAbsent(
+          deviceId,
+          () => MapMarkerData(
+            id: '$deviceId',
+            position: LatLng(p.latitude, p.longitude),
+            isSelected: selectedIds.contains(deviceId),
+            meta: {
+              'name': name,
+              'speed': p.speed,
+              'course': p.course,
+            },
           ),
-        );
+        ),);
         processedIds.add(deviceId);
       }
     }
@@ -63,17 +61,15 @@ class MarkerCache {
       final lat = _asDouble(d['latitude']);
       final lon = _asDouble(d['longitude']);
       if (_valid(lat, lon)) {
-        markers.add(
-          _cache.putIfAbsent(
-            deviceId,
-            () => MapMarkerData(
-              id: '$deviceId',
-              position: LatLng(lat!, lon!),
-              isSelected: selectedIds.contains(deviceId),
-              meta: {'name': name},
-            ),
+        markers.add(_cache.putIfAbsent(
+          deviceId,
+          () => MapMarkerData(
+            id: '$deviceId',
+            position: LatLng(lat!, lon!),
+            isSelected: selectedIds.contains(deviceId),
+            meta: {'name': name},
           ),
-        );
+        ),);
       }
     }
     // Defensive: filter out any markers with invalid positions just in case
