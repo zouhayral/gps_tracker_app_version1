@@ -147,6 +147,15 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
     // FMTC.instance('main').setMode(FMTCMode.hitOnly);
     // For now, this is handled by not fetching tiles when offline
 
+    // 🎯 NEW: Pause WebSocket retries when offline
+    try {
+      _ref.read(webSocketProvider.notifier).pause();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[CONNECTIVITY_PROVIDER] ⚠️ Failed to pause WebSocket: $e');
+      }
+    }
+
     // Note: Map rebuild NOT needed on offline transition
     // Cached tiles remain visible
   }
@@ -159,6 +168,15 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
 
     // TODO: Restore FMTC normal mode
     // FMTC.instance('main').setMode(FMTCMode.normal);
+
+    // 🎯 NEW: Resume WebSocket when back online
+    try {
+      _ref.read(webSocketProvider.notifier).resume();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[CONNECTIVITY_PROVIDER] ⚠️ Failed to resume WebSocket: $e');
+      }
+    }
 
     // Trigger map rebuild to refresh tiles and resume live markers
     // This is handled by FlutterMapAdapter listening to this provider

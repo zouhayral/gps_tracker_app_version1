@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
@@ -46,6 +47,13 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     with TickerProviderStateMixin {
   final mapController = MapController();
   final _moveThrottler = Throttler(const Duration(milliseconds: 300));
+  Timer? _overlayTimer; // auto-hide green online banner (for overlay)
+  bool _isOffline = false;
+  // Connectivity banner state is presented via overlay entries; local fields removed
+  // Map readiness: guard MapController access until FlutterMap has rendered once
+  bool _mapReady = false;
+  final List<VoidCallback> _onMapReadyQueue = [];
+  OverlayEntry? _connectivityBannerEntry;
   
   // ZOOM CLAMP: Maximum zoom level to prevent tile loading flicker
   static const double kMaxZoom = 18.0;
@@ -62,6 +70,8 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   // - User-Agent for OpenStreetMap compliance
   // - Short timeouts for fast failure
   late final IOClient _httpClient;
+  // Offline visual: Instead of per-tile placeholder, we overlay a subtle watermark
+  // when offline to indicate missing network; cached tiles remain visible.
 
   // Cache tile providers per (layer, source) to avoid recreating on every build,
   // which can cause visible blinking. We still separate base/overlay providers
@@ -77,6 +87,10 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
         ? NetworkTileProvider(httpClient: _httpClient)
         : FMTCStore(storeName ?? 'main').getTileProvider(
             httpClient: _httpClient,
+            // Toggle loading policy based on connectivity
+            loadingStrategy: _isOffline
+                ? BrowseLoadingStrategy.cacheOnly
+                : BrowseLoadingStrategy.onlineFirst,
           );
     _tileProviderCache[key] = created;
     return created;
@@ -95,6 +109,8 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     super.initState();
     // Initialize dedicated HTTP/1.1 client for reliable FMTC tile loading
     _httpClient = TileNetworkClient.shared();
+    // Initialize offline flag from provider immediately
+    _isOffline = ref.read(connectivityProvider).isOffline;
     // CRITICAL FIX: Initial camera fit must be IMMEDIATE to show selected devices
     // Without this, map shows (0,0) for 300ms+ while throttler delays the fit
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFit(immediate: true));
@@ -103,29 +119,98 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
       debugPrint('[MAP_REBUILD] 🎬 FlutterMapAdapter initialized with persistent MapController');
     }
 
-    // NETWORK RESILIENCE: Listen for reconnect events to trigger map refresh
-    ref.listenManual(connectivityProvider, (previous, next) {
-      if (previous != null && previous.isOffline && next.isOnline) {
-        if (kDebugMode) {
-          debugPrint(
-            '[NETWORK] 🟢 Reconnected → triggering map rebuild for fresh tiles',
-          );
-        }
-        // Trigger full map rebuild to refresh tiles and resume live markers
-        ref.read(mapRebuildProvider.notifier).trigger();
-      }
-    });
+    // NOTE: connectivity listening is registered in build() via ref.listen
   }
 
   @override
   void dispose() {
     // Do not close the shared client here; it may be reused elsewhere.
+    _overlayTimer?.cancel();
+    _removeOverlayBanner();
     mapController.dispose();
     if (kDebugMode) {
       debugPrint('[MAP_REBUILD] 🗑️ FlutterMapAdapter disposed');
     }
     super.dispose();
   }
+
+  void _showOverlayBanner(String message, Color color, {bool persistent = false}) {
+    // Cancel any existing transient timer
+    _overlayTimer?.cancel();
+
+    // If an entry already exists, update by removing first
+    _removeOverlayBanner();
+
+    _connectivityBannerEntry = OverlayEntry(
+      builder: (context) {
+        // Use SafeArea to avoid system status bar intrusion
+        return SafeArea(
+          minimum: const EdgeInsets.only(top: 8),
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6, offset: const Offset(0,2)),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            message,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    // Insert overlay at the top-most Overlay
+    final overlay = Overlay.of(context, rootOverlay: true)!;
+    overlay.insert(_connectivityBannerEntry!);
+    if (kDebugMode) debugPrint('[BANNER] Inserted overlay banner: "$message"');
+
+    if (!persistent) {
+      // Auto-dismiss after 3 seconds
+      _overlayTimer = Timer(const Duration(seconds: 3), () {
+        _removeOverlayBanner();
+      });
+    }
+  }
+
+  void _removeOverlayBanner() {
+    try {
+      if (_connectivityBannerEntry != null) {
+        if (kDebugMode) debugPrint('[BANNER] Removing overlay banner');
+        _connectivityBannerEntry!.remove();
+        _connectivityBannerEntry = null;
+      }
+    } catch (e, st) {
+      if (kDebugMode) debugPrint('[BANNER] Error removing overlay: $e\n$st');
+    }
+  }
+
+  // Public entry-point for external callers/tests
+  void updateCacheMode(bool isOffline) => _updateCacheMode(isOffline);
 
   void _maybeFit({bool immediate = false}) {
     final fit = widget.cameraFit;
@@ -173,11 +258,14 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
       // DEFENSIVE: Validate center before move
       if (immediate) {
         // Immediate camera move for initial load or user-triggered actions
-        _animatedMove(fit.center!, mapController.camera.zoom);
+        final currentZoom = _mapReady ? mapController.camera.zoom : 13.0;
+        _animatedMove(fit.center!, currentZoom);
       } else {
         // Throttled move for automatic updates
-        _moveThrottler
-            .run(() => _animatedMove(fit.center!, mapController.camera.zoom));
+        _moveThrottler.run(() {
+          final currentZoom = _mapReady ? mapController.camera.zoom : 13.0;
+          _animatedMove(fit.center!, currentZoom);
+        });
       }
     }
   }
@@ -266,6 +354,10 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     if (clampedZoom != zoom && kDebugMode) {
       debugPrint('[MAP] Zoom clamped to $kMaxZoom (requested: ${zoom.toStringAsFixed(1)})');
     }
+    if (!_mapReady) {
+      _enqueueWhenReady(() => mapController.move(center, clampedZoom));
+      return;
+    }
     mapController.move(center, clampedZoom);
   }
 
@@ -278,6 +370,10 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     
     // REBUILD ISOLATION: Camera moves via MapController do NOT trigger widget rebuilds
     // This is critical for performance - moving the camera updates internal state only
+    if (!_mapReady) {
+      _enqueueWhenReady(() => mapController.move(dest, clampedZoom));
+      return;
+    }
     mapController.move(dest, clampedZoom);
 
     if (kDebugMode) {
@@ -292,6 +388,30 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     if (point == null) return false;
     if (point.latitude.isNaN || point.longitude.isNaN) return false;
     return point.latitude.abs() <= 90 && point.longitude.abs() <= 180;
+  }
+
+  // Toggle FMTC cache behavior according to connectivity by recreating tile providers
+  // Offline -> cacheOnly loadingStrategy (serve cache only, no network)
+  // Online  -> onlineFirst loadingStrategy (fetch + cache)
+  void _updateCacheMode(bool isOffline) {
+    // Clearing providers ensures next build creates providers with correct loadingStrategy
+    _tileProviderCache.clear();
+    if (kDebugMode) {
+      debugPrint('[FMTC] Cache mode: ${isOffline ? 'hit-only (cacheOnly)' : 'online-first'}');
+    }
+    // Force a map rebuild to apply the change immediately
+    if (mounted) {
+      ref.read(mapRebuildProvider.notifier).trigger();
+    }
+  }
+
+  // Queue actions until FlutterMap is ready, then run them in order
+  void _enqueueWhenReady(VoidCallback action) {
+    if (_mapReady) {
+      action();
+    } else {
+      _onMapReadyQueue.add(action);
+    }
   }
 
   // Helper to build marker cluster layer with caching
@@ -373,6 +493,29 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   // This ensures the map completely rebuilds when switching between OSM and Satellite
     return Consumer(
       builder: (context, ref, _) {
+        // Register connectivity listener during build (Riverpod-safe)
+        ref.listen(connectivityProvider, (previous, next) {
+          final wasOffline = previous?.isOffline ?? false;
+          final nowOffline = next.isOffline;
+
+          // Update local offline flag for tile behavior
+          _isOffline = nowOffline;
+          // Update FMTC cache mode on every transition
+          _updateCacheMode(nowOffline);
+
+          if (wasOffline && !nowOffline) {
+            if (kDebugMode) {
+              debugPrint('[NETWORK] 🟢 Reconnected → triggering map rebuild for fresh tiles');
+            }
+            // Show transient green overlay banner above all widgets
+            _showOverlayBanner('🟢 Back online – syncing updates', Colors.green.shade700, persistent: false);
+            // Trigger full map rebuild to refresh tiles and resume live markers
+            ref.read(mapRebuildProvider.notifier).trigger();
+          } else if (!wasOffline && nowOffline) {
+            // Show persistent red overlay banner above all widgets
+            _showOverlayBanner('🔴 Offline mode – using cache', Colors.red.shade700, persistent: true);
+          }
+        });
         final provider = ref.watch(mapTileSourceProvider);
         final lastSwitchTs = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
         final rebuildEpoch = ref.watch(mapRebuildProvider);
@@ -382,12 +525,16 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
         }
 
         // If provider id changed, clear cached tile providers to force fresh instances
-        if (_lastProviderId != provider.id) {
+  if (_lastProviderId != provider.id) {
           if (kDebugMode) {
             debugPrint('[MAP_REBUILD] 🔁 Provider changed ${_lastProviderId ?? 'null'} → ${provider.id}; clearing tile provider cache');
           }
           _tileProviderCache.clear();
           _lastProviderId = provider.id;
+          // Ensure subsequent providers are created with correct loading strategy
+          if (kDebugMode) {
+            debugPrint('[FMTC] Ensured mode applied for new provider: ${_isOffline ? 'hit-only' : 'online-first'}');
+          }
         }
         
         // OPTIMIZATION: Wrap FlutterMap in RepaintBoundary to isolate render pipeline
@@ -407,6 +554,23 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
               initialZoom: 2,
               maxZoom: kMaxZoom, // ZOOM CLAMP: Prevent flicker from excessive zoom
               onTap: (_, __) => widget.onMapTap?.call(),
+              onMapReady: () {
+                if (!_mapReady) {
+                  _mapReady = true;
+                  if (kDebugMode) debugPrint('[MAP] ✅ Map ready, flushing ${_onMapReadyQueue.length} queued actions');
+                  // Flush queued actions
+                  for (final a in List<VoidCallback>.from(_onMapReadyQueue)) {
+                    try {
+                      a();
+                    } catch (e, st) {
+                      if (kDebugMode) {
+                        debugPrint('[MAP] ⚠️ Error running queued action: $e\n$st');
+                      }
+                    }
+                  }
+                  _onMapReadyQueue.clear();
+                }
+              },
             ),
             children: [
           // CRITICAL FIX: Tile layers must be direct children of FlutterMap
@@ -425,8 +589,9 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                 
                 // CRITICAL: Use cached per-layer provider to avoid blink,
                 // still unique per map source to prevent URL caching issues.
+        final _mode = _isOffline ? 'offline' : 'online';
         final layerTileProvider = widget.tileProvider ??
-          _getCachedProvider('base_${tileSource.id}_$ts', storeName: 'tiles_${tileSource.id}');
+          _getCachedProvider('base_${tileSource.id}_${ts}_$_mode', storeName: 'tiles_${tileSource.id}');
 
                 // Cache-busting: append timestamp query to force fresh tiles on toggle
                 final sep = tileSource.urlTemplate.contains('?') ? '&' : '?';
@@ -449,6 +614,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                   maxZoom: tileSource.maxZoom.toDouble(),
                   minZoom: tileSource.minZoom.toDouble(),
                   tileProvider: layerTileProvider,
+                  // Error tiles are logged; offline watermark overlay will indicate state
                   errorTileCallback: (tile, error, stack) {
                     if (kDebugMode) {
                       debugPrint('[FMTC][ERROR] Base tile ${tileSource.id} ${tile}: ${error.runtimeType} -> $error');
@@ -480,7 +646,8 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                 }
                 
                 // Overlay provider cached per source to avoid flicker
-                final overlayTileProvider = _getCachedProvider('overlay_${tileSource.id}_$ts', storeName: 'overlay_${tileSource.id}');
+                final _mode = _isOffline ? 'offline' : 'online';
+                final overlayTileProvider = _getCachedProvider('overlay_${tileSource.id}_${ts}_$_mode', storeName: 'overlay_${tileSource.id}');
                 
                 if (kDebugMode && overlayTileProvider.runtimeType.toString().contains('FMTC')) {
                   debugPrint('[FMTC][CLIENT] Overlay layer using shared IOClient');
@@ -502,6 +669,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                     maxZoom: tileSource.maxZoom.toDouble(),
                     minZoom: tileSource.minZoom.toDouble(),
                     tileProvider: overlayTileProvider,
+                    // Error tiles are logged; offline watermark overlay will indicate state
                   ),
                 );
               },
@@ -567,6 +735,17 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
               },
             ),
           ),
+          // Offline watermark overlay (non-blocking, ignores input)
+          if (_isOffline)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: true,
+                child: CustomPaint(
+                  painter: _NoInternetWatermarkPainter(),
+                ),
+              ),
+            ),
+          // Connectivity banner is shown via OverlayEntry (above all widgets)
         ],
       ),
     );
@@ -576,3 +755,40 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
 }
 
 // Marker icon visuals moved to MapMarkerWidget to support per-marker rebuild isolation.
+
+class _NoInternetWatermarkPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Draw a repeated diagonal text watermark
+    const text = 'NO INTERNET';
+    final textStyle = TextStyle(
+      color: Colors.black.withOpacity(0.15),
+      fontSize: 24,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.5,
+    );
+
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.rotate(-0.6); // ~-34 degrees
+    canvas.translate(-size.width / 2, -size.height / 2);
+
+    const spacing = 140.0;
+    for (double y = -spacing; y < size.height + spacing; y += spacing) {
+      for (double x = -spacing; x < size.width + spacing; x += spacing) {
+        final span = TextSpan(text: text, style: textStyle);
+        final tp = TextPainter(
+          text: span,
+          textAlign: TextAlign.center,
+          textDirection: TextDirection.ltr,
+        )..layout(minWidth: 0, maxWidth: spacing);
+        tp.paint(canvas, Offset(x, y));
+      }
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _NoInternetWatermarkPainter oldDelegate) => false;
+}

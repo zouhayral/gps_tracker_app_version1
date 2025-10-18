@@ -8,10 +8,25 @@ import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/providers/connectivity_provider.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Provider for cache (requires SharedPreferences) - PUBLIC for override in main
+final vehicleDataCacheProvider = Provider<VehicleDataCache>((ref) {
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return VehicleDataCache(prefs: prefs);
+});
+
+/// Provider for SharedPreferences (async init) - PUBLIC for override in main
+final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
+  final fromHolder = SharedPrefsHolder.instance;
+  if (fromHolder != null) return fromHolder;
+  throw UnimplementedError('SharedPreferences must be overridden in main.dart');
+});
 
 /// Provider for the vehicle data repository singleton
 final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
@@ -29,21 +44,24 @@ final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
     telemetryDao: telemetryDao,
   );
 
+  // Listen to unified connectivity and update repository/WS behavior
+  ref.listen(connectivityProvider, (previous, next) {
+    // Update repository offline flag to guard REST calls and timers
+    repo.setOffline(next.isOffline);
+
+    // Auto-manage WebSocket lifecycle to prevent retry spam when offline
+    final wsManager = ref.read(webSocketManagerProvider.notifier);
+    if (next.isOffline) {
+      wsManager.suspend();
+    } else {
+      wsManager.resume();
+      // Kick a refresh on reconnect (best-effort)
+      repo.refreshAll();
+    }
+  });
+
   ref.onDispose(repo.dispose);
   return repo;
-});
-
-/// Provider for cache (requires SharedPreferences) - PUBLIC for override in main
-final vehicleDataCacheProvider = Provider<VehicleDataCache>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return VehicleDataCache(prefs: prefs);
-});
-
-/// Provider for SharedPreferences (async init) - PUBLIC for override in main
-final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  final fromHolder = SharedPrefsHolder.instance;
-  if (fromHolder != null) return fromHolder;
-  throw UnimplementedError('SharedPreferences must be overridden in main.dart');
 });
 
 /// Centralized repository for vehicle data.
@@ -86,8 +104,9 @@ class VehicleDataRepository {
   // REST fallback timer
   Timer? _fallbackTimer;
 
-  // Connection state
+  // Connection state flags
   bool _isWebSocketConnected = false;
+  bool _isOffline = false; // unified offline flag (network or backend)
 
   static const _debounceDelay = Duration(milliseconds: 300);
   static const _minFetchInterval = Duration(seconds: 5);
@@ -98,12 +117,10 @@ class VehicleDataRepository {
   static bool testMode = false;
 
   void _init() {
-    // Defer WebSocket connection to avoid reading uninitialized providers
     // Pre-warm cache synchronously (safe - only reads SharedPreferences)
     _prewarmCache();
 
     // Fire-and-forget: apply telemetry retention policy (30 days) on startup
-    // This runs once and does not block initialization.
     unawaited(_applyTelemetryRetention());
 
     // Defer WebSocket subscription to after provider initialization completes
@@ -119,10 +136,25 @@ class VehicleDataRepository {
       }
 
       if (kDebugMode) {
-        debugPrint(
-            '[VehicleRepo] Initialized with deferred WebSocket connection',);
+        debugPrint('[VehicleRepo] Initialized with deferred WebSocket connection');
       }
     });
+  }
+
+  /// Update offline state from connectivity provider
+  void setOffline(bool offline) {
+    if (_isOffline == offline) return;
+    _isOffline = offline;
+    if (kDebugMode) {
+      debugPrint('[VehicleRepo] Connectivity changed → offline=$_isOffline');
+    }
+    if (_isOffline) {
+      _fallbackTimer?.cancel();
+    } else {
+      if (!VehicleDataRepository.testMode) {
+        _startFallbackPolling();
+      }
+    }
   }
 
   /// Deletes telemetry records older than 30 days.
@@ -131,8 +163,7 @@ class VehicleDataRepository {
       final cutoff = DateTime.now().toUtc().subtract(const Duration(days: 30));
       await telemetryDao.deleteOlderThan(cutoff);
       if (kDebugMode) {
-        debugPrint(
-            '[VehicleRepo] Telemetry retention applied. Cutoff: $cutoff',);
+        debugPrint('[VehicleRepo] Telemetry retention applied. Cutoff: $cutoff');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -142,29 +173,22 @@ class VehicleDataRepository {
   }
 
   /// Pre-warm cache by loading all cached snapshots into notifiers
-  /// This ensures instant marker rendering on app startup
   void _prewarmCache() {
     try {
       final allCached = cache.loadAll();
-
       if (allCached.isEmpty) {
         if (kDebugMode) {
           debugPrint('[VehicleRepo] No cached data to prewarm');
         }
         return;
       }
-
       for (final entry in allCached.entries) {
         final deviceId = entry.key;
         final snapshot = entry.value;
-
-        // Create notifier with cached value
         _notifiers[deviceId] = ValueNotifier<VehicleDataSnapshot?>(snapshot);
       }
-
       if (kDebugMode) {
-        debugPrint(
-            '[VehicleRepo] ✅ Pre-warmed cache with ${allCached.length} devices',);
+        debugPrint('[VehicleRepo] ✅ Pre-warmed cache with ${allCached.length} devices');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -203,8 +227,7 @@ class VehicleDataRepository {
             final posId = e['positionId'] as int?;
             final deviceId = e['deviceId'] as int?;
             if (kDebugMode) {
-              debugPrint(
-                  '[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId',);
+              debugPrint('[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId');
             }
             // If event contains a positionId, fetch that position (likely contains attributes)
             if (posId != null) {
@@ -212,15 +235,13 @@ class VehicleDataRepository {
                 final p = await positionsService.latestByPositionId(posId);
                 if (p != null) {
                   if (kDebugMode) {
-                    debugPrint(
-                        '[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}',);
+                    debugPrint('[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}');
                   }
                   _handlePositionUpdates([p]);
                 }
               } catch (e) {
                 if (kDebugMode) {
-                  debugPrint(
-                      '[VehicleRepo] Failed to fetch position for positionId=$posId: $e',);
+                  debugPrint('[VehicleRepo] Failed to fetch position for positionId=$posId: $e');
                 }
               }
             }
@@ -237,14 +258,10 @@ class VehicleDataRepository {
                   engineState = EngineState.on;
                 }
                 if (engineState != null) {
-                  final rawTime = (e['eventTime'] ??
-                      e['serverTime'] ??
-                      e['deviceTime']) as String?;
+                  final rawTime = (e['eventTime'] ?? e['serverTime'] ?? e['deviceTime']) as String?;
                   DateTime ts;
                   try {
-                    ts = rawTime != null
-                        ? DateTime.parse(rawTime).toUtc()
-                        : DateTime.now().toUtc();
+                    ts = rawTime != null ? DateTime.parse(rawTime).toUtc() : DateTime.now().toUtc();
                   } catch (_) {
                     ts = DateTime.now().toUtc();
                   }
@@ -257,8 +274,7 @@ class VehicleDataRepository {
                     lastUpdate: ts,
                   );
                   if (kDebugMode) {
-                    debugPrint(
-                        '[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts',);
+                    debugPrint('[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts');
                   }
                   _updateDeviceSnapshot(partial);
                 }
@@ -268,8 +284,7 @@ class VehicleDataRepository {
               if (posId == null) {
                 _lastFetchTime.remove(deviceId);
                 if (kDebugMode) {
-                  debugPrint(
-                      '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)',);
+                  debugPrint('[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)');
                 }
                 unawaited(_fetchDeviceData(deviceId));
               }
@@ -296,23 +311,20 @@ class VehicleDataRepository {
             final posId = d['positionId'] as int?;
             final deviceId = d['id'] as int?;
             if (kDebugMode) {
-              debugPrint(
-                  '[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId',);
+              debugPrint('[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
             }
             if (posId != null) {
               try {
                 final p = await positionsService.latestByPositionId(posId);
                 if (p != null) {
                   if (kDebugMode) {
-                    debugPrint(
-                        '[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}',);
+                    debugPrint('[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}');
                   }
                   _handlePositionUpdates([p]);
                 }
               } catch (e) {
                 if (kDebugMode) {
-                  debugPrint(
-                      '[VehicleRepo] Failed to fetch position for device update posId=$posId: $e',);
+                  debugPrint('[VehicleRepo] Failed to fetch position for device update posId=$posId: $e');
                 }
               }
             }
@@ -329,9 +341,7 @@ class VehicleDataRepository {
                   engineState = EngineState.on;
                 }
                 if (engineState != null) {
-                  final ts = DateTime.now()
-                      .toUtc()
-                      .add(const Duration(milliseconds: 1));
+                  final ts = DateTime.now().toUtc().add(const Duration(milliseconds: 1));
                   final partial = VehicleDataSnapshot(
                     deviceId: deviceId,
                     timestamp: ts,
@@ -339,8 +349,7 @@ class VehicleDataRepository {
                     lastUpdate: ts,
                   );
                   if (kDebugMode) {
-                    debugPrint(
-                        '[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts',);
+                    debugPrint('[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts');
                   }
                   _updateDeviceSnapshot(partial);
                 }
@@ -349,8 +358,7 @@ class VehicleDataRepository {
               // Refresh device data if no positionId to keep other fields fresh
               if (posId == null) {
                 if (kDebugMode) {
-                  debugPrint(
-                      '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)',);
+                  debugPrint('[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)');
                 }
                 _lastFetchTime.remove(deviceId);
                 unawaited(_fetchDeviceData(deviceId));
@@ -380,8 +388,7 @@ class VehicleDataRepository {
     }
 
     if (kDebugMode) {
-      debugPrint(
-          '[VehicleRepo] Processed ${positions.length} position updates',);
+      debugPrint('[VehicleRepo] Processed ${positions.length} position updates');
     }
   }
 
@@ -389,16 +396,13 @@ class VehicleDataRepository {
   void _updateDeviceSnapshot(VehicleDataSnapshot snapshot) {
     if (kDebugMode) {
       final existing = _notifiers[snapshot.deviceId]?.value;
-      debugPrint(
-          '[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}',);
+      debugPrint('[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}');
       debugPrint('[VehicleRepo]   incoming: $snapshot');
       debugPrint('[VehicleRepo]   existing: $existing');
 
       // Log engine state changes explicitly
-      if (snapshot.engineState != null &&
-          snapshot.engineState != existing?.engineState) {
-        debugPrint(
-            '[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}',);
+      if (snapshot.engineState != null && snapshot.engineState != existing?.engineState) {
+        debugPrint('[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}');
       }
     }
 
@@ -430,21 +434,16 @@ class VehicleDataRepository {
       final merged = existing?.merge(snapshot) ?? snapshot;
 
       // CRITICAL: Always create a new object reference to trigger ValueNotifier updates
-      // Even if values are the same, ValueNotifier needs a new reference to notify
       notifier.value = merged;
 
       if (kDebugMode) {
         debugPrint('[VehicleRepo]   merged: $merged');
-        debugPrint(
-            '[VehicleRepo]   ✅ Notifier updated - listeners will be notified',);
+        debugPrint('[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
       }
     } else {
-      // Create new notifier if it doesn't exist
-      _notifiers[snapshot.deviceId] =
-          ValueNotifier<VehicleDataSnapshot?>(snapshot);
+      _notifiers[snapshot.deviceId] = ValueNotifier<VehicleDataSnapshot?>(snapshot);
       if (kDebugMode) {
-        debugPrint(
-            '[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}',);
+        debugPrint('[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}');
       }
     }
   }
@@ -452,28 +451,28 @@ class VehicleDataRepository {
   /// Get or create a ValueNotifier for a device
   ValueNotifier<VehicleDataSnapshot?> getNotifier(int deviceId) {
     return _notifiers.putIfAbsent(deviceId, () {
-      // Try to load from cache immediately
       final cached = cache.get(deviceId);
       final notifier = ValueNotifier<VehicleDataSnapshot?>(cached);
-
-      // If cache miss, trigger a fetch
       if (cached == null) {
         _fetchDeviceData(deviceId);
       }
-
       return notifier;
     });
   }
 
-  /// Fetch data for a single device (with memoization to prevent redundant calls)
+  /// Fetch data for a single device (with memoization)
   Future<void> _fetchDeviceData(int deviceId) async {
-    // Check if we fetched recently
-    final lastFetch = _lastFetchTime[deviceId];
-    if (lastFetch != null &&
-        DateTime.now().difference(lastFetch) < _minFetchInterval) {
+    if (_isOffline) {
       if (kDebugMode) {
-        debugPrint(
-            '[VehicleRepo] Skipping fetch for device $deviceId (fetched recently)',);
+        debugPrint('[VehicleRepo] Offline → skip fetch for device $deviceId');
+      }
+      return; // Use cached data only
+    }
+
+    final lastFetch = _lastFetchTime[deviceId];
+    if (lastFetch != null && DateTime.now().difference(lastFetch) < _minFetchInterval) {
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] Skipping fetch for device $deviceId (fetched recently)');
       }
       return;
     }
@@ -527,7 +526,6 @@ class VehicleDataRepository {
           engineState = EngineState.on;
         }
         if (engineState != null && engineState != snapshot.engineState) {
-          // Bump timestamp slightly so merge prefers this snapshot
           snapshot = VehicleDataSnapshot(
             deviceId: snapshot.deviceId,
             timestamp: snapshot.timestamp.add(const Duration(milliseconds: 1)),
@@ -540,8 +538,7 @@ class VehicleDataRepository {
             fuelLevel: snapshot.fuelLevel,
           );
           if (kDebugMode) {
-            debugPrint(
-                '[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState',);
+            debugPrint('[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState');
           }
         }
         _updateDeviceSnapshot(snapshot);
@@ -556,11 +553,16 @@ class VehicleDataRepository {
   /// Parallel fetch for multiple devices (used on app start or WebSocket reconnect)
   Future<void> fetchMultipleDevices(List<int> deviceIds) async {
     if (deviceIds.isEmpty) return;
+    if (_isOffline) {
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] Offline → skip parallel fetch for ${deviceIds.length} devices');
+      }
+      return; // Use cached data only
+    }
 
     try {
       if (kDebugMode) {
-        debugPrint(
-            '[VehicleRepo] Fetching ${deviceIds.length} devices in parallel',);
+        debugPrint('[VehicleRepo] Fetching ${deviceIds.length} devices in parallel');
       }
 
       // Fetch all devices
@@ -593,11 +595,17 @@ class VehicleDataRepository {
 
   /// Start REST polling fallback (only when WebSocket disconnected)
   void _startFallbackPolling() {
+    _fallbackTimer?.cancel();
     _fallbackTimer = Timer.periodic(_restFallbackInterval, (_) {
+      if (_isOffline) {
+        if (kDebugMode) {
+          debugPrint('[VehicleRepo] Offline → skipping REST fallback tick');
+        }
+        return; // No network activity while offline
+      }
       if (!_isWebSocketConnected && _notifiers.isNotEmpty) {
         if (kDebugMode) {
-          debugPrint(
-              '[VehicleRepo] WebSocket disconnected, using REST fallback',);
+          debugPrint('[VehicleRepo] WebSocket disconnected, using REST fallback');
         }
         final deviceIds = _notifiers.keys.toList();
         fetchMultipleDevices(deviceIds);

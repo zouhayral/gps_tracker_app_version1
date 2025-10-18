@@ -115,8 +115,7 @@ class ReconnectionManager {
     if (!_isConnected && !_isReconnecting) {
       if (kDebugMode) {
         debugPrint(
-          '[ReconnectionManager] Health check failed - WebSocket disconnected',
-        );
+            '[ReconnectionManager] Health check failed - WebSocket disconnected',);
       }
       _handleSocketDisconnect();
     }
@@ -130,8 +129,7 @@ class ReconnectionManager {
       // Socket error received
       if (kDebugMode) {
         debugPrint(
-          '[ReconnectionManager] Socket error message: ${msg.payload}',
-        );
+            '[ReconnectionManager] Socket error message: ${msg.payload}',);
       }
     }
   }
@@ -154,8 +152,7 @@ class ReconnectionManager {
 
     if (kDebugMode) {
       debugPrint(
-        '[ReconnectionManager] WebSocket disconnected, attempting reconnect...',
-      );
+          '[ReconnectionManager] WebSocket disconnected, attempting reconnect...',);
     }
 
     // Update status
@@ -198,11 +195,8 @@ class ReconnectionManager {
         (_backoffMultiplier * _reconnectAttempts)
             .clamp(1, _maxBackoff.inSeconds ~/ _initialBackoff.inSeconds);
     final delay = Duration(
-      seconds: backoffSeconds.clamp(
-        _initialBackoff.inSeconds,
-        _maxBackoff.inSeconds,
-      ),
-    );
+        seconds: backoffSeconds.clamp(
+            _initialBackoff.inSeconds, _maxBackoff.inSeconds,),);
 
     if (kDebugMode) {
       debugPrint(

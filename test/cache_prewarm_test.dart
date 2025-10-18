@@ -46,9 +46,7 @@ void main() {
 
         snapshots[i] = snapshot.toJson();
         await prefs.setString(
-          'vehicle_cache_$i',
-          jsonEncode(snapshot.toJson()),
-        );
+            'vehicle_cache_$i', jsonEncode(snapshot.toJson()),);
       }
 
       // Measure load time (happens in constructor)
@@ -57,11 +55,8 @@ void main() {
       final allSnapshots = cache.loadAll();
       stopwatch.stop();
 
-      expect(
-        stopwatch.elapsedMilliseconds,
-        lessThan(100),
-        reason: 'Cache pre-warming must complete in under 100ms',
-      );
+      expect(stopwatch.elapsedMilliseconds, lessThan(100),
+          reason: 'Cache pre-warming must complete in under 100ms',);
       expect(allSnapshots.length, equals(50));
       expect(cache.get(1), isNotNull);
       expect(cache.get(50), isNotNull);
@@ -102,9 +97,7 @@ void main() {
         );
 
         await prefs.setString(
-          'vehicle_cache_$i',
-          jsonEncode(snapshot.toJson()),
-        );
+            'vehicle_cache_$i', jsonEncode(snapshot.toJson()),);
       }
 
       final cache = VehicleDataCache(prefs: prefs);
@@ -153,9 +146,7 @@ void main() {
       );
 
       await prefs.setString(
-        'vehicle_cache_1',
-        jsonEncode(freshSnapshot.toJson()),
-      );
+          'vehicle_cache_1', jsonEncode(freshSnapshot.toJson()),);
 
       // Stale position (>30 minutes old)
       final stalePos = Position(
@@ -180,9 +171,7 @@ void main() {
       );
 
       await prefs.setString(
-        'vehicle_cache_2',
-        jsonEncode(staleSnapshot.toJson()),
-      );
+          'vehicle_cache_2', jsonEncode(staleSnapshot.toJson()),);
 
       final cache = VehicleDataCache(prefs: prefs);
 
@@ -220,9 +209,7 @@ void main() {
         );
 
         await prefs.setString(
-          'vehicle_cache_$i',
-          jsonEncode(snapshot.toJson()),
-        );
+            'vehicle_cache_$i', jsonEncode(snapshot.toJson()),);
       }
 
       final stopwatch = Stopwatch()..start();
@@ -231,11 +218,8 @@ void main() {
       stopwatch.stop();
 
       // Even with 100 devices, should load quickly
-      expect(
-        stopwatch.elapsedMilliseconds,
-        lessThan(200),
-        reason: '100 device cache should pre-warm in under 200ms',
-      );
+      expect(stopwatch.elapsedMilliseconds, lessThan(200),
+          reason: '100 device cache should pre-warm in under 200ms',);
 
       expect(allSnapshots.length, equals(100));
       expect(cache.get(1), isNotNull);
@@ -267,9 +251,7 @@ void main() {
         );
 
         await prefs.setString(
-          'vehicle_cache_$i',
-          jsonEncode(snapshot.toJson()),
-        );
+            'vehicle_cache_$i', jsonEncode(snapshot.toJson()),);
       }
 
       final cache = VehicleDataCache(prefs: prefs);
