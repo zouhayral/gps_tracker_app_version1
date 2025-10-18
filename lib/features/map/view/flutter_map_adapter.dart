@@ -46,6 +46,10 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     with TickerProviderStateMixin {
   final mapController = MapController();
   final _moveThrottler = Throttler(const Duration(milliseconds: 300));
+  
+  // ZOOM CLAMP: Maximum zoom level to prevent tile loading flicker
+  static const double kMaxZoom = 18.0;
+  
   // Toggle to force-disable FMTC for troubleshooting
   static const bool kForceDisableFMTC =
       false; // enable FMTC by default; set to true only for troubleshooting
@@ -253,13 +257,31 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     _maybeFit(immediate: true);
   }
 
+  /// Safe zoom method with automatic clamping to prevent tile flicker
+  ///
+  /// Clamps zoom to [0, kMaxZoom] range and logs diagnostic when clamped.
+  /// Use this instead of direct mapController.move() for programmatic zoom.
+  void safeZoomTo(LatLng center, double zoom) {
+    final clampedZoom = zoom.clamp(0.0, kMaxZoom);
+    if (clampedZoom != zoom && kDebugMode) {
+      debugPrint('[MAP] Zoom clamped to $kMaxZoom (requested: ${zoom.toStringAsFixed(1)})');
+    }
+    mapController.move(center, clampedZoom);
+  }
+
   void _animatedMove(LatLng dest, double zoom) {
+    // ZOOM CLAMP: Prevent excessive zoom causing tile flicker
+    final clampedZoom = zoom.clamp(0.0, kMaxZoom);
+    if (clampedZoom != zoom && kDebugMode) {
+      debugPrint('[MAP] Zoom clamped to $kMaxZoom (requested: ${zoom.toStringAsFixed(1)})');
+    }
+    
     // REBUILD ISOLATION: Camera moves via MapController do NOT trigger widget rebuilds
     // This is critical for performance - moving the camera updates internal state only
-    mapController.move(dest, zoom);
+    mapController.move(dest, clampedZoom);
 
     if (kDebugMode) {
-      debugPrint('[MAP_REBUILD] 📍 Camera moved to (${dest.latitude.toStringAsFixed(4)}, ${dest.longitude.toStringAsFixed(4)}) @ zoom ${zoom.toStringAsFixed(1)} - NO rebuild');
+      debugPrint('[MAP_REBUILD] 📍 Camera moved to (${dest.latitude.toStringAsFixed(4)}, ${dest.longitude.toStringAsFixed(4)}) @ zoom ${clampedZoom.toStringAsFixed(1)} - NO rebuild');
     }
 
     // Note: flutter_map's move() is synchronous and does not rebuild the widget tree.
@@ -383,6 +405,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
             options: MapOptions(
               initialCenter: const LatLng(0, 0),
               initialZoom: 2,
+              maxZoom: kMaxZoom, // ZOOM CLAMP: Prevent flicker from excessive zoom
               onTap: (_, __) => widget.onMapTap?.call(),
             ),
             children: [

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/entities/trip_entity.dart';
+import 'package:my_app_gps/core/database/objectbox_singleton.dart';
 import 'package:my_app_gps/objectbox.g.dart';
 import 'package:objectbox/objectbox.dart' as ob;
 
@@ -135,6 +136,6 @@ final tripsDaoProvider = FutureProvider<TripsDaoBase>((ref) async {
     })
     ..onDispose(() => timer?.cancel());
 
-  final store = await openStore();
+  final store = await ObjectBoxSingleton.getStore();
   return TripsDaoObjectBox(store);
 });

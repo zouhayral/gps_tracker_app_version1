@@ -195,7 +195,7 @@ class MockDeviceScenarios {
 
   /// Normal load: 20 devices, 5s intervals (typical Traccar setup)
   static MockDeviceStream normal() => MockDeviceStream(
-        updateIntervalMs: 5000,
+        
       );
 
   /// Heavy load: 50 devices, 5s intervals

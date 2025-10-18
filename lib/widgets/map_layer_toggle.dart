@@ -7,10 +7,10 @@ class MapLayerToggleButton extends StatelessWidget {
   final ValueChanged<MapTileSource> onChanged;
 
   const MapLayerToggleButton({
-    Key? key,
+    super.key,
     required this.current,
     required this.onChanged,
-  }) : super(key: key);
+  });
 
   IconData _iconFor(MapTileSource s) {
     // Satellite mode: show satellite icon
@@ -36,12 +36,12 @@ class MapLayerToggleButton extends StatelessWidget {
                     Expanded(child: Text(s.name)),
                     if (s.id == current.id)
                       const Padding(
-                        padding: EdgeInsets.only(left: 8.0),
+                        padding: EdgeInsets.only(left: 8),
                         child: Icon(Icons.check, size: 18),
                       ),
                   ],
                 ),
-              ))
+              ),)
           .toList(),
       onSelected: (source) {
         if (kDebugMode) {

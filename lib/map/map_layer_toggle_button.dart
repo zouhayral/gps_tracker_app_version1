@@ -14,7 +14,7 @@ class MapLayerToggleButton extends ConsumerWidget {
     final notifier = ref.read(mapTileSourceProvider.notifier);
 
     return FloatingActionButton.extended(
-      onPressed: () => notifier.toggleSource(),
+      onPressed: notifier.toggleSource,
       icon: Icon(_getIconForSource(currentSource)),
       label: Text(currentSource.name),
       tooltip: 'Switch map layer',
@@ -43,7 +43,7 @@ class MapLayerToggleIconButton extends ConsumerWidget {
     final notifier = ref.read(mapTileSourceProvider.notifier);
 
     return IconButton(
-      onPressed: () => notifier.toggleSource(),
+      onPressed: notifier.toggleSource,
       icon: Icon(_getIconForSource(currentSource)),
       tooltip: 'Switch to ${_getNextSourceName(currentSource)}',
     );

@@ -70,7 +70,7 @@ class EnhancedMarkerCache {
     final created = <String>[];
     final reused = <String>[];
     final removed = <String>[];
-  int modified = 0; // updates where snapshot changed but marker already existed
+  var modified = 0; // updates where snapshot changed but marker already existed
     final processedIds = <String>{};
     final q = query.trim().toLowerCase();
 
@@ -326,10 +326,7 @@ class MarkerDiffResult {
   const MarkerDiffResult({
     required this.markers,
     required this.created,
-    this.modified = 0,
-    required this.reused,
-    required this.removed,
-    required this.totalCached,
+    required this.reused, required this.removed, required this.totalCached, this.modified = 0,
   });
 
   final List<MapMarkerData> markers;

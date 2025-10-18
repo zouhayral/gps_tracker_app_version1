@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart' as hive;
 import 'package:my_app_gps/core/database/entities/position_entity.dart';
+import 'package:my_app_gps/core/database/objectbox_singleton.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/objectbox.g.dart';
 import 'package:objectbox/objectbox.dart' as ob;
@@ -108,9 +109,9 @@ final positionsDaoProvider = FutureProvider<PositionsDaoBase>((ref) async {
 
   // Reuse the same ObjectBox store as FMTC when available.
   // FMTCObjectBoxBackend initialises a default store directory; if you have your own
-  // ObjectBox Store, you can share its directory. For simplicity, open default store.
+  // ObjectBox Store, you can share its directory. For simplicity, use singleton store.
   // Note: This requires objectbox.g.dart to be generated for PositionEntity.
-  final store = await openStore();
+  final store = await ObjectBoxSingleton.getStore();
   final dao = PositionsDaoObjectBox(store);
   await dao.migrateFromHiveIfPresent();
   return dao;

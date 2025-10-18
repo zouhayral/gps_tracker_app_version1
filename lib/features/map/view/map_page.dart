@@ -23,6 +23,9 @@ import 'package:my_app_gps/core/providers/vehicle_providers.dart';
 import 'package:my_app_gps/core/utils/throttled_value_notifier.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
+import 'package:my_app_gps/features/map/clustering/cluster_hud.dart';
+import 'package:my_app_gps/features/map/clustering/cluster_models.dart';
+import 'package:my_app_gps/features/map/clustering/spiderfy_overlay.dart';
 import 'package:my_app_gps/features/map/controller/fleet_map_telemetry_controller.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/data/granular_providers.dart';
@@ -32,11 +35,10 @@ import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
 import 'package:my_app_gps/features/map/view/map_page_lifecycle_mixin.dart';
 import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
-import 'package:my_app_gps/widgets/map_layer_toggle.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
-import 'package:my_app_gps/services/websocket_manager.dart';
-// import 'package:my_app_gps/map/tile_network_client.dart';
 import 'package:my_app_gps/services/positions_service.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
+import 'package:my_app_gps/widgets/map_layer_toggle.dart';
 
 // Clean rebuilt MapPage implementation
 // Features:
@@ -269,7 +271,7 @@ class _MapPageState extends ConsumerState<MapPage>
       debugPrint('[FMTC] warmup finished');
     }).catchError((Object e, StackTrace? st) {
       debugPrint('[FMTC] warmup error: $e');
-    }));
+    }),);
 
     // NEW: Warm up per-source FMTC stores used by FlutterMapAdapter
     // Prevents StoreNotExists errors when switching providers at runtime
@@ -279,7 +281,7 @@ class _MapPageState extends ConsumerState<MapPage>
       debugPrint('[FMTC] per-source store warmup finished');
     }).catchError((Object e, StackTrace? st) {
       debugPrint('[FMTC] per-source warmup error: $e');
-    }));
+    }),);
 
     // MIGRATION NOTE: Removed old positionsLiveProvider listening
     // VehicleDataRepository handles WebSocket → Cache → Notifiers internally
@@ -323,17 +325,17 @@ class _MapPageState extends ConsumerState<MapPage>
     }
     
     // Track which devices we've set up listeners for
-    final _listenedDeviceIds = <int>{};
+    final listenedDeviceIds = <int>{};
     
     // Helper to setup position listeners for a device
     void setupPositionListener(int deviceId) {
-      if (_listenedDeviceIds.contains(deviceId)) {
+      if (listenedDeviceIds.contains(deviceId)) {
         if (kDebugMode) {
           debugPrint('[MAP] Skipping duplicate listener for device $deviceId');
         }
         return;
       }
-      _listenedDeviceIds.add(deviceId);
+      listenedDeviceIds.add(deviceId);
       
       if (kDebugMode) {
         debugPrint('[MAP] Setting up position listener for device $deviceId');
@@ -591,7 +593,7 @@ class _MapPageState extends ConsumerState<MapPage>
       // CRITICAL: Ensure first non-empty dataset is not dropped by throttling.
       // If current UI has no markers yet but we now have positions or devices with
       // valid stored coordinates, force an update to render immediately.
-      bool _valid(double? lat, double? lon) =>
+      bool valid(double? lat, double? lon) =>
           lat != null &&
           lon != null &&
           !lat.isNaN &&
@@ -603,17 +605,17 @@ class _MapPageState extends ConsumerState<MapPage>
           lon >= -180 &&
           lon <= 180;
 
-      bool _hasAnyDeviceStoredCoords() {
+      bool hasAnyDeviceStoredCoords() {
         for (final d in devices) {
           final lat = _asDouble(d['latitude']);
           final lon = _asDouble(d['longitude']);
-          if (_valid(lat, lon)) return true;
+          if (valid(lat, lon)) return true;
         }
         return false;
       }
 
       final forceFirstRender = _markersNotifier.value.isEmpty &&
-          (positions.isNotEmpty || _hasAnyDeviceStoredCoords());
+          (positions.isNotEmpty || hasAnyDeviceStoredCoords());
 
       // OPTIMIZATION: Use enhanced marker cache with intelligent diffing
       final diffResult = _enhancedMarkerCache.getMarkersWithDiff(
@@ -717,6 +719,62 @@ class _MapPageState extends ConsumerState<MapPage>
     // OPTIMIZATION: Trigger marker update with new selection state
     final devicesAsync = ref.read(devicesNotifierProvider);
     devicesAsync.whenData(_triggerMarkerUpdate);
+
+    // New: if multiple devices are near the tapped one (within ~40m),
+    // show a spiderfy overlay for quick disambiguation.
+    _maybeShowSpiderfyForNearby(n);
+  }
+
+  // Group nearby markers around a tapped device and show spiderfy overlay for small groups
+  void _maybeShowSpiderfyForNearby(int tappedId) {
+    // Build a local list of nearby devices within ~40 meters
+    const distanceMeters = 40;
+    // Haversine approximation using latlong2 Distance
+    const d = Distance();
+
+    // Current merged positions from our local cache (built by listeners)
+    final positions = Map<int, Position>.from(_lastPositions);
+    if (positions.length <= 1) return; // nothing to group
+
+    final center = positions[tappedId];
+    if (center == null) return;
+    final centerLL = LatLng(center.latitude, center.longitude);
+
+    // Find members within radius
+    final memberIds = <int>[];
+    for (final entry in positions.entries) {
+      if (entry.key == tappedId) {
+        memberIds.add(entry.key);
+        continue;
+      }
+      final p = entry.value;
+      final ll = LatLng(p.latitude, p.longitude);
+      final meters = d.as(LengthUnit.Meter, centerLL, ll);
+      if (meters <= distanceMeters) memberIds.add(entry.key);
+      if (memberIds.length > 5) break; // spiderfy only for small groups
+    }
+
+    if (memberIds.length <= 1 || memberIds.length > 5) return;
+
+    // Build ClusterableMarker list
+    final members = <ClusterableMarker>[];
+    for (final id in memberIds) {
+      final p = positions[id]!;
+      members.add(
+        ClusterableMarker(
+          id: '$id',
+          position: LatLng(p.latitude, p.longitude),
+          metadata: {'deviceId': id},
+        ),
+      );
+    }
+
+    // Show overlay at center
+    SpiderfyOverlay.show(
+      context,
+      center: centerLL,
+      members: members,
+    );
   }
 
   void _onMapTap() {
@@ -833,7 +891,7 @@ class _MapPageState extends ConsumerState<MapPage>
   void _setupPositionListenersInBuild() {
     final devicesAsync = ref.watch(devicesNotifierProvider);
     final devices = devicesAsync.asData?.value ?? [];
-    int newlyAdded = 0;
+    var newlyAdded = 0;
     // Watch each device's position to trigger marker updates
     for (final device in devices) {
       final deviceId = device['id'] as int?;
@@ -1052,6 +1110,12 @@ class _MapPageState extends ConsumerState<MapPage>
                     markersNotifier:
                         _markersNotifier, // OPTIMIZATION: Use throttled ValueNotifier
                   ),
+                ),
+                // Clustering HUD (non-intrusive)
+                const Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: ClusterHud(),
                 ),
                 // OPTIMIZATION: Show cached snapshot overlay during initial load
                 if (MapDebugFlags.showSnapshotOverlay &&

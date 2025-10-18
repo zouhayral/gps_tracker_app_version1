@@ -92,10 +92,11 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
       }
 
       // Second check: REST API health ping
-      // TODO: Replace with your actual Traccar API base URL
+      // Defensive: Accept JSON, HTML, or plain text responses
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(seconds: 5),
+        responseType: ResponseType.plain, // Parse as string to avoid FormatException
       ));
 
       // Try a lightweight endpoint (adjust URL to match your backend)
@@ -108,13 +109,22 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
         ),
       );
 
-      final isHealthy = response.statusCode != null &&
-          response.statusCode! >= 200 &&
-          response.statusCode! < 500;
+      // Health check criteria:
+      // 1. HTTP status 200-499 (server responded)
+      // 2. Body contains indicators: "traccar", "OK", "Server", or is empty (204 No Content)
+      final statusCode = response.statusCode ?? 0;
+      final body = (response.data ?? '').toString().toLowerCase();
+      
+      final isHealthy = statusCode >= 200 && statusCode < 500 &&
+          (body.contains('traccar') || 
+           body.contains('ok') || 
+           body.contains('server') ||
+           body.isEmpty);
 
       if (kDebugMode) {
         debugPrint(
-          '[CONNECTIVITY_PROVIDER] ${isHealthy ? "✅" : "❌"} Backend check: REST status=${response.statusCode}',
+          '[CONNECTIVITY_PROVIDER] ${isHealthy ? "✅" : "❌"} Backend check: '
+          'status=$statusCode healthy=$isHealthy (body preview: ${body.substring(0, body.length > 50 ? 50 : body.length)}...)',
         );
       }
 

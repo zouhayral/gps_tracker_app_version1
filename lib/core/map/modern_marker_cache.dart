@@ -127,9 +127,9 @@ class ModernMarkerCache {
     for (final state in states) {
       await getOrGenerate(
         name: name,
-        online: state['online'] as bool,
-        engineOn: state['engineOn'] as bool,
-        moving: state['moving'] as bool,
+        online: state['online']! as bool,
+        engineOn: state['engineOn']! as bool,
+        moving: state['moving']! as bool,
         compact: compact,
         speed: state['speed'] as double?,
       );

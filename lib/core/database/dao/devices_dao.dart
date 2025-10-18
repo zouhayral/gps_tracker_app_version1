@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/entities/device_entity.dart';
+import 'package:my_app_gps/core/database/objectbox_singleton.dart';
 import 'package:my_app_gps/objectbox.g.dart';
 import 'package:objectbox/objectbox.dart' as ob;
 
@@ -103,6 +104,6 @@ final devicesDaoProvider = FutureProvider<DevicesDaoBase>((ref) async {
   });
   ref.onDispose(() => timer?.cancel());
 
-  final store = await openStore();
+  final store = await ObjectBoxSingleton.getStore();
   return DevicesDaoObjectBox(store);
 });

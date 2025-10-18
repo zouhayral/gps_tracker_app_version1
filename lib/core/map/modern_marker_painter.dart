@@ -59,7 +59,7 @@ class ModernMarkerPainter extends CustomPainter {
     final path = Path();
     path.addOval(Rect.fromCircle(center: center, radius: radius));
     // Tail
-    final tailHeight = 10.0;
+    const tailHeight = 10.0;
     path.moveTo(center.dx - 8, center.dy + radius - 2);
     path.lineTo(center.dx, center.dy + radius + tailHeight);
     path.lineTo(center.dx + 8, center.dy + radius - 2);
@@ -143,7 +143,7 @@ class ModernMarkerPainter extends CustomPainter {
 
   void _drawStatusBadge(Canvas canvas, Size size) {
     final center = Offset(size.width * 0.18, size.height * 0.18);
-    final r = 7.0;
+    const r = 7.0;
 
     Color badge;
     // Icon: always a power symbol; color indicates state (ON/OFF/NEUTRAL)
@@ -190,7 +190,7 @@ class ModernMarkerPainter extends CustomPainter {
     final start = Offset(size.width * 0.68, size.height * 0.7);
     const spacing = 6.0;
     const base = 2.5;
-    for (int i = 0; i < 3; i++) {
+    for (var i = 0; i < 3; i++) {
       final paint = Paint()
         ..color = _appGreen.withOpacity(1.0 - i * 0.25)
         ..style = PaintingStyle.fill;
@@ -236,7 +236,7 @@ class ModernMarkerPainter extends CustomPainter {
       ..strokeWidth = 1.8
       ..strokeCap = StrokeCap.round;
     final rect = Rect.fromCircle(center: center, radius: r * 0.8);
-    canvas.drawArc(rect, -1.2, 5.0, false, p);
+    canvas.drawArc(rect, -1.2, 5, false, p);
     // arrow head
     final ah = Path()
       ..moveTo(center.dx + r * 0.8, center.dy)

@@ -40,10 +40,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     final isLoading = ref.watch(
       // Only rebuild when loading state toggles
-      authNotifierProvider.select(
-        (state) =>
-            state is AuthAuthenticating || state is AuthValidatingSession,
-      ),
+      authNotifierProvider.select((state) =>
+          state is AuthAuthenticating || state is AuthValidatingSession,),
     );
 
     final errorMessage = ref.watch(

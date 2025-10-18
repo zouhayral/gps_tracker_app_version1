@@ -7,10 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:my_app_gps/core/map/ai_map_optimizer.dart';
 import 'package:my_app_gps/core/map/map_perf_monitor.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Fleet Map Prefetch & Snapshot Cache Manager
 ///

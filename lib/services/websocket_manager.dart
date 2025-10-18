@@ -48,6 +48,7 @@ class WebSocketManager extends Notifier<WebSocketState> {
   Timer? _circuitBreakerTimer;
   int _retryCount = 0;
   bool _disposed = false;
+  bool _circuitBreakerOpen = false;
   DateTime? _lastPingSent;
 
   Stream<Map<String, dynamic>> get stream =>
@@ -73,17 +74,43 @@ class WebSocketManager extends Notifier<WebSocketState> {
 
   Future<void> _connect() async {
     if (_disposed) return;
+
+    // Circuit breaker: Skip connection if placeholder hostname detected
+    if (_wsUrl.contains('your.server')) {
+      _log('[WS] ⚠️ Invalid hostname: "your.server" - skipping connection');
+      _log('[WS] 💡 Update _wsUrl in websocket_manager.dart with actual server URL');
+      _circuitBreakerOpen = true;
+      state = state.copyWith(
+        status: WebSocketStatus.disconnected,
+        error: 'Invalid WebSocket URL configuration',
+      );
+      return;
+    }
+
+    // Circuit breaker: Stop retrying if permanently failed
+    if (_circuitBreakerOpen) {
+      _log('[WS] ⛔ Circuit breaker open - not attempting connection');
+      return;
+    }
+
     state = state.copyWith(status: WebSocketStatus.connecting);
     _log('[WS][INIT] Connecting...');
     try {
       _socket = await WebSocket.connect(_wsUrl);
       _retryCount = 0;
+      _circuitBreakerOpen = false; // Reset circuit breaker on successful connection
       state = state.copyWith(status: WebSocketStatus.connected, retryCount: 0);
-      _log('[WS] Connected');
+      _log('[WS] ✅ Connected');
       _listen();
       _startPing();
+    } on SocketException catch (e) {
+      _log('[WS] ❌ SocketException: ${e.message}');
+      _handleReconnect('SocketException: ${e.message}');
+    } on WebSocketException catch (e) {
+      _log('[WS] ❌ WebSocketException: ${e.message}');
+      _handleReconnect('WebSocketException: ${e.message}');
     } catch (e) {
-      _log('[WS][ERROR] $e');
+      _log('[WS] ❌ Unexpected error: $e');
       _handleReconnect(e.toString());
     }
   }
@@ -136,14 +163,12 @@ class WebSocketManager extends Notifier<WebSocketState> {
     if (_disposed) return;
     _retryCount++;
     state = state.copyWith(
-      status: WebSocketStatus.retrying,
-      retryCount: _retryCount,
-      error: error,
-    );
+        status: WebSocketStatus.retrying,
+        retryCount: _retryCount,
+        error: error,);
     if (_retryCount > _maxRetries) {
       _log(
-        '[WS][CIRCUIT BREAKER] Too many retries, pausing for ${_circuitBreakerTimeout.inMinutes}m',
-      );
+          '[WS][CIRCUIT BREAKER] Too many retries, pausing for ${_circuitBreakerTimeout.inMinutes}m',);
       _circuitBreakerTimer = Timer(_circuitBreakerTimeout, () {
         _retryCount = 0;
         _connect();

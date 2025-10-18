@@ -212,11 +212,10 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
     final seconds =
         _initialRetryDelay.inSeconds * (1 << (attempt - 1).clamp(0, 5));
     return Duration(
-      seconds: seconds.clamp(
-        _initialRetryDelay.inSeconds,
-        _maxRetryDelay.inSeconds,
-      ),
-    );
+        seconds: seconds.clamp(
+      _initialRetryDelay.inSeconds,
+      _maxRetryDelay.inSeconds,
+    ),);
   }
 
   /// Manually trigger reconnection (call when app resumes or map page opens)
@@ -296,5 +295,4 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
 /// Provider for the enhanced WebSocket manager
 final webSocketManagerProvider =
     NotifierProvider<WebSocketManagerEnhanced, WebSocketState>(
-  WebSocketManagerEnhanced.new,
-);
+        WebSocketManagerEnhanced.new,);

@@ -240,7 +240,7 @@ class VehicleRepositoryBenchmark {
     const cacheReduction = 0.8; // 80% cache hits
     const wsUptime = 0.9; // 90% WebSocket uptime
 
-    final totalReduction =
+    const totalReduction =
         (cacheReduction + wsUptime * (1 - cacheReduction)) * 100;
     return totalReduction.clamp(0, 100);
   }

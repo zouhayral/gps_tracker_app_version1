@@ -34,14 +34,14 @@ class MapMarkerWidget extends ConsumerWidget {
     final device = ref.watch(deviceByIdProvider(deviceId));
     final position = ref.watch(positionByDeviceProvider(deviceId));
 
-    final name = ((device?['name']?.toString()) ?? fallbackName ?? '').trim();
+    final name = (device?['name']?.toString() ?? fallbackName ?? '').trim();
 
     // Determine online status (default to true if unknown to avoid hiding)
     final statusStr = (device?['status']?.toString() ?? '').toLowerCase();
     final online = statusStr.isEmpty ? true : statusStr == 'online';
 
     // Engine state with safe fallbacks
-    bool _asTrue(dynamic v) {
+    bool asTrue(dynamic v) {
       if (v is bool) return v;
       if (v is num) return v != 0;
       final s = v?.toString().toLowerCase().trim();
@@ -49,11 +49,11 @@ class MapMarkerWidget extends ConsumerWidget {
     }
 
     final attrs = position?.attributes ?? const <String, dynamic>{};
-    final engineOn = _asTrue(device?['ignition']) ||
-        _asTrue(device?['engineOn']) ||
-        _asTrue(attrs['ignition']) ||
-        _asTrue(attrs['engineOn']) ||
-        _asTrue(attrs['engine_on']) ||
+    final engineOn = asTrue(device?['ignition']) ||
+        asTrue(device?['engineOn']) ||
+        asTrue(attrs['ignition']) ||
+        asTrue(attrs['engineOn']) ||
+        asTrue(attrs['engine_on']) ||
         (fallbackEngineOn ?? false);
 
     // Speed with fallback; moving if > 1 km/h

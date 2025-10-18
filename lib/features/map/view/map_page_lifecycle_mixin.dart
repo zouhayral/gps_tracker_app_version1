@@ -51,8 +51,7 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
   void _onAppResumed() {
     if (kDebugMode) {
       debugPrint(
-        '[LIFECYCLE] Resumed → reconnecting WebSocket and refreshing data',
-      );
+          '[LIFECYCLE] Resumed → reconnecting WebSocket and refreshing data',);
     }
 
     // 1. Force WebSocket reconnection
@@ -101,8 +100,7 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
 
         if (kDebugMode) {
           debugPrint(
-            '[LIFECYCLE] First open → fetching fresh data from server',
-          );
+              '[LIFECYCLE] First open → fetching fresh data from server',);
         }
 
         // Force WebSocket health check
@@ -152,12 +150,10 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
         if (kDebugMode) {
           if (wsState.status != WebSocketStatus.connected) {
             debugPrint(
-              '[FALLBACK] WebSocket not connected → using REST refresh',
-            );
+                '[FALLBACK] WebSocket not connected → using REST refresh',);
           } else {
             debugPrint(
-              '[FALLBACK] WebSocket silent for 20s → using REST refresh',
-            );
+                '[FALLBACK] WebSocket silent for 20s → using REST refresh',);
           }
         }
 
@@ -175,8 +171,7 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
 
     if (kDebugMode) {
       debugPrint(
-        '[FALLBACK] Started periodic refresh every ${refreshInterval.inSeconds}s',
-      );
+          '[FALLBACK] Started periodic refresh every ${refreshInterval.inSeconds}s',);
     }
   }
 

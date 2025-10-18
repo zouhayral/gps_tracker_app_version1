@@ -152,17 +152,17 @@ class ModernMarkerGenerator {
         'online': true,
         'engineOn': true,
         'moving': true,
-        'speed': 60.0
+        'speed': 60.0,
       },
       'online_idle_engine_on': {
         'online': true,
         'engineOn': true,
-        'moving': false
+        'moving': false,
       },
       'online_idle_engine_off': {
         'online': true,
         'engineOn': false,
-        'moving': false
+        'moving': false,
       },
       'offline': {'online': false, 'engineOn': false, 'moving': false},
     };

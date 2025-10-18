@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
+import 'package:my_app_gps/core/database/objectbox_singleton.dart';
 import 'package:my_app_gps/objectbox.g.dart';
 import 'package:objectbox/objectbox.dart' as ob;
 
@@ -29,10 +30,8 @@ class TelemetryDaoObjectBox implements TelemetryDaoBase {
     final startMs = start.toUtc().millisecondsSinceEpoch;
     final endMs = end.toUtc().millisecondsSinceEpoch;
     final q = _box
-        .query(
-          TelemetryRecord_.deviceId.equals(deviceId) &
-              TelemetryRecord_.timestampMs.between(startMs, endMs),
-        )
+        .query(TelemetryRecord_.deviceId.equals(deviceId) &
+            TelemetryRecord_.timestampMs.between(startMs, endMs),)
         .order(TelemetryRecord_.timestampMs)
         .build();
     try {
@@ -68,9 +67,9 @@ class TelemetryDaoObjectBox implements TelemetryDaoBase {
   }
 }
 
-/// Provider exposing an ObjectBox-backed telemetry DAO (async, opens the store).
+/// Provider exposing an ObjectBox-backed telemetry DAO (uses singleton store).
 final telemetryDaoObjectBoxProvider =
     FutureProvider<TelemetryDaoBase>((ref) async {
-  final store = await openStore();
+  final store = await ObjectBoxSingleton.getStore();
   return TelemetryDaoObjectBox(store);
 });

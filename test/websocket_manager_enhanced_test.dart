@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app_gps/services/auth_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
-import 'package:my_app_gps/services/auth_service.dart';
 
 // Fake TraccarSocketService that implements only the bits our tests need.
 class FakeTraccarSocketService implements TraccarSocketService {

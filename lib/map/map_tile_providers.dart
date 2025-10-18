@@ -2,6 +2,7 @@
 ///
 /// This module provides access to various tile sources including
 /// OpenStreetMap and satellite imagery from Esri.
+library;
 
 class MapTileSource {
   /// Unique identifier for this tile source
@@ -67,7 +68,6 @@ class MapTileProviders {
     // Use a community mirror suitable for app traffic (verify availability/policy)
     urlTemplate: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
     attribution: '© OpenStreetMap contributors | Tiles: HOT OSM',
-    maxZoom: 19,
   );
 
   /// Esri World Imagery satellite layer
@@ -78,7 +78,6 @@ class MapTileProviders {
     urlTemplate:
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: '© Esri – Maxar – Earthstar Geographics',
-    maxZoom: 19,
   );
 
   /// All available tile sources
