@@ -137,7 +137,10 @@ class EnhancedMarkerCache {
             modified++;
           }
         } else {
-          // Reuse existing marker
+          // Reuse existing marker (delta rebuild skip)
+          if (kDebugMode) {
+            debugPrint('[MARKER] 🔁 Skipped rebuild for deviceId=$deviceId');
+          }
           updated.add(existingMarker);
           reused.add(markerId);
         }
@@ -253,8 +256,15 @@ class EnhancedMarkerCache {
     );
 
     // Log reuse ratio if significant activity
-    if (kDebugMode && (result.created > 0 || result.removed > 0)) {
+    if (kDebugMode && (result.created > 0 || result.removed > 0 || result.modified > 0)) {
+      final total = result.created + result.modified + result.reused;
+      final rebuildCount = result.created + result.modified;
+      final rebuildPercent = total > 0 ? (rebuildCount / total * 100).toStringAsFixed(1) : '0.0';
       final reusePercent = (result.efficiency * 100).toStringAsFixed(1);
+      
+      debugPrint(
+        '[MARKER] ✅ Rebuilt $rebuildCount/${result.markers.length} markers ($rebuildPercent%)',
+      );
       debugPrint(
         '[EnhancedMarkerCache] 📊 Update: '
         'total=${result.markers.length}, '
