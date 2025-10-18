@@ -10,11 +10,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-
+import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/prefetch/prefetch_profile.dart';
 import 'package:my_app_gps/prefetch/prefetch_progress.dart';
 import 'package:my_app_gps/providers/prefetch_provider.dart';
-import 'package:my_app_gps/map/map_tile_source_provider.dart';
 
 /// Prefetch settings and control panel
 class PrefetchPanel extends ConsumerWidget {
@@ -72,7 +71,7 @@ class PrefetchPanel extends ConsumerWidget {
                   labelText: 'Profile',
                   border: OutlineInputBorder(),
                 ),
-                value: settings.selectedProfile,
+                initialValue: settings.selectedProfile,
                 items: PrefetchProfile.builtInProfiles.map((profile) {
                   return DropdownMenuItem(
                     value: profile,
@@ -114,7 +113,7 @@ class PrefetchPanel extends ConsumerWidget {
                       onPressed: progress.isActive || currentCenter == null
                           ? null
                           : () => _startPrefetch(context, ref, currentCenter!,
-                              tileSource.id),
+                              tileSource.id,),
                       icon: const Icon(Icons.download_for_offline),
                       label: const Text('Prefetch Current View'),
                     ),

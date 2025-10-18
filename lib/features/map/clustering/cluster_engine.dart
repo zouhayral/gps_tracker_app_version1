@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart'; // For LatLngBounds
 import 'package:latlong2/latlong.dart';
 
-import 'cluster_models.dart';
+import 'package:my_app_gps/features/map/clustering/cluster_models.dart';
 
 /// Pure Dart clustering engine using grid-based algorithm
 ///
@@ -69,12 +69,12 @@ class ClusterEngine {
   ) {
     // Fast path: clustering disabled at this zoom
     if (!config.shouldClusterAtZoom(zoom)) {
-      return markers.map((m) => ClusterResult.individual(m)).toList();
+      return markers.map(ClusterResult.individual).toList();
     }
 
     // Fast path: too few markers to cluster
     if (markers.length < config.minClusterSize) {
-      return markers.map((m) => ClusterResult.individual(m)).toList();
+      return markers.map(ClusterResult.individual).toList();
     }
 
     // Get pixel distance threshold for this zoom

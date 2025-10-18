@@ -61,9 +61,7 @@ class PrefetchProfile {
     name: 'Light',
     zoomMin: 12,
     zoomMax: 15,
-    radiusKm: 2.0,
-    concurrency: 2,
-    throttleMs: 100,
+    radiusKm: 2,
     maxTilesPerRun: 500,
   );
 
@@ -75,7 +73,7 @@ class PrefetchProfile {
     name: 'Commute',
     zoomMin: 11,
     zoomMax: 16,
-    radiusKm: 5.0,
+    radiusKm: 5,
     concurrency: 3,
     throttleMs: 80,
     maxTilesPerRun: 1500,
@@ -89,10 +87,9 @@ class PrefetchProfile {
     name: 'Heavy',
     zoomMin: 10,
     zoomMax: 17,
-    radiusKm: 10.0,
+    radiusKm: 10,
     concurrency: 3,
     throttleMs: 120,
-    maxTilesPerRun: 2000,
   );
 
   /// All built-in profiles
@@ -136,8 +133,8 @@ class PrefetchProfile {
   /// Estimate total tiles for this profile at a given center point
   /// Rough approximation: tiles ≈ 4^zoom × (radius/earthRadius)^2
   int estimateTileCount() {
-    int totalTiles = 0;
-    for (int zoom = zoomMin; zoom <= zoomMax; zoom++) {
+    var totalTiles = 0;
+    for (var zoom = zoomMin; zoom <= zoomMax; zoom++) {
       // Approximate tiles per zoom level
       // At zoom N, each degree ≈ 2^N tiles
       // Rough estimate: tiles ≈ (radius_km / 40000) * 2^zoom * 4

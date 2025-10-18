@@ -1,6 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:objectbox/objectbox.dart';
-
 import 'package:my_app_gps/objectbox.g.dart';
 
 /// Singleton ObjectBox Store manager

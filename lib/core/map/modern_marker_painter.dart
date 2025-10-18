@@ -177,7 +177,7 @@ class ModernMarkerPainter extends CustomPainter {
     canvas.drawCircle(center, r, border);
 
     // Icon: power symbol for all states
-    final s = r * 0.55;
+    const s = r * 0.55;
     // stem
     canvas.drawLine(center.translate(0, -s), center, iconPaint);
     // arc

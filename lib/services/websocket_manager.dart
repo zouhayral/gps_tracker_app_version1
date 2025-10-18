@@ -290,7 +290,6 @@ class WebSocketManager extends Notifier<WebSocketState> {
     state = state.copyWith(
       status: WebSocketStatus.connecting,
       retryCount: 0,
-      error: null,
     );
     
     _connect();

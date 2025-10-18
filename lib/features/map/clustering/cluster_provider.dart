@@ -14,9 +14,7 @@ import 'package:my_app_gps/features/map/data/position_model.dart';
 /// Provider for cluster configuration
 final clusterConfigProvider = Provider<ClusterConfig>((ref) {
   return const ClusterConfig(
-    minClusterSize: 2,
-    useIsolate: true,
-    isolateThreshold: 800,
+    
   );
 });
 
@@ -138,7 +136,6 @@ class ClusterNotifier extends StateNotifier<ClusterState> {
       // Update state with results
       state = ClusterState(
         results: response.results,
-        isLoading: false,
         lastComputed: DateTime.now(),
         markerCount: response.markerCount,
         clusterCount: response.clusterCount,
@@ -225,7 +222,6 @@ class ClusterNotifier extends StateNotifier<ClusterState> {
       zoom: zoom,
       viewport: viewport,
       config: config,
-      timeout: const Duration(milliseconds: 250),
     );
 
     sw.stop();

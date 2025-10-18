@@ -6,13 +6,12 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:my_app_gps/controllers/connectivity_coordinator.dart';
 import 'package:my_app_gps/prefetch/prefetch_orchestrator.dart';
 import 'package:my_app_gps/prefetch/prefetch_profile.dart';
 import 'package:my_app_gps/prefetch/prefetch_progress.dart';
 import 'package:my_app_gps/providers/connectivity_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider for prefetch orchestrator instance
 final prefetchOrchestratorProvider = Provider<PrefetchOrchestrator>((ref) {
@@ -29,9 +28,7 @@ final prefetchOrchestratorProvider = Provider<PrefetchOrchestrator>((ref) {
     }
   });
 
-  ref.onDispose(() {
-    orchestrator.dispose();
-  });
+  ref.onDispose(orchestrator.dispose);
 
   return orchestrator;
 });
