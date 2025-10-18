@@ -13,6 +13,8 @@ import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/view/map_marker.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/map/tile_network_client.dart';
+import 'package:my_app_gps/providers/connectivity_provider.dart';
+import 'package:my_app_gps/providers/map_rebuild_provider.dart';
 
 class FlutterMapAdapter extends ConsumerStatefulWidget implements MapAdapter {
   const FlutterMapAdapter({
@@ -80,7 +82,8 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   void didUpdateWidget(covariant FlutterMapAdapter oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Use throttled fit for subsequent updates to avoid rapid camera jumps
-    _maybeFit(immediate: false);
+    // NOTE: Camera updates via MapController do NOT trigger widget rebuilds
+    _maybeFit();
   }
 
   @override
@@ -91,12 +94,32 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     // CRITICAL FIX: Initial camera fit must be IMMEDIATE to show selected devices
     // Without this, map shows (0,0) for 300ms+ while throttler delays the fit
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFit(immediate: true));
+    
+    if (kDebugMode) {
+      debugPrint('[MAP_REBUILD] 🎬 FlutterMapAdapter initialized with persistent MapController');
+    }
+
+    // NETWORK RESILIENCE: Listen for reconnect events to trigger map refresh
+    ref.listenManual(connectivityProvider, (previous, next) {
+      if (previous != null && previous.isOffline && next.isOnline) {
+        if (kDebugMode) {
+          debugPrint(
+            '[NETWORK] 🟢 Reconnected → triggering map rebuild for fresh tiles',
+          );
+        }
+        // Trigger full map rebuild to refresh tiles and resume live markers
+        ref.read(mapRebuildProvider.notifier).trigger();
+      }
+    });
   }
 
   @override
   void dispose() {
     // Do not close the shared client here; it may be reused elsewhere.
     mapController.dispose();
+    if (kDebugMode) {
+      debugPrint('[MAP_REBUILD] 🗑️ FlutterMapAdapter disposed');
+    }
     super.dispose();
   }
 
@@ -161,7 +184,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
       if (kDebugMode) {
         debugPrint('[FlutterMapAdapter] ⚠️ Bounds contain non-finite values: $b');
       }
-      return 13.0; // Return safe default zoom
+      return 13; // Return safe default zoom
     }
     
     // Very naive fit; refine later with size info & padding.
@@ -171,7 +194,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     
     // DEFENSIVE: Ensure maxDiff is finite
     if (!maxDiff.isFinite || maxDiff.isNaN) {
-      return 13.0; // Safe default
+      return 13; // Safe default
     }
     
     double base;
@@ -231,13 +254,16 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   }
 
   void _animatedMove(LatLng dest, double zoom) {
-    // Use flutter_map's built-in animated move for smooth transitions
-    // Duration optimized for <100ms total response time
+    // REBUILD ISOLATION: Camera moves via MapController do NOT trigger widget rebuilds
+    // This is critical for performance - moving the camera updates internal state only
     mapController.move(dest, zoom);
 
-    // Note: flutter_map 6.x doesn't have smooth animations built-in.
-    // We rely on the map widget's internal interpolation.
-    // The actual move is synchronous and fast.
+    if (kDebugMode) {
+      debugPrint('[MAP_REBUILD] 📍 Camera moved to (${dest.latitude.toStringAsFixed(4)}, ${dest.longitude.toStringAsFixed(4)}) @ zoom ${zoom.toStringAsFixed(1)} - NO rebuild');
+    }
+
+    // Note: flutter_map's move() is synchronous and does not rebuild the widget tree.
+    // The map canvas repaints in place, keeping all layers stable.
   }
 
   bool _validLatLng(LatLng? point) {
@@ -294,7 +320,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                   isSelected: m.isSelected,
                   zoomLevel: mapController.camera.zoom,
                   // Fallbacks from MapMarkerData.meta allow immediate render
-                  fallbackName: (m.meta?['name']?.toString()),
+                  fallbackName: m.meta?['name']?.toString(),
                   fallbackSpeed: (m.meta?['speed'] is num)
                       ? (m.meta?['speed'] as num).toDouble()
                       : null,
@@ -327,15 +353,16 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
       builder: (context, ref, _) {
         final provider = ref.watch(mapTileSourceProvider);
         final lastSwitchTs = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
+        final rebuildEpoch = ref.watch(mapRebuildProvider);
         
         if (kDebugMode) {
-          debugPrint('[MAP] 🧭 Active provider: ${provider.id} (ts=$lastSwitchTs)');
+          debugPrint('[MAP_REBUILD] 🧭 Epoch: $rebuildEpoch, Source: ${provider.id}, Timestamp: $lastSwitchTs');
         }
 
         // If provider id changed, clear cached tile providers to force fresh instances
         if (_lastProviderId != provider.id) {
           if (kDebugMode) {
-            debugPrint('[MAP] 🔁 Provider changed ${_lastProviderId ?? 'null'} → ${provider.id}; clearing tile provider cache');
+            debugPrint('[MAP_REBUILD] 🔁 Provider changed ${_lastProviderId ?? 'null'} → ${provider.id}; clearing tile provider cache');
           }
           _tileProviderCache.clear();
           _lastProviderId = provider.id;
@@ -345,10 +372,13 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
         // This prevents map tiles from repainting when markers update
         return RepaintBoundary(
           child: FlutterMap(
-            // Stable key that only changes when the tile source changes.
-            // This avoids frequent full reconstructions that cause blinking.
-            // Include lastSwitchTs to guarantee a hard refresh when toggling
-            key: ValueKey('map_${provider.id}_$lastSwitchTs'),
+            // REBUILD-AWARE KEY: Combines source ID, timestamp, and rebuild epoch
+            // This ensures map rebuilds ONLY when:
+            // 1. Tile source changes (provider.id)
+            // 2. Explicit rebuild triggered (rebuildEpoch)
+            // 3. Timestamp-based cache bust (lastSwitchTs)
+            // Marker updates and camera moves do NOT trigger rebuilds
+            key: ValueKey('map_${provider.id}_${lastSwitchTs}_$rebuildEpoch'),
             mapController: mapController,
             options: MapOptions(
               initialCenter: const LatLng(0, 0),
@@ -398,7 +428,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                   tileProvider: layerTileProvider,
                   errorTileCallback: (tile, error, stack) {
                     if (kDebugMode) {
-                      debugPrint('[FMTC][ERROR] Base tile ${tileSource.id} ${tile.toString()}: ${error.runtimeType} -> $error');
+                      debugPrint('[FMTC][ERROR] Base tile ${tileSource.id} ${tile}: ${error.runtimeType} -> $error');
                     }
                   },
                 );

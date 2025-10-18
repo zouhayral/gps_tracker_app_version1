@@ -1,25 +1,27 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'map_tile_providers.dart';
+import 'package:my_app_gps/map/map_tile_providers.dart';
+import 'package:my_app_gps/providers/map_rebuild_provider.dart';
 
 /// Provider for managing the currently selected map tile source
 /// Persists user selection using SharedPreferences
 final mapTileSourceProvider =
     StateNotifierProvider<MapTileSourceNotifier, MapTileSource>(
-  (ref) => MapTileSourceNotifier(),
+  (ref) => MapTileSourceNotifier(ref),
 );
 
 /// Notifier that manages the selected map tile source
 /// Automatically loads saved preference on init and persists changes
 class MapTileSourceNotifier extends StateNotifier<MapTileSource> {
   static const _prefsKey = 'selected_map_source';
+  final Ref _ref;
   
   // Track last switch timestamp to force aggressive rebuilds
   int _lastSwitchTimestamp = DateTime.now().millisecondsSinceEpoch;
   int get lastSwitchTimestamp => _lastSwitchTimestamp;
 
-  MapTileSourceNotifier() : super(MapTileProviders.defaultSource) {
+  MapTileSourceNotifier(this._ref) : super(MapTileProviders.defaultSource) {
     _loadSavedSource();
   }
 
@@ -63,6 +65,10 @@ class MapTileSourceNotifier extends StateNotifier<MapTileSource> {
       debugPrint('[PROVIDER] 🔄 Updating map tile source to: ${newSource.id} (${newSource.name})');
       debugPrint('[PROVIDER] 🕐 Switch timestamp: $_lastSwitchTimestamp');
     }
+    
+    // Trigger explicit map rebuild via MapRebuildProvider
+    // This ensures FlutterMap's ValueKey changes and forces full reconstruction
+    _ref.read(mapRebuildProvider.notifier).trigger();
     
     state = newSource;
     
