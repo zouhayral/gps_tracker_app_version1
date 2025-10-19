@@ -52,6 +52,52 @@ const bool kEnableVerboseMapLogging = false;
 /// Performance impact: ~0.1ms per operation
 const bool kEnableMapPerformanceProfiling = false;
 
+/// Global toggle for FMTC debug overlay (runtime-toggleable)
+///
+/// Can be toggled at runtime via long-press on map in debug mode.
+/// Automatically disabled in release builds.
+class MapDebugFlags {
+  MapDebugFlags._(); // Private constructor
+
+  /// ValueNotifier for FMTC overlay visibility
+  static final ValueNotifier<bool> showFmtcOverlay = ValueNotifier<bool>(false);
+
+  /// Returns true if overlay should be visible
+  static bool get isOverlayEnabled => !kReleaseMode && showFmtcOverlay.value;
+
+  /// Toggle the overlay visibility (for tap gesture)
+  static void toggleOverlay() {
+    if (kReleaseMode) return;
+    showFmtcOverlay.value = !showFmtcOverlay.value;
+    if (kDebugMode) {
+      debugPrint(
+        '[MAP_DEBUG] FMTC overlay ${showFmtcOverlay.value ? "enabled" : "disabled"}',
+      );
+    }
+  }
+
+  /// Whether to show snapshot overlay during map loading
+  static const bool showSnapshotOverlay = false;
+
+  /// Whether to show rebuild tracking badges
+  static const bool showRebuildOverlay = false;
+
+  /// Toggle to enable frame timing summarizer logs
+  static const bool enableFrameTiming = false;
+
+  /// Toggle to enable PerformanceMetricsService (FPS/Jank logs, CSV, etc.)
+  static const bool enablePerfMetrics = false;
+
+  /// Toggle to use FleetMapTelemetryController (async-first) instead of devicesNotifierProvider
+  static const bool useFMTCController = false;
+
+  /// Toggle to show marker performance stats (cache efficiency, processing time)
+  static const bool showMarkerPerformance = false;
+
+  /// Toggle to enable tile prefetch and snapshot cache
+  static const bool enablePrefetch = false;
+}
+
 /// Helper to check if concurrent debug is active
 bool get isConcurrentDebugActive => kDebugMode && kEnableConcurrentDebug;
 

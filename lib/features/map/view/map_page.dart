@@ -14,6 +14,7 @@ import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 import 'package:my_app_gps/core/map/bitmap_descriptor_cache.dart';
 import 'package:my_app_gps/core/map/enhanced_marker_cache.dart';
 import 'package:my_app_gps/core/map/fleet_map_prefetch.dart';
+import 'package:my_app_gps/core/map/map_debug_flags.dart';
 import 'package:my_app_gps/core/map/marker_cache.dart';
 import 'package:my_app_gps/core/map/marker_icon_manager.dart';
 import 'package:my_app_gps/core/map/marker_performance_monitor.dart';
@@ -77,25 +78,6 @@ Map<int, Position> useDebouncedPositions(
     error: (_, __) {},
   );
   return latest;
-}
-
-/// Debug toggles for map page (safe defaults: all off)
-class MapDebugFlags {
-  // Toggle to show rebuild counters overlay (console + UI)
-  static const bool showRebuildOverlay = false;
-  // Toggle to enable frame timing summarizer logs
-  static const bool enableFrameTiming = false;
-  // Toggle to enable PerformanceMetricsService (FPS/Jank logs, CSV, etc.)
-  static const bool enablePerfMetrics = false;
-  // Toggle to use FleetMapTelemetryController (async-first) instead of devicesNotifierProvider
-  // Set to true to enable the new async controller for testing
-  static const bool useFMTCController = false;
-  // Toggle to show marker performance stats (cache efficiency, processing time)
-  static const bool showMarkerPerformance = false;
-  // Toggle to enable tile prefetch and snapshot cache
-  static const bool enablePrefetch = false;
-  // Toggle to show snapshot overlay during load
-  static const bool showSnapshotOverlay = false;
 }
 
 // Simple rebuild badge for profiling; increments an internal counter each build.
@@ -1234,29 +1216,43 @@ class _MapPageState extends ConsumerState<MapPage>
                   ]
                 : const <Map<String, dynamic>>[];
 
-            return Stack(
-              children: [
-                // OPTIMIZATION: Wrap map in RepaintBoundary for snapshot capture
-                RepaintBoundary(
-                  key: _snapshotKey,
-                  child: FlutterMapAdapter(
-                    key: _mapKey,
-                    markers: currentMarkers,
-                    cameraFit: fit,
-                    onMarkerTap: _onMarkerTap,
-                    onMapTap: _onMapTap,
-                    markersNotifier:
-                        _markersNotifier, // OPTIMIZATION: Use throttled ValueNotifier
+            return GestureDetector(
+              behavior: HitTestBehavior.deferToChild,
+              onLongPress: MapDebugFlags.toggleOverlay,
+              child: Stack(
+                children: [
+                  // OPTIMIZATION: Wrap map in RepaintBoundary for snapshot capture
+                  RepaintBoundary(
+                    key: _snapshotKey,
+                    child: FlutterMapAdapter(
+                      key: _mapKey,
+                      markers: currentMarkers,
+                      cameraFit: fit,
+                      onMarkerTap: _onMarkerTap,
+                      onMapTap: _onMapTap,
+                      markersNotifier:
+                          _markersNotifier, // OPTIMIZATION: Use throttled ValueNotifier
+                    ),
                   ),
-                ),
-                // Clustering HUD (non-intrusive)
-                const Positioned(
-                  left: 12,
-                  bottom: 12,
-                  child: ClusterHud(),
-                ),
-                // FMTC Diagnostics Overlay (debug-only)
-                const MapDebugOverlay(),
+                  // Clustering HUD (non-intrusive)
+                  const Positioned(
+                    left: 12,
+                    bottom: 12,
+                    child: ClusterHud(),
+                  ),
+                  // FMTC Diagnostics Overlay (debug-only, tap-to-toggle)
+                  ValueListenableBuilder<bool>(
+                    valueListenable: MapDebugFlags.showFmtcOverlay,
+                    builder: (context, showOverlay, child) {
+                      if (!MapDebugFlags.isOverlayEnabled) {
+                        return const SizedBox.shrink();
+                      }
+                      return const Align(
+                        alignment: Alignment.bottomLeft,
+                        child: MapDebugOverlay(),
+                      );
+                    },
+                  ),
                 // OPTIMIZATION: Show cached snapshot overlay during initial load
                 if (MapDebugFlags.showSnapshotOverlay &&
                     _isShowingSnapshot &&
@@ -1822,7 +1818,8 @@ class _MapPageState extends ConsumerState<MapPage>
                   ),
                 ),
               ],
-            );
+            ),
+            ); // Close GestureDetector
           },
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, st) => Center(
