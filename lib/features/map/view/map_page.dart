@@ -157,9 +157,8 @@ class _MapPageState extends ConsumerState<MapPage>
   // OPTIMIZATION: Enhanced marker cache with intelligent diffing
   final _enhancedMarkerCache = EnhancedMarkerCache();
 
-  // Bottom panel snaps
-  final List<double> _panelStops = const [0.05, 0.30, 0.50, 0.80];
-  int _panelIndex = 1; // start at 30%
+  // Bottom panel controller for smooth swipe animation
+  late final DraggableScrollableController _sheetController;
 
   // Refresh state
   bool _isRefreshing = false;
@@ -169,6 +168,9 @@ class _MapPageState extends ConsumerState<MapPage>
   @override
   void initState() {
     super.initState();
+
+    // Initialize draggable sheet controller for smooth bottom panel animation
+    _sheetController = DraggableScrollableController();
 
     // OPTIMIZATION: Initialize throttled marker notifier
     // Raised throttle to 80ms to reduce UI thread load
@@ -528,6 +530,7 @@ class _MapPageState extends ConsumerState<MapPage>
     _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
+    _sheetController.dispose(); // Dispose draggable sheet controller
     _markersNotifier
         .dispose(); // OPTIMIZATION: Clean up throttled marker notifier
 
@@ -1643,180 +1646,133 @@ class _MapPageState extends ConsumerState<MapPage>
                     connectionStatus: ref.watch(connectionStatusProvider),
                   ),
                 ),
-                // Bottom multi-snap panel
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: _selectedIds.isEmpty
-                        ? const SizedBox.shrink()
-                        : LayoutBuilder(
-                            key: ValueKey(_selectedIds.hashCode ^ _panelIndex),
-                            builder: (ctx, _) {
-                              final screenH = MediaQuery.of(
-                                context,
-                              ).size.height;
-                              final height =
-                                  (screenH * _panelStops[_panelIndex]).clamp(
-                                90.0,
-                                screenH * 0.9,
-                              );
-                              return GestureDetector(
-                                onVerticalDragEnd: (details) {
-                                  final v = details.primaryVelocity ?? 0;
-                                  if (v > 250) {
-                                    setState(
-                                      () => _panelIndex = (_panelIndex - 1)
-                                          .clamp(0, _panelStops.length - 1),
-                                    );
-                                  } else if (v < -250) {
-                                    setState(
-                                      () => _panelIndex = (_panelIndex + 1)
-                                          .clamp(0, _panelStops.length - 1),
-                                    );
-                                  }
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  curve: Curves.easeOut,
-                                  height: height,
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    10,
-                                    16,
-                                    16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(24),
-                                    ),
-                                    border: Border.all(
-                                      color: const Color(0xFFA6CD27),
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      InkWell(
-                                        onTap: () => setState(
-                                          () => _panelIndex =
-                                              (_panelIndex + 1) %
-                                                  _panelStops.length,
-                                        ),
-                                        borderRadius: BorderRadius.circular(40),
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 4,
-                                            bottom: 8,
-                                          ),
-                                          child: Container(
-                                            width: 56,
-                                            height: 6,
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[400],
-                                              borderRadius:
-                                                  BorderRadius.circular(40),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: ClipRect(
-                                          child: SingleChildScrollView(
-                                            padding: EdgeInsets.zero,
-                                            physics:
-                                                const BouncingScrollPhysics(),
-                                            child: RepaintBoundary(
-                                              child: AnimatedSwitcher(
-                                                duration: const Duration(
-                                                  milliseconds: 220,
-                                                ),
-                                                switchInCurve: Curves.easeInOut,
-                                                switchOutCurve:
-                                                    Curves.easeInOut,
-                                                transitionBuilder:
-                                                    (child, animation) {
-                                                  final slide = Tween<Offset>(
-                                                    begin:
-                                                        const Offset(0, 0.02),
-                                                    end: Offset.zero,
-                                                  ).animate(animation);
-                                                  return FadeTransition(
-                                                    opacity: animation,
-                                                    child: SlideTransition(
-                                                      position: slide,
-                                                      child: child,
-                                                    ),
-                                                  );
-                                                },
-                                                child: _selectedIds.length == 1
-                                                    ? _InfoBox(
-                                                        key: const ValueKey(
-                                                          'single-info',
-                                                        ),
-                                                        deviceId:
-                                                            _selectedIds.first,
-                                                        devices: devices,
-                                                        position: ref.watch(
-                                                          positionByDeviceProvider(
-                                                            _selectedIds.first,
-                                                          ),
-                                                        ),
-                                                        statusResolver:
-                                                            _deviceStatus,
-                                                        statusColorBuilder:
-                                                            _statusColor,
-                                                        onClose: () => setState(
-                                                          _selectedIds.clear,
-                                                        ),
-                                                        onFocus: _focusSelected,
-                                                      )
-                                                    : _MultiSelectionInfoBox(
-                                                        key: const ValueKey(
-                                                          'multi-info',
-                                                        ),
-                                                        selectedIds:
-                                                            _selectedIds,
-                                                        devices: devices,
-                                                        positions: positions,
-                                                        statusResolver:
-                                                            _deviceStatus,
-                                                        statusColorBuilder:
-                                                            _statusColor,
-                                                        onClear: () => setState(
-                                                          _selectedIds.clear,
-                                                        ),
-                                                        onFocus: _focusSelected,
-                                                      ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      if (_panelIndex == 0)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 6,
-                                          ),
-                                          child: Text(
-                                            'Tap or swipe up for more',
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.labelSmall,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
+                // Bottom draggable panel with smooth swipe animation
+                if (_selectedIds.isNotEmpty)
+                  DraggableScrollableSheet(
+                    controller: _sheetController,
+                    initialChildSize: 0.05, // 5% of screen height (collapsed)
+                    minChildSize: 0.05,
+                    maxChildSize: 0.45, // 45% of screen height (expanded)
+                    snap: true,
+                    snapSizes: const [0.05, 0.45],
+                    builder: (context, scrollController) {
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOutCubic,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(24),
                           ),
+                          border: Border.all(
+                            color: const Color(0xFFA6CD27),
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 10,
+                              offset: const Offset(0, -3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            // Grab line - always visible
+                            GestureDetector(
+                              onTap: () {
+                                // Toggle between collapsed and expanded
+                                final currentSize =
+                                    _sheetController.size;
+                                if (currentSize < 0.25) {
+                                  _sheetController.animateTo(
+                                    0.45,
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeOutCubic,
+                                  );
+                                } else {
+                                  _sheetController.animateTo(
+                                    0.05,
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeOutCubic,
+                                  );
+                                }
+                              },
+                              child: Container(
+                                width: 56,
+                                height: 6,
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 16,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[400],
+                                  borderRadius: BorderRadius.circular(40),
+                                ),
+                              ),
+                            ),
+
+                            // Scrollable content
+                            Expanded(
+                              child: SingleChildScrollView(
+                                controller: scrollController,
+                                physics: const BouncingScrollPhysics(),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  switchInCurve: Curves.easeInOut,
+                                  switchOutCurve: Curves.easeInOut,
+                                  transitionBuilder: (child, animation) {
+                                    final slide = Tween<Offset>(
+                                      begin: const Offset(0, 0.02),
+                                      end: Offset.zero,
+                                    ).animate(animation);
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: slide,
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: _selectedIds.length == 1
+                                      ? _InfoBox(
+                                          key: const ValueKey('single-info'),
+                                          deviceId: _selectedIds.first,
+                                          devices: devices,
+                                          position: ref.watch(
+                                            positionByDeviceProvider(
+                                              _selectedIds.first,
+                                            ),
+                                          ),
+                                          statusResolver: _deviceStatus,
+                                          statusColorBuilder: _statusColor,
+                                          onClose: () =>
+                                              setState(_selectedIds.clear),
+                                          onFocus: _focusSelected,
+                                        )
+                                      : _MultiSelectionInfoBox(
+                                          key: const ValueKey('multi-info'),
+                                          selectedIds: _selectedIds,
+                                          devices: devices,
+                                          positions: positions,
+                                          statusResolver: _deviceStatus,
+                                          statusColorBuilder: _statusColor,
+                                          onClear: () =>
+                                              setState(_selectedIds.clear),
+                                          onFocus: _focusSelected,
+                                        ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                ),
               ],
             ),
             ); // Close GestureDetector
