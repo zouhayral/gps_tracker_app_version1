@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
+// import 'package:flutter/physics.dart';
 // import 'package:flutter_map/flutter_map.dart';
 // import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,40 +42,7 @@ import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:url_launcher/url_launcher.dart';
-// Smooth spring-based snapping controller for the bottom sheet
-class SmoothSheetController {
-  final DraggableScrollableController controller;
-  final double min;
-  final double max;
-
-  SmoothSheetController({
-    required this.controller,
-    this.min = 0.05,
-    this.max = 0.45,
-  });
-
-  void snapToNearest(double currentSize, double velocity) {
-    // Decide target based on which anchor is closer
-  final target = (currentSize - min).abs() < (max - currentSize).abs()
-        ? min
-        : max;
-
-    // Optionally compute a spring simulation (for future fine‑tuning)
-    // ignore: unused_local_variable
-    final simulation = SpringSimulation(
-      const SpringDescription(mass: 1, stiffness: 250, damping: 30),
-      currentSize,
-      target,
-      velocity,
-    );
-    // We keep animateTo with a friendly easing for now; simulation reserved for custom ticker use
-    controller.animateTo(
-      target,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeOutCubic,
-    );
-  }
-}
+// Removed SmoothSheetController; using direct controller-driven logic
 // import 'package:my_app_gps/services/websocket_manager.dart';
 
 // Clean rebuilt MapPage implementation
@@ -194,10 +161,8 @@ class _MapPageState extends ConsumerState<MapPage>
 
   // Bottom panel controller for smooth swipe animation
   late final DraggableScrollableController _sheetController;
-  late final SmoothSheetController _smoothSheet;
-  bool _isSnapping = false;
-  Timer? _sheetSnapDebounce;
-  double _lastNotifiedExtent = 0.05;
+  // Track current extent; used for toggle decisions
+  double _lastExtent = 0.05;
 
   // Refresh state
   bool _isRefreshing = false;
@@ -210,28 +175,10 @@ class _MapPageState extends ConsumerState<MapPage>
 
     // Initialize draggable sheet controller for smooth bottom panel animation
     _sheetController = DraggableScrollableController();
-  _smoothSheet = SmoothSheetController(controller: _sheetController);
-
-    // Listen to size changes and debounce snapping to nearest anchor
+    // Lightweight listener to track current extent; no auto-snapping
     _sheetController.addListener(() {
-      if (!mounted) return;
-      final extent = _sheetController.size;
-      _lastNotifiedExtent = extent;
-      // Guard against re-entrant triggers during snapping animations
-      if (_isSnapping) return;
-
-      // Only consider snapping when not at anchors
-      if (extent != 0.05 && extent != 0.45) {
-        _sheetSnapDebounce?.cancel();
-        _sheetSnapDebounce = Timer(const Duration(milliseconds: 90), () {
-          if (!mounted) return;
-          _isSnapping = true;
-          _smoothSheet.snapToNearest(_lastNotifiedExtent, 0);
-          Future<void>.delayed(const Duration(milliseconds: 420), () {
-            if (mounted) _isSnapping = false;
-          });
-        });
-      }
+      if (!mounted || !_sheetController.isAttached) return;
+      _lastExtent = _sheetController.size;
     });
 
     // OPTIMIZATION: Initialize throttled marker notifier
@@ -1710,13 +1657,49 @@ class _MapPageState extends ConsumerState<MapPage>
                 ),
                 // Bottom draggable panel with smooth swipe animation
                 if (_selectedIds.isNotEmpty)
-                  DraggableScrollableSheet(
-                    controller: _sheetController,
-                    initialChildSize: 0.05,
-                    minChildSize: 0.05,
-                    maxChildSize: 0.45,
-                    builder: (context, scrollController) {
-                      return AnimatedContainer(
+                  GestureDetector(
+                    onTap: () async {
+                      if (!_sheetController.isAttached) return;
+                      final target = (_lastExtent < 0.25) ? 0.45 : 0.05;
+                      // Ensure attached before animating this frame
+                      WidgetsBinding.instance.addPostFrameCallback((_) async {
+                        if (!_sheetController.isAttached) return;
+                        await _sheetController.animateTo(
+                          target,
+                          duration: const Duration(milliseconds: 350),
+                          curve: Curves.easeInOutCubic,
+                        );
+                        _lastExtent = target;
+                      });
+                    },
+                    onVerticalDragEnd: (details) async {
+                      if (!_sheetController.isAttached) return;
+                      final velocity = details.primaryVelocity ?? 0;
+                      double target;
+                      if (velocity < -300) {
+                        target = 0.45;
+                      } else if (velocity > 300) {
+                        target = 0.05;
+                      } else {
+                        target = (_lastExtent < 0.25) ? 0.45 : 0.05;
+                      }
+                      WidgetsBinding.instance.addPostFrameCallback((_) async {
+                        if (!_sheetController.isAttached) return;
+                        await _sheetController.animateTo(
+                          target,
+                          duration: const Duration(milliseconds: 400),
+                          curve: Curves.easeOutCubic,
+                        );
+                        _lastExtent = target;
+                      });
+                    },
+                    child: DraggableScrollableSheet(
+                      controller: _sheetController,
+                      initialChildSize: 0.05,
+                      minChildSize: 0.05,
+                      maxChildSize: 0.45,
+                      builder: (context, scrollController) {
+                        return AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOutCubic,
                           decoration: BoxDecoration(
@@ -1738,34 +1721,16 @@ class _MapPageState extends ConsumerState<MapPage>
                           ),
                           child: Column(
                             children: [
-                              GestureDetector(
-                                onTap: () {
-                                  final currentSize = _sheetController.size;
-                                  if (currentSize < 0.25) {
-                                    _sheetController.animateTo(
-                                      0.45,
-                                      duration: const Duration(milliseconds: 400),
-                                      curve: Curves.easeOutCubic,
-                                    );
-                                  } else {
-                                    _sheetController.animateTo(
-                                      0.05,
-                                      duration: const Duration(milliseconds: 400),
-                                      curve: Curves.easeOutCubic,
-                                    );
-                                  }
-                                },
-                                child: Container(
-                                  width: 56,
-                                  height: 6,
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                    horizontal: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[400],
-                                    borderRadius: BorderRadius.circular(40),
-                                  ),
+                              Container(
+                                width: 56,
+                                height: 6,
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 16,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[400],
+                                  borderRadius: BorderRadius.circular(40),
                                 ),
                               ),
                               Expanded(
@@ -1824,7 +1789,8 @@ class _MapPageState extends ConsumerState<MapPage>
                             ],
                           ),
                         );
-                    },
+                      },
+                    ),
                   ),
               ],
             ),

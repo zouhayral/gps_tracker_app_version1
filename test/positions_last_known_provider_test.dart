@@ -108,10 +108,11 @@ void main() {
     );
     addTearDown(sub.close);
 
-    // First, DAO prefill should be available via state.asData
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    final first = container.read(positionsLastKnownProvider);
-    expect(first.asData?.value[1]?.latitude, 5);
+  // First, DAO prefill should be available via state.asData
+  await Future<void>.delayed(const Duration(milliseconds: 10));
+  final first = container.read(positionsLastKnownProvider);
+  final firstMap = first.asData?.value;
+  expect(firstMap?[1]?.latitude, 5);
 
     // Then, REST should replace it — wait up to 1s for the provider to emit the REST result.
     final end = DateTime.now().add(const Duration(seconds: 1));
@@ -119,7 +120,7 @@ void main() {
     while (DateTime.now().isBefore(end)) {
       final state = container.read(positionsLastKnownProvider);
       finalMap = state.asData?.value;
-      if (finalMap != null && finalMap[1]?.latitude == 7) break;
+      if (finalMap?[1]?.latitude == 7) break;
       await Future<void>.delayed(const Duration(milliseconds: 20));
     }
     expect(finalMap, isNotNull);
