@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
 import 'package:my_app_gps/core/diagnostics/frame_timing_summarizer.dart';
 import 'package:my_app_gps/core/diagnostics/map_performance_monitor.dart';
 import 'package:my_app_gps/core/diagnostics/performance_metrics_service.dart';
@@ -123,6 +124,8 @@ class _MapPageState extends ConsumerState<MapPage>
     with WidgetsBindingObserver, MapPageLifecycleMixin<MapPage> {
   // Selection
   final Set<int> _selectedIds = <int>{};
+  // 7F: Selected marker snapshot for info card display
+  VehicleDataSnapshot? _selectedSnapshot;
   // Last-known positions captured by listeners to avoid timing gaps
   final Map<int, Position> _lastPositions = <int, Position>{};
 
@@ -962,24 +965,30 @@ class _MapPageState extends ConsumerState<MapPage>
     // Trigger fresh fetch for this device immediately
     refreshDevice(n);
 
+    // 7F: Get snapshot for tapped marker to display in info card
+    final notifier = ref.read(vehicleSnapshotProvider(n));
+    final snapshot = notifier.value;
+
     setState(() {
-      if (_selectedIds.contains(n)) {
-        _selectedIds.remove(n);
-      } else {
-        _selectedIds.add(n);
-      }
+      _selectedIds.clear();
+      _selectedIds.add(n); // Single selection for info card
+      _selectedSnapshot = snapshot; // Store snapshot for card display
     });
 
     // Ensure we have a position for this tapped/selected device
     // Fire-and-forget to enrich markers without blocking UI
     unawaited(_ensureSelectedDevicePositions({n}));
 
-    // 7E: Auto-fit camera to selected markers with smooth animation
-    _scheduleCameraFitForSelection();
+    // 7F: Disable auto-camera fit on marker tap (keep map stable)
+    // ❌ Do NOT call _scheduleCameraFitForSelection();
 
     // OPTIMIZATION: Trigger marker update with new selection state
     final devicesAsync = ref.read(devicesNotifierProvider);
     devicesAsync.whenData(_triggerMarkerUpdate);
+
+    if (kDebugMode) {
+      debugPrint('[MARKER_TAP] Selected deviceId=$n, snapshot: $snapshot');
+    }
 
     // New: if multiple devices are near the tapped one (within ~40m),
     // show a spiderfy overlay for quick disambiguation.
@@ -1045,6 +1054,7 @@ class _MapPageState extends ConsumerState<MapPage>
     var changed = false;
     if (_selectedIds.isNotEmpty) {
       _selectedIds.clear();
+      _selectedSnapshot = null; // 7F: Hide info card
       changed = true;
 
       // 7E: Auto-fit camera to all markers when selection cleared
@@ -1179,6 +1189,96 @@ class _MapPageState extends ConsumerState<MapPage>
     final d = diff.inDays;
     if (d < 7) return '${d}d ago';
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  // 7F: Build device overlay info card
+  Widget _buildDeviceOverlayCard(VehicleDataSnapshot snap) {
+    // Get device info for name and status
+    final device = ref.read(deviceByIdProvider(snap.deviceId));
+    final deviceName = device?['name']?.toString() ?? 'Device ${snap.deviceId}';
+    final status = _deviceStatus(device, snap.position);
+    
+    final isOnline = status == 'online';
+    final isMoving = snap.motion ?? false;
+    final ignOn = snap.engineState == EngineState.on;
+
+    // Determine status color
+    Color statusColor;
+    if (!isOnline) {
+      statusColor = Colors.grey;
+    } else if (isMoving) {
+      statusColor = Colors.green;
+    } else if (ignOn) {
+      statusColor = Colors.orange;
+    } else {
+      statusColor = Colors.blueGrey;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    deviceName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    isOnline ? 'Online' : 'Offline',
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Ignition: ${ignOn ? "ON" : "OFF"}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              Text(
+                isMoving ? 'Moving' : 'Stopped',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   // ---------- Build ----------
@@ -1918,6 +2018,18 @@ class _MapPageState extends ConsumerState<MapPage>
                         )
                       : const SizedBox.shrink(key: ValueKey('no-sheet')),
                 ),
+                // 7F: Smart Marker Overlay InfoCard
+                if (_selectedSnapshot != null)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 24,
+                    child: AnimatedOpacity(
+                      opacity: 1,
+                      duration: const Duration(milliseconds: 250),
+                      child: _buildDeviceOverlayCard(_selectedSnapshot!),
+                    ),
+                  ),
               ],
             ),
             ); // Close GestureDetector
