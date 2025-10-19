@@ -25,6 +25,39 @@ class EnhancedMarkerCache {
   DateTime? _lastUpdate;
   static const _minUpdateInterval = Duration(milliseconds: 300);
 
+  /// Determine if marker should be rebuilt based on snapshot changes
+  /// 
+  /// **Optimization rules:**
+  /// - Skip if timestamp identical (no new position data)
+  /// - Skip if position delta < 0.000001° (~10 cm)
+  /// - Skip if motion/engine states unchanged and position stable
+  /// 
+  /// **Returns:** true if marker needs rebuild, false to reuse existing marker
+  bool _shouldRebuildMarker(_MarkerSnapshot? oldSnap, _MarkerSnapshot newSnap) {
+    // First time creation - always rebuild
+    if (oldSnap == null) return true;
+
+    // ✅ Skip if timestamp identical (no new position data)
+    if (oldSnap.timestamp == newSnap.timestamp) return false;
+
+    // ✅ Skip if position delta < 0.000001° (~10 cm)
+    final samePosition = (oldSnap.lat - newSnap.lat).abs() < 0.000001 &&
+                         (oldSnap.lon - newSnap.lon).abs() < 0.000001;
+
+    // ✅ Skip if motion/engine states unchanged and position stable
+    final sameState = oldSnap.engineOn == newSnap.engineOn &&
+                      oldSnap.speed == newSnap.speed &&
+                      oldSnap.course == newSnap.course;
+
+    final sameSelection = oldSnap.isSelected == newSnap.isSelected;
+
+    // Only rebuild if something meaningful changed
+    if (samePosition && sameState && sameSelection) return false;
+
+    // ⚡ Otherwise, rebuild marker
+    return true;
+  }
+
   /// Get markers with intelligent diffing - only updates changed markers
   ///
   /// **Throttling:** Updates are throttled to minimum 300ms intervals
@@ -99,22 +132,27 @@ class EnhancedMarkerCache {
       }
 
       if (_valid(p.latitude, p.longitude)) {
+        final engineOn = _asTrue(p.attributes['ignition']) ||
+            _asTrue(p.attributes['engineOn']) ||
+            _asTrue(p.attributes['engine_on']);
+        
         final snapshot = _MarkerSnapshot(
           lat: p.latitude,
           lon: p.longitude,
           isSelected: selectedIds.contains(deviceId),
           speed: p.speed,
           course: p.course,
+          timestamp: p.deviceTime,
+          engineOn: engineOn,
         );
 
         final existingSnapshot = _snapshots[markerId];
         final existingMarker = _cache[markerId];
 
-        // Check if marker needs update
-    final needsUpdate = existingSnapshot == null ||
-      existingMarker == null ||
-      existingSnapshot != snapshot;
-    if (needsUpdate) {
+        // Check if marker needs update using intelligent rebuild detection
+        final needsUpdate = _shouldRebuildMarker(existingSnapshot, snapshot);
+        
+        if (needsUpdate) {
           // Create or update marker
           final marker = MapMarkerData(
             id: markerId,
@@ -126,9 +164,7 @@ class EnhancedMarkerCache {
               'speed': p.speed,
               'course': p.course,
               // Provide engineOn boolean when present in attributes
-              'engineOn': _asTrue(p.attributes['ignition']) ||
-                  _asTrue(p.attributes['engineOn']) ||
-                  _asTrue(p.attributes['engine_on']),
+              'engineOn': engineOn,
             },
           );
 
@@ -146,8 +182,10 @@ class EnhancedMarkerCache {
           if (kDebugMode) {
             debugPrint('[MARKER] 🔁 Skipped rebuild for deviceId=$deviceId');
           }
-          updated.add(existingMarker);
-          reused.add(markerId);
+          if (existingMarker != null) {
+            updated.add(existingMarker);
+            reused.add(markerId);
+          }
         }
 
         processedIds.add(markerId);
@@ -180,22 +218,32 @@ class EnhancedMarkerCache {
       final lon = _asDouble(d['longitude']);
 
       if (_valid(lat, lon)) {
+        final engineOn = _asTrue(d['ignition']) ||
+            _asTrue(d['engineOn']) ||
+            _asTrue(d['engine_on']);
+        
+        // Use current time as fallback for devices without recent position updates
+        final timestamp = d['lastUpdate'] != null 
+            ? DateTime.tryParse(d['lastUpdate'].toString())?.toUtc() ?? DateTime.now().toUtc()
+            : DateTime.now().toUtc();
+        
         final snapshot = _MarkerSnapshot(
           lat: lat!,
           lon: lon!,
           isSelected: selectedIds.contains(deviceId),
           speed: 0,
           course: 0,
+          timestamp: timestamp,
+          engineOn: engineOn,
         );
 
         final existingSnapshot = _snapshots[markerId];
         final existingMarker = _cache[markerId];
 
-        // Check if marker needs update
-    final needsUpdate = existingSnapshot == null ||
-      existingMarker == null ||
-      existingSnapshot != snapshot;
-    if (needsUpdate) {
+        // Check if marker needs update using intelligent rebuild detection
+        final needsUpdate = _shouldRebuildMarker(existingSnapshot, snapshot);
+        
+        if (needsUpdate) {
           // Create or update marker
           final marker = MapMarkerData(
             id: markerId,
@@ -204,9 +252,7 @@ class EnhancedMarkerCache {
             meta: {
               'name': name,
               // Try to infer engine state from device fields when available
-              'engineOn': _asTrue(d['ignition']) ||
-                  _asTrue(d['engineOn']) ||
-                  _asTrue(d['engine_on']),
+              'engineOn': engineOn,
             },
           );
 
@@ -221,8 +267,10 @@ class EnhancedMarkerCache {
           }
         } else {
           // Reuse existing marker
-          updated.add(existingMarker);
-          reused.add(markerId);
+          if (existingMarker != null) {
+            updated.add(existingMarker);
+            reused.add(markerId);
+          }
         }
 
         processedIds.add(markerId);
@@ -267,34 +315,22 @@ class EnhancedMarkerCache {
 
     // Log reuse ratio if significant activity
     if (kDebugMode && (result.created > 0 || result.removed > 0 || result.modified > 0)) {
-      final total = result.created + result.modified + result.reused;
       final rebuildCount = result.created + result.modified;
-      final rebuildPercent = total > 0 ? (rebuildCount / total * 100).toStringAsFixed(1) : '0.0';
-      final reusePercent = (result.efficiency * 100).toStringAsFixed(1);
+      final reuseRate = result.efficiency * 100;
       
       debugPrint(
-        '[MARKER] ✅ Rebuilt $rebuildCount/${result.markers.length} markers ($rebuildPercent%)',
-      );
-      debugPrint(
-        '[EnhancedMarkerCache] 📊 Update: '
-        'total=${result.markers.length}, '
-        'created=${result.created}, '
-        'modified=${result.modified}, '
-        'reused=${result.reused}, '
-        'removed=${result.removed}, '
-        'reuse=$reusePercent%, '
-        'time=${stopwatch.elapsedMilliseconds}ms',
+        '[MARKER] ✅ Rebuilt $rebuildCount/${result.markers.length} markers (${reuseRate.toStringAsFixed(1)}% reuse)',
       );
 
-      // Highlight if reuse is below target
-      if (result.efficiency < 0.7 && result.created + result.reused > 10) {
+      // Highlight if reuse is below target (should be >90% with optimization)
+      if (result.efficiency < 0.9 && result.created + result.reused > 10) {
         debugPrint(
-          '[EnhancedMarkerCache] ⚠️ Low reuse rate: $reusePercent% '
-          '(target: >70%)',
+          '[EnhancedMarkerCache] ⚠️ Low reuse rate: ${reuseRate.toStringAsFixed(1)}% '
+          '(target: >90%)',
         );
-      } else if (result.efficiency >= 0.7) {
+      } else if (result.efficiency >= 0.9) {
         debugPrint(
-          '[EnhancedMarkerCache] ✅ Good reuse rate: $reusePercent%',
+          '[EnhancedMarkerCache] ✅ Excellent reuse rate: ${reuseRate.toStringAsFixed(1)}%',
         );
       }
     }
@@ -377,6 +413,8 @@ class _MarkerSnapshot {
     required this.isSelected,
     required this.speed,
     required this.course,
+    required this.timestamp,
+    required this.engineOn,
   });
 
   final double lat;
@@ -384,6 +422,8 @@ class _MarkerSnapshot {
   final bool isSelected;
   final double speed;
   final double course;
+  final DateTime timestamp;
+  final bool engineOn;
 
   @override
   bool operator ==(Object other) =>
@@ -394,7 +434,9 @@ class _MarkerSnapshot {
           lon == other.lon &&
           isSelected == other.isSelected &&
           speed == other.speed &&
-          course == other.course;
+          course == other.course &&
+          timestamp == other.timestamp &&
+          engineOn == other.engineOn;
 
   @override
   int get hashCode =>
@@ -402,5 +444,7 @@ class _MarkerSnapshot {
       lon.hashCode ^
       isSelected.hashCode ^
       speed.hashCode ^
-      course.hashCode;
+      course.hashCode ^
+      timestamp.hashCode ^
+      engineOn.hashCode;
 }
