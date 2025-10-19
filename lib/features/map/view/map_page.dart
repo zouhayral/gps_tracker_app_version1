@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 // import 'package:flutter/physics.dart';
 // import 'package:flutter_map/flutter_map.dart';
 // import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
@@ -159,10 +160,7 @@ class _MapPageState extends ConsumerState<MapPage>
   // OPTIMIZATION: Enhanced marker cache with intelligent diffing
   final _enhancedMarkerCache = EnhancedMarkerCache();
 
-  // Bottom panel controller for smooth swipe animation
-  late final DraggableScrollableController _sheetController;
-  // Track current extent; used for toggle decisions
-  double _lastExtent = 0.05;
+  // Instant sheet has no controller; no fields required
 
   // Refresh state
   bool _isRefreshing = false;
@@ -173,13 +171,7 @@ class _MapPageState extends ConsumerState<MapPage>
   void initState() {
     super.initState();
 
-    // Initialize draggable sheet controller for smooth bottom panel animation
-    _sheetController = DraggableScrollableController();
-    // Lightweight listener to track current extent; no auto-snapping
-    _sheetController.addListener(() {
-      if (!mounted || !_sheetController.isAttached) return;
-      _lastExtent = _sheetController.size;
-    });
+    // No sheet controller to initialize for InstantInfoSheet
 
     // OPTIMIZATION: Initialize throttled marker notifier
     // Raised throttle to 80ms to reduce UI thread load
@@ -539,7 +531,7 @@ class _MapPageState extends ConsumerState<MapPage>
     _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
-    _sheetController.dispose(); // Dispose draggable sheet controller
+  // No sheet controller to dispose for InstantInfoSheet
     _markersNotifier
         .dispose(); // OPTIMIZATION: Clean up throttled marker notifier
 
@@ -1655,141 +1647,57 @@ class _MapPageState extends ConsumerState<MapPage>
                     connectionStatus: ref.watch(connectionStatusProvider),
                   ),
                 ),
-                // Bottom draggable panel with smooth swipe animation
+                // Bottom info panel with instant swipe reaction
                 if (_selectedIds.isNotEmpty)
-                  GestureDetector(
-                    onTap: () async {
-                      if (!_sheetController.isAttached) return;
-                      final target = (_lastExtent < 0.25) ? 0.45 : 0.05;
-                      // Ensure attached before animating this frame
-                      WidgetsBinding.instance.addPostFrameCallback((_) async {
-                        if (!_sheetController.isAttached) return;
-                        await _sheetController.animateTo(
-                          target,
-                          duration: const Duration(milliseconds: 350),
-                          curve: Curves.easeInOutCubic,
-                        );
-                        _lastExtent = target;
-                      });
-                    },
-                    onVerticalDragEnd: (details) async {
-                      if (!_sheetController.isAttached) return;
-                      final velocity = details.primaryVelocity ?? 0;
-                      double target;
-                      if (velocity < -300) {
-                        target = 0.45;
-                      } else if (velocity > 300) {
-                        target = 0.05;
-                      } else {
-                        target = (_lastExtent < 0.25) ? 0.45 : 0.05;
-                      }
-                      WidgetsBinding.instance.addPostFrameCallback((_) async {
-                        if (!_sheetController.isAttached) return;
-                        await _sheetController.animateTo(
-                          target,
-                          duration: const Duration(milliseconds: 400),
-                          curve: Curves.easeOutCubic,
-                        );
-                        _lastExtent = target;
-                      });
-                    },
-                    child: DraggableScrollableSheet(
-                      controller: _sheetController,
-                      initialChildSize: 0.05,
-                      minChildSize: 0.05,
-                      maxChildSize: 0.45,
-                      builder: (context, scrollController) {
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOutCubic,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(24),
+                  _InstantInfoSheet(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        switchInCurve: Curves.easeInOut,
+                        switchOutCurve: Curves.easeInOut,
+                        transitionBuilder: (child, animation) {
+                          final slide = Tween<Offset>(
+                            begin: const Offset(0, 0.02),
+                            end: Offset.zero,
+                          ).animate(animation);
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: slide,
+                              child: child,
                             ),
-                            border: Border.all(
-                              color: const Color(0xFFA6CD27),
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
-                                blurRadius: 10,
-                                offset: const Offset(0, -3),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 56,
-                                height: 6,
-                                margin: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                  horizontal: 16,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[400],
-                                  borderRadius: BorderRadius.circular(40),
-                                ),
-                              ),
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  controller: scrollController,
-                                  physics: const BouncingScrollPhysics(),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
-                                  ),
-                                  child: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 220),
-                                    switchInCurve: Curves.easeInOut,
-                                    switchOutCurve: Curves.easeInOut,
-                                    transitionBuilder: (child, animation) {
-                                      final slide = Tween<Offset>(
-                                        begin: const Offset(0, 0.02),
-                                        end: Offset.zero,
-                                      ).animate(animation);
-                                      return FadeTransition(
-                                        opacity: animation,
-                                        child: SlideTransition(
-                                          position: slide,
-                                          child: child,
-                                        ),
-                                      );
-                                    },
-                                    child: _selectedIds.length == 1
-                                        ? _InfoBox(
-                                            key: const ValueKey('single-info'),
-                                            deviceId: _selectedIds.first,
-                                            devices: devices,
-                                            position: ref.watch(
-                                              positionByDeviceProvider(
-                                                _selectedIds.first,
-                                              ),
-                                            ),
-                                            statusResolver: _deviceStatus,
-                                            statusColorBuilder: _statusColor,
-                                            onClose: () => setState(_selectedIds.clear),
-                                            onFocus: _focusSelected,
-                                          )
-                                        : _MultiSelectionInfoBox(
-                                            key: const ValueKey('multi-info'),
-                                            selectedIds: _selectedIds,
-                                            devices: devices,
-                                            positions: positions,
-                                            statusResolver: _deviceStatus,
-                                            statusColorBuilder: _statusColor,
-                                            onClear: () => setState(_selectedIds.clear),
-                                            onFocus: _focusSelected,
-                                          ),
+                          );
+                        },
+                        child: _selectedIds.length == 1
+                            ? _InfoBox(
+                                key: const ValueKey('single-info'),
+                                deviceId: _selectedIds.first,
+                                devices: devices,
+                                position: ref.watch(
+                                  positionByDeviceProvider(
+                                    _selectedIds.first,
                                   ),
                                 ),
+                                statusResolver: _deviceStatus,
+                                statusColorBuilder: _statusColor,
+                                onClose: () => setState(_selectedIds.clear),
+                                onFocus: _focusSelected,
+                              )
+                            : _MultiSelectionInfoBox(
+                                key: const ValueKey('multi-info'),
+                                selectedIds: _selectedIds,
+                                devices: devices,
+                                positions: positions,
+                                statusResolver: _deviceStatus,
+                                statusColorBuilder: _statusColor,
+                                onClear: () => setState(_selectedIds.clear),
+                                onFocus: _focusSelected,
                               ),
-                            ],
-                          ),
-                        );
-                      },
+                      ),
                     ),
                   ),
               ],
@@ -2690,6 +2598,109 @@ class _StatRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Instant-response info sheet: reacts to drag updates immediately and snaps on release.
+class _InstantInfoSheet extends StatefulWidget {
+  const _InstantInfoSheet({required this.child});
+  final Widget child;
+
+  @override
+  State<_InstantInfoSheet> createState() => _InstantInfoSheetState();
+}
+
+class _InstantInfoSheetState extends State<_InstantInfoSheet>
+    with SingleTickerProviderStateMixin {
+  double _fraction = 0.05; // between 0.05 and 0.45
+  double _dragStart = 0;
+  double _startFraction = 0;
+  bool _isDragging = false;
+
+  void _onDragStart(DragStartDetails d) {
+    _dragStart = d.globalPosition.dy;
+    _startFraction = _fraction;
+    _isDragging = true;
+  }
+
+  void _onDragUpdate(DragUpdateDetails d) {
+    if (!_isDragging) return;
+    final delta = _dragStart - d.globalPosition.dy;
+    final height = MediaQuery.of(context).size.height;
+    final newFraction = (_startFraction + delta / height).clamp(0.05, 0.45);
+    setState(() => _fraction = newFraction);
+  }
+
+  void _onDragEnd(DragEndDetails d) {
+    _isDragging = false;
+    final velocity = d.primaryVelocity ?? 0;
+
+    double target;
+    if (velocity < -300) {
+      target = 0.45;
+    } else if (velocity > 300) {
+      target = 0.05;
+    } else {
+      target = (_fraction < 0.25) ? 0.05 : 0.45;
+    }
+
+    HapticFeedback.selectionClick();
+    setState(() => _fraction = target);
+  }
+
+  void _onTap() {
+    final target = (_fraction < 0.25) ? 0.45 : 0.05;
+    HapticFeedback.selectionClick();
+    setState(() => _fraction = target);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: GestureDetector(
+        onVerticalDragStart: _onDragStart,
+        onVerticalDragUpdate: _onDragUpdate,
+        onVerticalDragEnd: _onDragEnd,
+        onTap: _onTap,
+        behavior: HitTestBehavior.translucent,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          height: screenHeight * _fraction,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: const Color(0xFFA6CD27), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 10,
+                offset: const Offset(0, -3),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 56,
+                height: 6,
+                margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: (_fraction > 0.25)
+                      ? const Color(0xFF2196F3)
+                      : Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(40),
+                ),
+              ),
+              Expanded(child: widget.child),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
