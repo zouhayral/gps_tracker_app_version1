@@ -24,6 +24,7 @@ import 'package:my_app_gps/core/map/marker_processing_isolate.dart';
 import 'package:my_app_gps/core/map/rebuild_profiler.dart';
 import 'package:my_app_gps/core/providers/connectivity_providers.dart';
 import 'package:my_app_gps/core/providers/vehicle_providers.dart';
+import 'package:my_app_gps/core/map/marker_motion_controller.dart';
 import 'package:my_app_gps/core/utils/throttled_value_notifier.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
@@ -160,6 +161,9 @@ class _MapPageState extends ConsumerState<MapPage>
   // OPTIMIZATION: Enhanced marker cache with intelligent diffing
   final _enhancedMarkerCache = EnhancedMarkerCache();
 
+  // 7H: Smooth motion controller (interpolates positions between updates)
+  MarkerMotionController? _motionController;
+
   // PERF PHASE 2: Marker update debouncing (collapses rapid bursts into single rebuild)
   Timer? _markerUpdateDebounce;
   static const _kMarkerUpdateDelay = Duration(milliseconds: 120);
@@ -189,6 +193,13 @@ class _MapPageState extends ConsumerState<MapPage>
   @override
   void initState() {
     super.initState();
+    // 7H: Initialize motion controller from provider after first frame to have context
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _motionController = ref.read(markerMotionControllerProvider);
+      // Listen to global motion ticks to update marker positions without rebuilding the whole map
+      _motionController!.globalTick.addListener(_onMotionTick);
+    });
 
     // No sheet controller to initialize for InstantInfoSheet
 
@@ -491,6 +502,55 @@ class _MapPageState extends ConsumerState<MapPage>
       _selectedIds,
       _query,
     );
+
+    // 7H: Seed motion controller with known positions so animations have a baseline
+    if (_motionController != null && positions.isNotEmpty) {
+      for (final entry in positions.entries) {
+        final p = entry.value;
+        _motionController!.updatePosition(
+          deviceId: entry.key,
+          target: LatLng(p.latitude, p.longitude),
+        );
+      }
+    }
+  }
+
+  // 7H: On motion tick, update only marker positions while preserving identity
+  void _onMotionTick() {
+    if (!mounted) return;
+    final mc = _motionController;
+    if (mc == null) return;
+    final motionPositions = mc.currentPositions;
+    if (motionPositions.isEmpty) return;
+
+    final current = _markersNotifier.value;
+    if (current.isEmpty) return;
+
+    var anyChanged = false;
+    final updated = List<MapMarkerData>.generate(current.length, (i) {
+      final m = current[i];
+      final id = int.tryParse(m.id);
+      if (id == null) return m;
+      final ll = motionPositions[id];
+      if (ll == null) return m;
+      final pos = m.position;
+      if ((pos.latitude - ll.latitude).abs() < 1e-9 &&
+          (pos.longitude - ll.longitude).abs() < 1e-9) {
+        return m;
+      }
+      anyChanged = true;
+      return MapMarkerData(
+        id: m.id,
+        position: ll,
+        heading: m.heading,
+        isSelected: m.isSelected,
+        meta: m.meta,
+      );
+    });
+
+    if (anyChanged) {
+      _markersNotifier.forceUpdate(updated);
+    }
   }
 
   // 7B.2: Debounced auto expand/collapse of the info sheet based on selection
@@ -732,6 +792,10 @@ class _MapPageState extends ConsumerState<MapPage>
     _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
+    // 7H: Remove motion tick listener if attached
+    try {
+      _motionController?.globalTick.removeListener(_onMotionTick);
+    } catch (_) {}
   // No sheet controller to dispose for InstantInfoSheet
     _markersNotifier
         .dispose(); // OPTIMIZATION: Clean up throttled marker notifier
@@ -1276,6 +1340,11 @@ class _MapPageState extends ConsumerState<MapPage>
         final pos = next.valueOrNull;
         if (pos != null) {
           _lastPositions[deviceId] = pos;
+          // 7H: Feed motion controller with new target for smooth interpolation
+          _motionController?.updatePosition(
+            deviceId: deviceId,
+            target: LatLng(pos.latitude, pos.longitude),
+          );
         }
         
         // Trigger marker update when position changes

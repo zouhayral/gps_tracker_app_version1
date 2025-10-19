@@ -8,7 +8,7 @@ import 'package:http/io_client.dart'; // IOClient for FMTC HTTP/1.1 compatibilit
 import 'package:latlong2/latlong.dart';
 
 import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
-import 'package:my_app_gps/core/map/marker_layer_cache.dart';
+// Removed MarkerLayerOptionsCache to ensure marker position updates are applied
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/providers/map_state_providers.dart';
@@ -472,12 +472,9 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
       }
     }
 
-    // Use cached marker layer options to avoid rebuilding identical layers
-    final cachedMarkers =
-        MarkerLayerOptionsCache.instance.getCachedMarkers(dedupMarkers);
-
-    // Use plain MarkerLayer to ensure visibility while we stabilize clustering.
-    final markersList = cachedMarkers ?? [
+    // Build fresh markers list so updated positions are reflected immediately
+    // (Caching by id/selection would ignore position changes during animation)
+    final markersList = [
       for (final m in dedupMarkers)
         Marker(
           key: ValueKey('marker_${m.id}_${m.isSelected}'),

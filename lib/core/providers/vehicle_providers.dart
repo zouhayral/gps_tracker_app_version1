@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:my_app_gps/core/map/marker_motion_controller.dart';
 
 /// Granular providers for vehicle metrics.
 /// Each provider listens to the repository and rebuilds only when its specific data changes.
@@ -54,6 +56,60 @@ final vehiclePositionProvider =
   // Emit updates from the stream
   await for (final position in streamController.stream) {
     yield position;
+  }
+});
+
+/// Global motion controller for interpolated marker motion
+final markerMotionControllerProvider = Provider<MarkerMotionController>((ref) {
+  final controller = MarkerMotionController();
+  ref.onDispose(controller.dispose);
+  return controller;
+});
+
+/// Hook motion controller to raw position updates to generate smooth paths
+final vehicleMotionPositionProvider =
+    StreamProvider.family<LatLng?, int>((ref, deviceId) async* {
+  final motion = ref.watch(markerMotionControllerProvider);
+  final raw = ref.watch(vehiclePositionProvider(deviceId));
+
+  // Emit initial (interpolated or raw) value
+  final initPos = raw.asData?.value;
+  if (initPos != null) {
+    final ll = LatLng(initPos.latitude, initPos.longitude);
+    motion.updatePosition(deviceId: deviceId, target: ll);
+    yield ll;
+  } else {
+    final cur = motion.currentValue(deviceId);
+    if (cur != null) yield cur;
+  }
+
+  // Bridge motion tick into a stream for Riverpod
+  final controller = StreamController<LatLng?>();
+  void notifyTick() {
+    controller.add(motion.currentValue(deviceId));
+  }
+
+  // Listen: any time raw changes, push a new target into the controller
+  final subRaw = ref.listen<AsyncValue<Position?>>(vehiclePositionProvider(deviceId), (prev, next) {
+    final pos = next.valueOrNull;
+    if (pos != null) {
+      motion.updatePosition(
+        deviceId: deviceId,
+        target: LatLng(pos.latitude, pos.longitude),
+      );
+    }
+  });
+
+  // Listen global ticks (only increments when animating) and emit current value
+  motion.globalTick.addListener(notifyTick);
+  ref.onDispose(() {
+    motion.globalTick.removeListener(notifyTick);
+    controller.close();
+    subRaw.close();
+  });
+
+  await for (final v in controller.stream) {
+    yield v;
   }
 });
 

@@ -24,6 +24,7 @@ import 'package:my_app_gps/controllers/connectivity_coordinator.dart' as coordin
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart' as repo;
 import 'package:my_app_gps/core/services/network_connectivity_monitor.dart' as netmon;
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
+import 'package:my_app_gps/core/map/marker_motion_controller.dart' as motion;
 // Adapter import for toggling tiles
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
 // ObjectBox imports to check availability
@@ -92,4 +93,6 @@ Future<void> setupTestEnvironment() async {
   netmon.NetworkConnectivityMonitor.testMode = true;
   coordinator.ConnectivityCoordinator.testMode = true;
   repo.VehicleDataRepository.testMode = true;
+  // Disable marker motion periodic ticker in tests
+  motion.MarkerMotionController.testMode = true;
 }

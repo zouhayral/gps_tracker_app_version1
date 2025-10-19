@@ -44,25 +44,32 @@ class EnhancedMarkerCache {
     // First time creation - always rebuild
     if (oldSnap == null) return true;
 
-    // ✅ Skip if timestamp identical (no new position data)
-    if (oldSnap.timestamp == newSnap.timestamp) return false;
+    // Compute deltas/state comparisons
+    final timestampUnchanged = oldSnap.timestamp == newSnap.timestamp;
 
-    // ✅ Skip if position delta < 0.000001° (~10 cm)
+    // ✅ Consider position changes beyond a tiny epsilon (~10 cm)
     final samePosition = (oldSnap.lat - newSnap.lat).abs() < 0.000001 &&
-                         (oldSnap.lon - newSnap.lon).abs() < 0.000001;
+        (oldSnap.lon - newSnap.lon).abs() < 0.000001;
 
-    // ✅ Skip if motion/engine states unchanged and position stable
+    // ✅ Consider motion/engine state changes
     final sameState = oldSnap.engineOn == newSnap.engineOn &&
-                      oldSnap.speed == newSnap.speed &&
-                      oldSnap.course == newSnap.course;
+        oldSnap.speed == newSnap.speed &&
+        oldSnap.course == newSnap.course;
 
+    // ✅ Selection state must force a rebuild even without new telemetry
     final sameSelection = oldSnap.isSelected == newSnap.isSelected;
+    if (!sameSelection) return true;
 
-    // Only rebuild if something meaningful changed
-    if (samePosition && sameState && sameSelection) return false;
+    // If absolutely nothing changed (including timestamp), reuse
+    if (timestampUnchanged && samePosition && sameState && sameSelection) {
+      return false;
+    }
 
-    // ⚡ Otherwise, rebuild marker
-    return true;
+    // Rebuild when position significantly changed or state changed
+    if (!samePosition || !sameState) return true;
+
+    // Otherwise, reuse existing marker
+    return false;
   }
 
   /// Get markers with intelligent diffing - only updates changed markers
