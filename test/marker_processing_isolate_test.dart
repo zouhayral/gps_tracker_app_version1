@@ -4,10 +4,8 @@ import 'package:my_app_gps/core/map/marker_processing_isolate.dart';
 
 void main() {
   group('MarkerProcessingIsolate', () {
-    tearDown(() {
-      // Clean up after each test
-      MarkerProcessingIsolate.instance.dispose();
-    });
+    // Clean up after each test
+    tearDown(MarkerProcessingIsolate.instance.dispose);
 
     test('handles double initialization safely', () async {
       final isolate = MarkerProcessingIsolate.instance;
@@ -16,10 +14,10 @@ void main() {
       await isolate.initialize();
 
       // Second initialization should skip gracefully
-      expect(() async => await isolate.initialize(), returnsNormally);
+      expect(isolate.initialize, returnsNormally);
 
       // Dispose should work
-      expect(() => isolate.dispose(), returnsNormally);
+      expect(isolate.dispose, returnsNormally);
     });
 
     test('can reinitialize after dispose', () async {
@@ -31,8 +29,8 @@ void main() {
       // Dispose
       isolate.dispose();
 
-      // Should be able to initialize again
-      expect(() async => await isolate.initialize(), returnsNormally);
+  // Should be able to initialize again
+  expect(isolate.initialize, returnsNormally);
 
       // Clean up
       isolate.dispose();
@@ -42,9 +40,9 @@ void main() {
       final isolate = MarkerProcessingIsolate.instance;
 
       // Multiple dispose calls should not throw
-      expect(() => isolate.dispose(), returnsNormally);
-      expect(() => isolate.dispose(), returnsNormally);
-      expect(() => isolate.dispose(), returnsNormally);
+      expect(isolate.dispose, returnsNormally);
+      expect(isolate.dispose, returnsNormally);
+      expect(isolate.dispose, returnsNormally);
     });
 
     test('logs "Already initialized, skipping" on double init', () async {

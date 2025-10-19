@@ -6,11 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Production code should override the provider in main.dart; tests can
 /// call SharedPrefsHolder.set(...) during setup to avoid UnimplementedError.
 class SharedPrefsHolder {
-  static SharedPreferences? _instance;
+  static late SharedPreferences _instance;
+  static bool _initialized = false;
 
-  static void set(SharedPreferences prefs) {
+  static set instance(SharedPreferences prefs) {
     _instance = prefs;
+    _initialized = true;
   }
-
-  static SharedPreferences? get instance => _instance;
+  static SharedPreferences get instance => _instance;
+  static bool get isInitialized => _initialized;
 }

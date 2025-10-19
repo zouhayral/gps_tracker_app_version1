@@ -117,6 +117,9 @@ class AdaptiveSyncManager {
   // Motion tracking
   final Map<int, bool> _vehicleMotionState = {}; // deviceId -> isMoving
   // ignore: unused_field
+  // Intentionally nullable to reflect "unknown until first event"; using `late`
+  // would hide this state and can lead to access before assignment.
+  // ignore: use_late_for_private_fields_and_variables, unused_field
   DateTime? _lastMotionUpdate;
 
   // Lifecycle tracking

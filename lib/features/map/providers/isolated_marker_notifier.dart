@@ -81,18 +81,10 @@ class IsolatedMarkerNotifier extends ChangeNotifier {
       stopwatch.stop();
 
       if (kDebugMode) {
-        debugPrint(
-          '[IsolatedMarkerNotifier] 📊 MarkerDiff('
-          'total=${diffResult.markers.length}, '
-          'created=${diffResult.created}, '
-          'reused=${diffResult.reused}, '
-          'removed=${diffResult.removed}, '
-          'cached=${diffResult.totalCached}, '
-          'efficiency=${(diffResult.efficiency * 100).toStringAsFixed(1)}%)',
-        );
-        debugPrint(
-          '[IsolatedMarkerNotifier] ⚡ Processing: ${stopwatch.elapsedMilliseconds}ms',
-        );
+        debugPrint('[IsolatedMarkerNotifier] 📊 MarkerDiff(total=${diffResult.markers.length}, '
+            'created=${diffResult.created}, reused=${diffResult.reused}, removed=${diffResult.removed}, '
+            'cached=${diffResult.totalCached}, efficiency=${(diffResult.efficiency * 100).toStringAsFixed(1)}%)');
+        debugPrint('[IsolatedMarkerNotifier] ⚡ Processing: ${stopwatch.elapsedMilliseconds}ms');
       }
 
       // Only update notifier if markers actually changed

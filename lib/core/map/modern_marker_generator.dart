@@ -1,8 +1,7 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import 'package:my_app_gps/core/map/modern_marker_painter.dart';
 
@@ -207,8 +206,9 @@ class MarkerData {
 }
 
 /// Marker state helper
+@immutable
 class MarkerState {
-  MarkerState({
+  const MarkerState({
     required this.online,
     required this.engineOn,
     required this.moving,

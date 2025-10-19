@@ -88,21 +88,21 @@ class RebuildTracker {
     final sorted = _rebuildCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    for (final entry in sorted) {
+  for (final entry in sorted) {
       final count = entry.value;
       final rate = elapsed > 0 ? (count / elapsed).toStringAsFixed(1) : '0.0';
       final padding = ' ' * (35 - entry.key.length);
       assert(() {
         debugPrint('║ ${entry.key}$padding $count rebuilds ($rate/s)');
         return true;
-      }());
+      }(), 'RebuildTracker printSummary loop for ${entry.key}',);
     }
 
     assert(() {
       debugPrint('╚═══════════════════════════════════════════════════════════╝');
       debugPrint('');
       return true;
-    }());
+    }(), 'RebuildTracker printSummary footer',);
   }
 
   /// Print compact one-line summary
@@ -111,7 +111,7 @@ class RebuildTracker {
       assert(() {
         debugPrint('[RebuildTracker] No rebuilds');
         return true;
-      }());
+      }(), 'RebuildTracker printCompact with empty counts',);
       return;
     }
 
@@ -121,7 +121,7 @@ class RebuildTracker {
       debugPrint(
           '[RebuildTracker] Total: $total rebuilds across $widgetCount widgets',);
       return true;
-    }());
+    }(), 'RebuildTracker printCompact summary',);
   }
 
   /// Reset tracking data
@@ -190,7 +190,7 @@ void enableRebuildLogging() {
     debugPrint('[RebuildTracker] ✅ Rebuild logging enabled');
     debugPrint('[RebuildTracker] Set debugPrintRebuildDirtyWidgets = true');
     return true;
-  }());
+  }(), 'enableRebuildLogging',);
 }
 
 /// Disable rebuild logging
@@ -199,5 +199,5 @@ void disableRebuildLogging() {
   assert(() {
     debugPrint('[RebuildTracker] Rebuild logging disabled');
     return true;
-  }());
+  }(), 'disableRebuildLogging',);
 }

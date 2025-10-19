@@ -1,3 +1,5 @@
+// ignore_for_file: unawaited_futures
+
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -213,7 +215,7 @@ class AsyncMarkerWarmCache {
 
     // Use post-frame callback to avoid blocking current frame
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      _processBatch();
+      unawaited(_processBatch());
     });
   }
 
@@ -438,8 +440,9 @@ class _QueuedMarker {
 /// Marker render state (for isolate communication)
 ///
 /// Must be simple data types (no ui.Image, no BuildContext) for compute()
+@immutable
 class MarkerRenderState {
-  MarkerRenderState({
+  const MarkerRenderState({
     required this.name,
     required this.online,
     required this.engineOn,
@@ -465,13 +468,15 @@ class MarkerRenderState {
   }) {
     final name = (device['name']?.toString() ?? '').trim();
     final statusStr = (device['status']?.toString() ?? '').toLowerCase();
-    final online = statusStr.isEmpty ? true : statusStr == 'online';
+    final online = statusStr.isEmpty || statusStr == 'online';
 
     // Extract engine state
+    final attrs = device['attributes'];
+    final attrsMap =
+        attrs is Map<String, dynamic> ? attrs : const <String, dynamic>{};
     final engineOn = device['ignition'] == true ||
         device['engineOn'] == true ||
-        (device['attributes']?['ignition'] == true) ||
-        false;
+        (attrsMap['ignition'] == true);
 
     // Extract motion state
     final speed = _parseSpeed(device);

@@ -104,7 +104,7 @@ class PrefetchSettingsNotifier extends StateNotifier<PrefetchSettings> {
   }
 
   /// Toggle prefetch enabled/disabled
-  Future<void> setEnabled(bool enabled) async {
+  Future<void> setEnabled({required bool enabled}) async {
     state = state.copyWith(enabled: enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyEnabled, enabled);

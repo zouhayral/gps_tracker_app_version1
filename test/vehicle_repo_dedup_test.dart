@@ -59,7 +59,7 @@ void main() {
   });
 
   test(
-      'duplicate positions are skipped (five identical -> one update)', () async {
+    'duplicate positions are skipped (five identical -> one update)', () async {
     // Prepare container with overrides
     final socket = _FakeSocket();
 
@@ -80,7 +80,7 @@ void main() {
       positionsServiceProvider.overrideWith((ref) => PositionsService(Dio(BaseOptions(baseUrl: 'https://example.com')))),
       // Telemetry DAO
       telemetryDaoProvider.overrideWithValue(_FakeTelemetryDao()),
-    ]);
+    ],);
 
     addTearDown(container.dispose);
 

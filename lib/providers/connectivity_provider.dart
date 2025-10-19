@@ -141,7 +141,7 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
       debugPrint('[CONNECTIVITY_PROVIDER] 📦 Switching to FMTC hit-only mode');
     }
 
-    // TODO: Enable FMTC hit-only mode when flutter_map_tile_caching supports it
+  // TODO(zouhayral): Enable FMTC hit-only mode when flutter_map_tile_caching supports it
     // FMTC.instance('main').setMode(FMTCMode.hitOnly);
     // For now, this is handled by not fetching tiles when offline
 
@@ -164,7 +164,7 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
       debugPrint('[CONNECTIVITY_PROVIDER] 🌐 Switching to FMTC normal mode');
     }
 
-    // TODO: Restore FMTC normal mode
+  // TODO(zouhayral): Restore FMTC normal mode
     // FMTC.instance('main').setMode(FMTCMode.normal);
 
     // 🎯 NEW: Resume WebSocket when back online

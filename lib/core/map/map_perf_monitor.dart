@@ -245,7 +245,9 @@ class MapPerfMonitor with ChangeNotifier {
     final avgZoom = _average(_zoomDurations);
     if (avgZoom > 300) {
       score -= 20;
-    } else if (avgZoom > 500) score -= 40;
+    } else if (avgZoom > 500) {
+      score -= 40;
+    }
     
     // Deduct for dropped frames (>5%)
     final dropRate = _frameTimes.isEmpty 
@@ -253,19 +255,25 @@ class MapPerfMonitor with ChangeNotifier {
         : _droppedFrames / _frameTimes.length;
     if (dropRate > 0.05) {
       score -= 15;
-    } else if (dropRate > 0.10) score -= 30;
+    } else if (dropRate > 0.10) {
+      score -= 30;
+    }
     
     // Deduct for slow rebuilds (>50ms)
     final avgRebuild = _average(_rebuildTimes['markers']!);
     if (avgRebuild > 50) {
       score -= 10;
-    } else if (avgRebuild > 100) score -= 25;
+    } else if (avgRebuild > 100) {
+      score -= 25;
+    }
     
     // Deduct for bottlenecks
     final totalBottlenecks = _bottlenecks.values.fold(0, (a, b) => a + b);
     if (totalBottlenecks > 10) {
       score -= 20;
-    } else if (totalBottlenecks > 5) score -= 10;
+    } else if (totalBottlenecks > 5) {
+      score -= 10;
+    }
     
     return score.clamp(0, 100);
   }

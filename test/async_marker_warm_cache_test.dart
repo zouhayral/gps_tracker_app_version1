@@ -38,7 +38,7 @@ void main() {
       cache.clear();
     });
 
-    test('singleton instance is same', () {
+  test('singleton instance is same', () {
       final instance1 = AsyncMarkerWarmCache.instance;
       final instance2 = AsyncMarkerWarmCache.instance;
 
@@ -46,7 +46,7 @@ void main() {
     });
 
     test('generates and caches marker on first access', () async {
-      final state = MarkerRenderState(
+      const state = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -65,7 +65,7 @@ void main() {
     });
 
     test('returns cached marker on second access', () async {
-      final state = MarkerRenderState(
+      const state = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -93,7 +93,7 @@ void main() {
           name: 'Vehicle $i',
           online: true,
           engineOn: true,
-          moving: i % 2 == 0,
+          moving: i.isEven,
           speed: 40.0 + i,
         ),
       );
@@ -112,7 +112,7 @@ void main() {
     });
 
     test('warm-up skips already cached markers', () async {
-      final state = MarkerRenderState(
+      const state = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -133,7 +133,7 @@ void main() {
     });
 
     test('warm-up handles different marker states', () async {
-      final states = [
+      const states = <MarkerRenderState>[
         // Moving
         MarkerRenderState(
           name: 'Vehicle 1',
@@ -184,7 +184,7 @@ void main() {
     });
 
     test('has() returns true for cached markers', () async {
-      final state = MarkerRenderState(
+      const state = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -200,7 +200,7 @@ void main() {
     });
 
     test('operator[] returns cached image', () async {
-      final state = MarkerRenderState(
+      const state = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -257,7 +257,7 @@ void main() {
     });
 
     test('cache key is deterministic for same state', () {
-      final state1 = MarkerRenderState(
+      const state1 = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -265,7 +265,7 @@ void main() {
         speed: 50,
       );
 
-      final state2 = MarkerRenderState(
+  const state2 = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -277,7 +277,7 @@ void main() {
     });
 
     test('cache key differs for different states', () {
-      final state1 = MarkerRenderState(
+      const state1 = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -285,7 +285,7 @@ void main() {
         speed: 50,
       );
 
-      final state2 = MarkerRenderState(
+  const state2 = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: false, // Different
@@ -297,7 +297,7 @@ void main() {
     });
 
     test('MarkerRenderState equality works correctly', () {
-      final state1 = MarkerRenderState(
+      const state1 = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -305,7 +305,7 @@ void main() {
         speed: 50,
       );
 
-      final state2 = MarkerRenderState(
+  const state2 = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -313,7 +313,7 @@ void main() {
         speed: 50,
       );
 
-      final state3 = MarkerRenderState(
+  const state3 = MarkerRenderState(
         name: 'Vehicle 2', // Different
         online: true,
         engineOn: true,
@@ -326,14 +326,14 @@ void main() {
     });
 
     test('fromDevice creates correct state', () {
-      final device = {
+      const device = {
         'name': 'Vehicle 1',
         'status': 'online',
         'ignition': true,
         'position': {'speed': 50.0},
       };
 
-      final state = MarkerRenderState.fromDevice(device);
+  final state = MarkerRenderState.fromDevice(device);
 
       expect(state.name, 'Vehicle 1');
       expect(state.online, true);
@@ -343,13 +343,13 @@ void main() {
     });
 
     test('fromDevice handles offline device', () {
-      final device = {
+      const device = {
         'name': 'Vehicle 2',
         'status': 'offline',
         'ignition': false,
       };
 
-      final state = MarkerRenderState.fromDevice(device);
+  final state = MarkerRenderState.fromDevice(device);
 
       expect(state.online, false);
       expect(state.engineOn, false);
@@ -357,7 +357,7 @@ void main() {
     });
 
     test('fromDevice handles missing attributes', () {
-      final device = {'name': 'Vehicle 3'};
+      const device = {'name': 'Vehicle 3'};
 
       final state = MarkerRenderState.fromDevice(device);
 
@@ -368,7 +368,7 @@ void main() {
     });
 
     test('stats provide accurate cache metrics', () async {
-      final state = MarkerRenderState(
+      const state = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,
@@ -403,7 +403,7 @@ void main() {
           name: 'Vehicle $i',
           online: true,
           engineOn: i % 3 == 0,
-          moving: i % 2 == 0,
+          moving: i.isEven,
           speed: 30.0 + i,
         ),
       );
@@ -427,7 +427,7 @@ void main() {
     });
 
     test('concurrent access to same marker waits for pending render', () async {
-      final state = MarkerRenderState(
+      const state = MarkerRenderState(
         name: 'Vehicle 1',
         online: true,
         engineOn: true,

@@ -36,6 +36,8 @@ linter:
 
 # Exclude generated files from analyzer to reduce noise from codegen artifacts
 analyzer:
+  errors:
+    todo: ignore
   exclude:
     - lib/**.g.dart
     - lib/**.freezed.dart

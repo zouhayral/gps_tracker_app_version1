@@ -4,6 +4,9 @@
 /// OpenStreetMap and satellite imagery from Esri.
 library;
 
+import 'package:flutter/foundation.dart';
+
+@immutable
 class MapTileSource {
   /// Unique identifier for this tile source
   final String id;

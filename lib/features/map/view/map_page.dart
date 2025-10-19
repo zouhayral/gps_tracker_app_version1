@@ -254,8 +254,8 @@ class _MapPageState extends ConsumerState<MapPage>
 
       // Register marker count supplier for performance overlay (disabled by default)
       if (MapDebugFlags.enablePerfMetrics) {
-        final perfSvc = ref.read(performanceMetricsServiceProvider);
-        perfSvc.setMarkerCountSupplier(() => _markersNotifier.value.length);
+  final perfSvc = ref.read(performanceMetricsServiceProvider);
+  perfSvc.markerCountSupplier = () => _markersNotifier.value.length;
         perfSvc.start();
       }
 
@@ -1906,7 +1906,7 @@ class _MapPageState extends ConsumerState<MapPage>
                       gaplessPlayback: true,
                     ),
                   ),
-                // TODO(my_app): Add full UI overlay (search bar, bottom panel, etc.)
+                // TODO(owner): Add full UI overlay (search bar, bottom panel, etc.)
                 // For now, this shows the map with markers
               ],
             ),

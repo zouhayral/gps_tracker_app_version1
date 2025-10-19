@@ -75,14 +75,16 @@ void main() {
         traccarSocketServiceProvider.overrideWith((ref) => socket),
         deviceServiceProvider.overrideWith(
           (ref) => DeviceService(
-              Dio(BaseOptions(baseUrl: 'https://example.com')),),
+            Dio(BaseOptions(baseUrl: 'https://example.com')),
+          ),
         ),
         positionsServiceProvider.overrideWith(
           (ref) => PositionsService(
-              Dio(BaseOptions(baseUrl: 'https://example.com')),),
+            Dio(BaseOptions(baseUrl: 'https://example.com')),
+          ),
         ),
         telemetryDaoProvider.overrideWithValue(_FakeTelemetryDao()),
-      ]);
+      ],);
 
       repo = container.read(vehicleDataRepositoryProvider);
     });
@@ -115,6 +117,7 @@ void main() {
       // This test verifies initialization doesn't throw
       // Timer itself is disabled in test mode
       expect(repo, isNotNull);
-    });
+    },
+    );
   });
 }

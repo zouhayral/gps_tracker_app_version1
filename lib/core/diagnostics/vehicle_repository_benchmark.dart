@@ -232,7 +232,7 @@ class VehicleRepositoryBenchmark {
           'Overall: ${_allTestsPass(report) ? '✅ ALL TESTS PASSED' : '⚠️  SOME TESTS FAILED'}',);
       debugPrint('=' * 60 + '\n');
       return true;
-    }());
+    }(), 'VehicleRepositoryBenchmark.printReport',);
   }
 
   /// Estimate API call reduction percentage

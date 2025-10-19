@@ -23,8 +23,9 @@ final vehicleDataCacheProvider = Provider<VehicleDataCache>((ref) {
 
 /// Provider for SharedPreferences (async init) - PUBLIC for override in main
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  final fromHolder = SharedPrefsHolder.instance;
-  if (fromHolder != null) return fromHolder;
+  if (SharedPrefsHolder.isInitialized) {
+    return SharedPrefsHolder.instance;
+  }
   throw UnimplementedError('SharedPreferences must be overridden in main.dart');
 });
 
