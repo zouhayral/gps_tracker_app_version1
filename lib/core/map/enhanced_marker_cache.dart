@@ -86,6 +86,11 @@ class EnhancedMarkerCache {
               ?.toString() ??
           '';
 
+      // Filter: show only selected devices when there are selections
+      if (selectedIds.isNotEmpty && !selectedIds.contains(deviceId)) {
+        continue;
+      }
+
       // Filter by query if not selected
       if (q.isNotEmpty &&
           !name.toLowerCase().contains(q) &&
@@ -158,6 +163,11 @@ class EnhancedMarkerCache {
       if (processedIds.contains(markerId)) continue;
 
       final name = d['name']?.toString() ?? '';
+
+      // Filter: show only selected devices when there are selections
+      if (selectedIds.isNotEmpty && !selectedIds.contains(deviceId)) {
+        continue;
+      }
 
       // Filter by query if not selected
       if (q.isNotEmpty &&
