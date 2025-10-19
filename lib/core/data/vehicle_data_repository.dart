@@ -47,7 +47,7 @@ final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
   // Listen to unified connectivity and update repository/WS behavior
   ref.listen(connectivityProvider, (previous, next) {
     // Update repository offline flag to guard REST calls and timers
-    repo.setOffline(next.isOffline);
+    repo.setOffline(offline: next.isOffline);
 
     // Auto-manage WebSocket lifecycle to prevent retry spam when offline
     final wsManager = ref.read(webSocketManagerProvider.notifier);
@@ -110,6 +110,7 @@ class VehicleDataRepository {
   // Connection state flags
   bool _isWebSocketConnected = false;
   bool _isOffline = false; // unified offline flag (network or backend)
+  bool _isDisposed = false; // Safety guard for async operations
 
   static const _debounceDelay = Duration(milliseconds: 300);
   static const _minFetchInterval = Duration(seconds: 5);
@@ -180,7 +181,7 @@ class VehicleDataRepository {
   }
 
   /// Update offline state from connectivity provider
-  void setOffline(bool offline) {
+  void setOffline({required bool offline}) {
     if (_isOffline == offline) return;
     _isOffline = offline;
     if (kDebugMode) {
@@ -226,8 +227,15 @@ class VehicleDataRepository {
 
   /// Remove and dispose stale device notifiers (older than 7 days)
   void _cleanupStaleDevices() {
+    if (_isDisposed) {
+      if (kDebugMode) {
+        debugPrint('[CONCURRENCY] 🧩 Cleanup skipped: repository disposed');
+      }
+      return;
+    }
+
     final now = DateTime.now();
-    int removed = 0;
+    var removed = 0;
 
     _notifiers.removeWhere((deviceId, notifier) {
       final snapshot = notifier.value;
@@ -278,6 +286,13 @@ class VehicleDataRepository {
 
   /// Handle incoming WebSocket messages
   Future<void> _handleSocketMessage(TraccarSocketMessage msg) async {
+    if (_isDisposed) {
+      if (kDebugMode) {
+        debugPrint('[CONCURRENCY] 🧩 Socket message dropped: repository disposed');
+      }
+      return;
+    }
+
     if (msg.type == 'connected') {
       _isWebSocketConnected = true;
       if (kDebugMode) {
@@ -700,6 +715,12 @@ class VehicleDataRepository {
   void _startFallbackPolling() {
     _fallbackTimer?.cancel();
     _fallbackTimer = Timer.periodic(_restFallbackInterval, (_) {
+      if (_isDisposed) {
+        if (kDebugMode) {
+          debugPrint('[CONCURRENCY] 🧩 Fallback tick skipped: repository disposed');
+        }
+        return;
+      }
       if (_isOffline) {
         if (kDebugMode) {
           debugPrint('[VehicleRepo] Offline → skipping REST fallback tick');
@@ -733,6 +754,14 @@ class VehicleDataRepository {
 
   /// Dispose resources
   void dispose() {
+    if (_isDisposed) {
+      if (kDebugMode) {
+        debugPrint('[CONCURRENCY] ⚠️ Double dispose prevented');
+      }
+      return;
+    }
+    _isDisposed = true;
+
     _socketSub?.cancel();
     _fallbackTimer?.cancel();
     _cleanupTimer?.cancel();
