@@ -38,6 +38,7 @@ import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 // import 'package:my_app_gps/services/websocket_manager.dart';
 
 // Clean rebuilt MapPage implementation
@@ -451,6 +452,75 @@ class _MapPageState extends ConsumerState<MapPage>
       _selectedIds,
       _query,
     );
+  }
+
+  /// Open the selected device location in native maps app
+  /// iOS: Apple Maps, Android/Web: Google Maps
+  Future<void> _openInMaps() async {
+    if (_selectedIds.length != 1) return;
+
+    final deviceId = _selectedIds.first;
+    
+    // Try to get position from provider (live or last-known)
+    final position = ref.read(positionByDeviceProvider(deviceId));
+    
+    double? lat;
+    double? lon;
+    
+    if (position != null && _valid(position.latitude, position.longitude)) {
+      lat = position.latitude;
+      lon = position.longitude;
+    } else {
+      // Fallback: get coordinates from device stored data
+      final device = ref.read(deviceByIdProvider(deviceId));
+      if (device != null) {
+        lat = _asDouble(device['latitude']);
+        lon = _asDouble(device['longitude']);
+      }
+    }
+    
+    if (lat == null || lon == null || !_valid(lat, lon)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No valid coordinates available for this device'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return;
+    }
+    
+    // Generate platform-specific URL
+    final platform = Theme.of(context).platform;
+    final Uri mapsUrl;
+    
+    if (platform == TargetPlatform.iOS) {
+      // Apple Maps
+      mapsUrl = Uri.parse('http://maps.apple.com/?ll=$lat,$lon');
+    } else {
+      // Google Maps (Android, web, desktop)
+      mapsUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lon');
+    }
+    
+    try {
+      if (await canLaunchUrl(mapsUrl)) {
+        await launchUrl(mapsUrl, mode: LaunchMode.externalApplication);
+      } else {
+        throw Exception('Cannot launch maps app');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open maps: $e'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -1536,6 +1606,15 @@ class _MapPageState extends ConsumerState<MapPage>
                           );
                         },
                       ),
+                      // Open in Maps button (only shown when single device selected)
+                      if (_selectedIds.length == 1) ...[
+                        const SizedBox(height: 8),
+                        _ActionButton(
+                          icon: Icons.open_in_new,
+                          tooltip: 'Open in Maps',
+                          onTap: _openInMaps,
+                        ),
+                      ],
                     ],
                   ),
                 ),
