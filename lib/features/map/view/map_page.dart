@@ -2682,22 +2682,41 @@ class _InstantInfoSheetState extends State<_InstantInfoSheet>
               ),
             ],
           ),
-          child: Column(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 56,
-                height: 6,
-                margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: (_fraction > 0.25)
-                      ? const Color(0xFF2196F3)
-                      : Colors.grey.shade400,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-              ),
-              Expanded(child: widget.child),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final available = constraints.biggest.height;
+              // Adapt the grab handle size/margins to avoid overflow on tiny heights
+              final handleHeight = available.clamp(0, double.infinity) * 0.15;
+              final safeHandleHeight = handleHeight.clamp(2.0, 8.0);
+              final handleVMargin = (available * 0.10).clamp(4.0, 10.0);
+              return Column(
+                children: [
+                  SizedBox(height: handleVMargin),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 56,
+                    height: safeHandleHeight,
+                    decoration: BoxDecoration(
+                      color: (_fraction > 0.25)
+                          ? const Color(0xFF2196F3)
+                          : Colors.grey.shade400,
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                  ),
+                  SizedBox(height: handleVMargin),
+                  // Ensure content never overflows: make it scrollable when space is tight
+                  Expanded(
+                    child: ClipRect(
+                      child: SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        child: widget.child,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
