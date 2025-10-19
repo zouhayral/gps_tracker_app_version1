@@ -170,6 +170,9 @@ class _MapPageState extends ConsumerState<MapPage>
   // Hide/show sheet visibility
   bool _isSheetVisible = false;
 
+  // 7E: Auto-camera fit debounce timer
+  Timer? _debouncedCameraFit;
+
   // Refresh state
   bool _isRefreshing = false;
 
@@ -495,6 +498,138 @@ class _MapPageState extends ConsumerState<MapPage>
     }
   }
 
+  // 7E: Auto-camera fit scheduler - debounced to prevent rapid camera jumps
+  void _scheduleCameraFitForSelection() {
+    if (_selectedIds.isEmpty) {
+      // 🧭 No selection → fit to all markers (fleet view)
+      _debouncedCameraFit?.cancel();
+      _debouncedCameraFit = Timer(const Duration(milliseconds: 150), _fitToAllMarkers);
+      return;
+    }
+
+    // 🗺 One or more selected → fit to their positions
+    _debouncedCameraFit?.cancel();
+    _debouncedCameraFit = Timer(const Duration(milliseconds: 150), _fitToSelectedMarkers);
+  }
+
+  // 7E: Fit camera to selected markers with smooth animation
+  Future<void> _fitToSelectedMarkers() async {
+    if (_selectedIds.isEmpty) return;
+    
+    // Gather positions for selected devices
+    final selectedPositions = <LatLng>[];
+    for (final deviceId in _selectedIds) {
+      final position = ref.read(positionByDeviceProvider(deviceId));
+      if (position != null && _valid(position.latitude, position.longitude)) {
+        selectedPositions.add(LatLng(position.latitude, position.longitude));
+      } else {
+        // Fallback to device stored coordinates
+        final device = ref.read(deviceByIdProvider(deviceId));
+        if (device != null) {
+          final lat = _asDouble(device['latitude']);
+          final lon = _asDouble(device['longitude']);
+          if (_valid(lat, lon)) {
+            selectedPositions.add(LatLng(lat!, lon!));
+          }
+        }
+      }
+    }
+    
+    if (selectedPositions.isEmpty) return;
+
+    if (kDebugMode) {
+      debugPrint('[CAMERA_FIT] Fitting to ${_selectedIds.length} selected markers');
+    }
+
+    await _animatedMoveToBounds(
+      selectedPositions,
+      padding: 60,
+    );
+  }
+
+  // 7E: Fit camera to all markers (fleet view)
+  Future<void> _fitToAllMarkers() async {
+    // Gather all valid positions
+    final allPositions = <LatLng>[];
+    for (final entry in _lastPositions.entries) {
+      final pos = entry.value;
+      if (_valid(pos.latitude, pos.longitude)) {
+        allPositions.add(LatLng(pos.latitude, pos.longitude));
+      }
+    }
+    
+    if (allPositions.isEmpty) return;
+
+    if (kDebugMode) {
+      debugPrint('[CAMERA_FIT] Fitting to all ${allPositions.length} markers (fleet view)');
+    }
+
+    await _animatedMoveToBounds(
+      allPositions,
+      padding: 40,
+    );
+  }
+
+  // 7E: Animated camera move to fit bounds with smooth spring-like curve
+  Future<void> _animatedMoveToBounds(
+    List<LatLng> points, {
+    double padding = 50,
+  }) async {
+    if (points.isEmpty || _mapKey.currentState == null) return;
+
+    // Calculate bounds manually
+    var minLat = points.first.latitude;
+    var maxLat = points.first.latitude;
+    var minLng = points.first.longitude;
+    var maxLng = points.first.longitude;
+
+    for (final pos in points) {
+      if (pos.latitude < minLat) minLat = pos.latitude;
+      if (pos.latitude > maxLat) maxLat = pos.latitude;
+      if (pos.longitude < minLng) minLng = pos.longitude;
+      if (pos.longitude > maxLng) maxLng = pos.longitude;
+    }
+
+    // Calculate center
+    final centerLat = (minLat + maxLat) / 2;
+    final centerLng = (minLng + maxLng) / 2;
+    final center = LatLng(centerLat, centerLng);
+
+    // Calculate appropriate zoom level based on bounds size
+    final latDiff = maxLat - minLat;
+    final lngDiff = maxLng - minLng;
+    final maxDiff = latDiff > lngDiff ? latDiff : lngDiff;
+
+    // Rough zoom calculation (adjust as needed)
+    double targetZoom;
+    if (maxDiff < 0.01) {
+      targetZoom = 16.0;
+    } else if (maxDiff < 0.05) {
+      targetZoom = 14.0;
+    } else if (maxDiff < 0.1) {
+      targetZoom = 12.0;
+    } else if (maxDiff < 0.5) {
+      targetZoom = 10.0;
+    } else if (maxDiff < 1.0) {
+      targetZoom = 8.0;
+    } else {
+      targetZoom = 6.0;
+    }
+
+    // Clamp zoom to safe range
+    targetZoom = targetZoom.clamp(0.0, 18.0);
+
+    // Use the existing safe move method
+    _mapKey.currentState!.safeZoomTo(center, targetZoom);
+
+    if (kDebugMode) {
+      debugPrint(
+        '[CAMERA_FIT] Moved to center: (${center.latitude.toStringAsFixed(4)}, '
+        '${center.longitude.toStringAsFixed(4)}) @ zoom ${targetZoom.toStringAsFixed(1)}',
+      );
+    }
+  }
+
   /// Open the selected device location in native maps app
   /// Uses geo: URI for native app launch with web URL fallback
   Future<void> _openInMaps() async {
@@ -569,6 +704,7 @@ class _MapPageState extends ConsumerState<MapPage>
   void dispose() {
     // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
+    _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
     _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
@@ -838,12 +974,8 @@ class _MapPageState extends ConsumerState<MapPage>
     // Fire-and-forget to enrich markers without blocking UI
     unawaited(_ensureSelectedDevicePositions({n}));
 
-    // CRITICAL FIX: Trigger immediate camera fit after device selection
-    // This ensures the camera moves immediately to show the selected device(s)
-    // without waiting for the throttled didUpdateWidget in FlutterMapAdapter
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _mapKey.currentState?.fitCameraImmediate();
-    });
+    // 7E: Auto-fit camera to selected markers with smooth animation
+    _scheduleCameraFitForSelection();
 
     // OPTIMIZATION: Trigger marker update with new selection state
     final devicesAsync = ref.read(devicesNotifierProvider);
@@ -914,6 +1046,9 @@ class _MapPageState extends ConsumerState<MapPage>
     if (_selectedIds.isNotEmpty) {
       _selectedIds.clear();
       changed = true;
+
+      // 7E: Auto-fit camera to all markers when selection cleared
+      _scheduleCameraFitForSelection();
 
       // OPTIMIZATION: Trigger marker update when selection cleared
       final devicesAsync = ref.read(devicesNotifierProvider);
