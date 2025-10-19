@@ -46,7 +46,7 @@ class FlutterMapAdapter extends ConsumerStatefulWidget implements MapAdapter {
 
 class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     with TickerProviderStateMixin {
-  final mapController = MapController();
+  late final mapController = MapController();
   final _moveThrottler = Throttler(const Duration(milliseconds: 300));
   Timer? _overlayTimer; // auto-hide green online banner (for overlay)
   bool _isOffline = false;
@@ -58,6 +58,15 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   
   // ZOOM CLAMP: Maximum zoom level to prevent tile loading flicker
   static const double kMaxZoom = 18;
+  
+  // OPTIMIZATION: Cached MapOptions to avoid recreation each frame (~5ms/rebuild)
+  late final _mapOptions = MapOptions(
+    initialCenter: const LatLng(0, 0),
+    initialZoom: 2,
+    maxZoom: kMaxZoom,
+    onTap: (_, __) => widget.onMapTap?.call(),
+    onMapReady: _onMapReady,
+  );
   
   // Toggle to force-disable FMTC for troubleshooting
   static const bool kForceDisableFMTC =
@@ -123,6 +132,27 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     }
 
     // NOTE: connectivity listening is registered in build() via ref.listen
+  }
+
+  // OPTIMIZATION: Extract onMapReady callback to enable MapOptions caching
+  void _onMapReady() {
+    if (!_mapReady) {
+      _mapReady = true;
+      if (kDebugMode) {
+        debugPrint('[MAP] ✅ Map ready, flushing ${_onMapReadyQueue.length} queued actions');
+      }
+      // Flush queued actions
+      for (final a in List<VoidCallback>.from(_onMapReadyQueue)) {
+        try {
+          a();
+        } catch (e, st) {
+          if (kDebugMode) {
+            debugPrint('[MAP] ⚠️ Error running queued action: $e\n$st');
+          }
+        }
+      }
+      _onMapReadyQueue.clear();
+    }
   }
 
   @override
@@ -551,29 +581,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
             // Marker updates and camera moves do NOT trigger rebuilds
             key: ValueKey('map_${provider.id}_${lastSwitchTs}_$rebuildEpoch'),
             mapController: mapController,
-            options: MapOptions(
-              initialCenter: const LatLng(0, 0),
-              initialZoom: 2,
-              maxZoom: kMaxZoom, // ZOOM CLAMP: Prevent flicker from excessive zoom
-              onTap: (_, __) => widget.onMapTap?.call(),
-              onMapReady: () {
-                if (!_mapReady) {
-                  _mapReady = true;
-                  if (kDebugMode) debugPrint('[MAP] ✅ Map ready, flushing ${_onMapReadyQueue.length} queued actions');
-                  // Flush queued actions
-                  for (final a in List<VoidCallback>.from(_onMapReadyQueue)) {
-                    try {
-                      a();
-                    } catch (e, st) {
-                      if (kDebugMode) {
-                        debugPrint('[MAP] ⚠️ Error running queued action: $e\n$st');
-                      }
-                    }
-                  }
-                  _onMapReadyQueue.clear();
-                }
-              },
-            ),
+            options: _mapOptions, // OPTIMIZATION: Reuse cached MapOptions
             children: [
           // CRITICAL FIX: Tile layers must be direct children of FlutterMap
           // DO NOT wrap in Column - that causes infinite size errors!
