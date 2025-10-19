@@ -161,6 +161,14 @@ class _MapPageState extends ConsumerState<MapPage>
   final _enhancedMarkerCache = EnhancedMarkerCache();
 
   // Instant sheet has no controller; no fields required
+  // 7B.2: Instant sheet control key + debounce
+  final GlobalKey<_InstantInfoSheetState> _sheetKey =
+      GlobalKey<_InstantInfoSheetState>();
+  Timer? _sheetDebounce;
+  String? _sheetLastAction; // 'expand' | 'collapse'
+  
+  // Hide/show sheet visibility
+  bool _isSheetVisible = false;
 
   // Refresh state
   bool _isRefreshing = false;
@@ -294,6 +302,11 @@ class _MapPageState extends ConsumerState<MapPage>
 
     if (widget.preselectedIds != null && widget.preselectedIds!.isNotEmpty) {
       _selectedIds.addAll(widget.preselectedIds!);
+      _isSheetVisible = true; // Make sheet visible for preselected devices
+      // Auto-expand on first frame when deep-link preselection provided
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scheduleSheetAnimation(expand: true);
+      });
       // Snackbar reminder if not focused after delay
       _preselectSnackTimer = Timer(const Duration(seconds: 6), () {
         if (!mounted) return;
@@ -452,6 +465,34 @@ class _MapPageState extends ConsumerState<MapPage>
       _selectedIds,
       _query,
     );
+  }
+
+  // 7B.2: Debounced auto expand/collapse of the info sheet based on selection
+  void _scheduleSheetAnimation({required bool expand}) {
+    final action = expand ? 'expand' : 'collapse';
+    // Prevent redundant animations on identical consecutive actions
+    if (_sheetLastAction == action) return;
+    _sheetDebounce?.cancel();
+    _sheetLastAction = action;
+    _sheetDebounce = Timer(const Duration(milliseconds: 80), () {
+      if (!mounted) return;
+      final sheet = _sheetKey.currentState;
+      if (sheet == null) return;
+      if (expand) {
+        sheet.expand();
+      } else {
+        sheet.collapse();
+      }
+    });
+  }
+
+  void _scheduleSheetForSelection() {
+    final shouldShow = _selectedIds.isNotEmpty;
+    if (shouldShow != _isSheetVisible) {
+      setState(() {
+        _isSheetVisible = shouldShow;
+      });
+    }
   }
 
   /// Open the selected device location in native maps app
@@ -811,6 +852,9 @@ class _MapPageState extends ConsumerState<MapPage>
     // New: if multiple devices are near the tapped one (within ~40m),
     // show a spiderfy overlay for quick disambiguation.
     _maybeShowSpiderfyForNearby(n);
+
+    // 7B.2: Auto-expand/collapse based on selection
+    _scheduleSheetForSelection();
   }
 
   // Group nearby markers around a tapped device and show spiderfy overlay for small groups
@@ -880,6 +924,10 @@ class _MapPageState extends ConsumerState<MapPage>
       changed = true;
     }
     if (changed) setState(() {});
+    if (changed) {
+      // 7B.2: Collapse when selection cleared
+      _scheduleSheetForSelection();
+    }
   }
 
   /// Show layer selection menu
@@ -1449,6 +1497,8 @@ class _MapPageState extends ConsumerState<MapPage>
                                                 if (!allSelected && _selectedIds.isNotEmpty) {
                                                   unawaited(_ensureSelectedDevicePositions(_selectedIds));
                                                 }
+                                                // 7B.2: Auto expand/collapse based on selection
+                                                _scheduleSheetForSelection();
                                               },
                                             );
                                           }
@@ -1522,6 +1572,8 @@ class _MapPageState extends ConsumerState<MapPage>
                                                     // Trigger marker update after selection change
                                                     final devicesAsync = ref.read(devicesNotifierProvider);
                                                     devicesAsync.whenData(_triggerMarkerUpdate);
+                                                    // 7B.2: Auto expand/collapse based on selection
+                                                    _scheduleSheetForSelection();
                                                   },
                                           );
                                         },
@@ -1647,59 +1699,90 @@ class _MapPageState extends ConsumerState<MapPage>
                     connectionStatus: ref.watch(connectionStatusProvider),
                   ),
                 ),
-                // Bottom info panel with instant swipe reaction
-                if (_selectedIds.isNotEmpty)
-                  _InstantInfoSheet(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                // Bottom info panel - fade/slide in when device selected, completely hidden when none selected
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final slide = Tween<Offset>(
+                      begin: const Offset(0, 0.1),
+                      end: Offset.zero,
+                    ).animate(CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),);
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: slide,
+                        child: child,
                       ),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        switchInCurve: Curves.easeInOut,
-                        switchOutCurve: Curves.easeInOut,
-                        transitionBuilder: (child, animation) {
-                          final slide = Tween<Offset>(
-                            begin: const Offset(0, 0.02),
-                            end: Offset.zero,
-                          ).animate(animation);
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: slide,
-                              child: child,
+                    );
+                  },
+                  child: _isSheetVisible
+                      ? _InstantInfoSheet(
+                          key: _sheetKey,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
                             ),
-                          );
-                        },
-                        child: _selectedIds.length == 1
-                            ? _InfoBox(
-                                key: const ValueKey('single-info'),
-                                deviceId: _selectedIds.first,
-                                devices: devices,
-                                position: ref.watch(
-                                  positionByDeviceProvider(
-                                    _selectedIds.first,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              switchInCurve: Curves.easeInOut,
+                              switchOutCurve: Curves.easeInOut,
+                              transitionBuilder: (child, animation) {
+                                final slide = Tween<Offset>(
+                                  begin: const Offset(0, 0.02),
+                                  end: Offset.zero,
+                                ).animate(animation);
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: slide,
+                                    child: child,
                                   ),
-                                ),
-                                statusResolver: _deviceStatus,
-                                statusColorBuilder: _statusColor,
-                                onClose: () => setState(_selectedIds.clear),
-                                onFocus: _focusSelected,
-                              )
-                            : _MultiSelectionInfoBox(
-                                key: const ValueKey('multi-info'),
-                                selectedIds: _selectedIds,
-                                devices: devices,
-                                positions: positions,
-                                statusResolver: _deviceStatus,
-                                statusColorBuilder: _statusColor,
-                                onClear: () => setState(_selectedIds.clear),
-                                onFocus: _focusSelected,
-                              ),
-                      ),
-                    ),
-                  ),
+                                );
+                              },
+                              child: _selectedIds.isEmpty
+                                  ? const SizedBox.shrink()
+                                  : (_selectedIds.length == 1
+                                      ? _InfoBox(
+                                          key: const ValueKey('single-info'),
+                                          deviceId: _selectedIds.first,
+                                          devices: devices,
+                                          position: ref.watch(
+                                            positionByDeviceProvider(
+                                              _selectedIds.first,
+                                            ),
+                                          ),
+                                          statusResolver: _deviceStatus,
+                                          statusColorBuilder: _statusColor,
+                                          onClose: () {
+                                            setState(_selectedIds.clear);
+                                            _scheduleSheetForSelection();
+                                          },
+                                          onFocus: _focusSelected,
+                                        )
+                                      : _MultiSelectionInfoBox(
+                                          key: const ValueKey('multi-info'),
+                                          selectedIds: _selectedIds,
+                                          devices: devices,
+                                          positions: positions,
+                                          statusResolver: _deviceStatus,
+                                          statusColorBuilder: _statusColor,
+                                          onClear: () {
+                                            setState(_selectedIds.clear);
+                                            _scheduleSheetForSelection();
+                                          },
+                                          onFocus: _focusSelected,
+                                        )),
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(key: ValueKey('no-sheet')),
+                ),
               ],
             ),
             ); // Close GestureDetector
@@ -2604,7 +2687,7 @@ class _StatRow extends StatelessWidget {
 
 /// Instant-response info sheet: reacts to drag updates immediately and snaps on release.
 class _InstantInfoSheet extends StatefulWidget {
-  const _InstantInfoSheet({required this.child});
+  const _InstantInfoSheet({required this.child, super.key});
   final Widget child;
 
   @override
@@ -2613,15 +2696,34 @@ class _InstantInfoSheet extends StatefulWidget {
 
 class _InstantInfoSheetState extends State<_InstantInfoSheet>
     with SingleTickerProviderStateMixin {
-  double _fraction = 0.05; // between 0.05 and 0.45
+  double _fraction = 0.45; // between 0.05 and 0.45, start expanded when visible
   double _dragStart = 0;
   double _startFraction = 0;
   bool _isDragging = false;
+  Duration _animDuration = const Duration(milliseconds: 200);
+  Curve _animCurve = Curves.easeOutCubic;
+
+  // Programmatic controls with spring-like animation
+  void expand() {
+    _animDuration = const Duration(milliseconds: 280);
+    _animCurve = Curves.easeOutBack;
+    HapticFeedback.selectionClick();
+    setState(() => _fraction = 0.45);
+  }
+
+  void collapse() {
+    _animDuration = const Duration(milliseconds: 280);
+    _animCurve = Curves.easeOutBack;
+    HapticFeedback.selectionClick();
+    setState(() => _fraction = 0.05);
+  }
 
   void _onDragStart(DragStartDetails d) {
     _dragStart = d.globalPosition.dy;
     _startFraction = _fraction;
     _isDragging = true;
+    // Instant reaction while dragging
+    _animDuration = Duration.zero;
   }
 
   void _onDragUpdate(DragUpdateDetails d) {
@@ -2646,12 +2748,17 @@ class _InstantInfoSheetState extends State<_InstantInfoSheet>
     }
 
     HapticFeedback.selectionClick();
+    // Smooth settle after drag ends
+    _animDuration = const Duration(milliseconds: 220);
+    _animCurve = Curves.easeOutCubic;
     setState(() => _fraction = target);
   }
 
   void _onTap() {
     final target = (_fraction < 0.25) ? 0.45 : 0.05;
     HapticFeedback.selectionClick();
+    _animDuration = const Duration(milliseconds: 260);
+    _animCurve = Curves.easeOutBack;
     setState(() => _fraction = target);
   }
 
@@ -2667,8 +2774,8 @@ class _InstantInfoSheetState extends State<_InstantInfoSheet>
         onTap: _onTap,
         behavior: HitTestBehavior.translucent,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
+          duration: _animDuration,
+          curve: _animCurve,
           height: screenHeight * _fraction,
           decoration: BoxDecoration(
             color: Colors.white,
