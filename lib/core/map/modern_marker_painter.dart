@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 /// Painter that draws markers matching the uploaded design set:
 /// - State 1 (online + ignition ON + stopped): green pin with car icon and green power badge
@@ -67,7 +66,7 @@ class ModernMarkerPainter extends CustomPainter {
 
     // Shadow
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.25)
+      ..color = Colors.black.withValues(alpha: 0.25)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     canvas.drawPath(path.shift(const Offset(0, 2)), shadowPaint);
 
@@ -110,7 +109,7 @@ class ModernMarkerPainter extends CustomPainter {
 
     // Shadow
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.25)
+      ..color = Colors.black.withValues(alpha: 0.25)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     canvas.drawCircle(center.translate(0, 1.5), radius, shadowPaint);
 
@@ -192,7 +191,7 @@ class ModernMarkerPainter extends CustomPainter {
     const base = 2.5;
     for (var i = 0; i < 3; i++) {
       final paint = Paint()
-        ..color = _appGreen.withOpacity(1.0 - i * 0.25)
+        ..color = _appGreen.withValues(alpha: 1.0 - i * 0.25)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(start.translate(i * spacing * 0.7, i * spacing * 0.7), base * (1.0 - i * 0.15), paint);
     }

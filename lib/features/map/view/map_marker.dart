@@ -38,7 +38,7 @@ class MapMarkerWidget extends ConsumerWidget {
 
     // Determine online status (default to true if unknown to avoid hiding)
     final statusStr = (device?['status']?.toString() ?? '').toLowerCase();
-    final online = statusStr.isEmpty ? true : statusStr == 'online';
+  final online = statusStr.isEmpty || statusStr == 'online';
 
     // Engine state with safe fallbacks
     bool asTrue(dynamic v) {

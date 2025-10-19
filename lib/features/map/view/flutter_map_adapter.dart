@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
@@ -84,15 +84,17 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     final existing = _tileProviderCache[key];
     if (existing != null) return existing;
     // Use a dedicated FMTC store per map source to prevent cross-source cache collisions.
-    final created = kForceDisableFMTC
-        ? NetworkTileProvider(httpClient: _httpClient)
-        : FMTCStore(storeName ?? 'main').getTileProvider(
-            httpClient: _httpClient,
-            // Toggle loading policy based on connectivity
-            loadingStrategy: _isOffline
-                ? BrowseLoadingStrategy.cacheOnly
-                : BrowseLoadingStrategy.onlineFirst,
-          );
+  final created = kForceDisableFMTC
+    ? NetworkTileProvider(httpClient: _httpClient)
+    : FMTCTileProvider(
+      // Target a single FMTC store by name (strategy null = defaults)
+      stores: { (storeName ?? 'main'): null },
+      httpClient: _httpClient,
+      // Toggle loading policy based on connectivity (match previous behavior)
+      loadingStrategy: _isOffline
+        ? BrowseLoadingStrategy.cacheOnly
+        : BrowseLoadingStrategy.onlineFirst,
+      );
     _tileProviderCache[key] = created;
     return created;
   }
@@ -158,10 +160,10 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.95),
+                      color: color.withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6, offset: const Offset(0,2)),
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 6, offset: const Offset(0,2)),
                       ],
                     ),
                     child: Row(
@@ -209,7 +211,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   }
 
   // Public entry-point for external callers/tests
-  void updateCacheMode(bool isOffline) => _updateCacheMode(isOffline);
+  void updateCacheMode({required bool isOffline}) => _updateCacheMode(isOffline: isOffline);
 
   void _maybeFit({bool immediate = false}) {
     final fit = widget.cameraFit;
@@ -323,19 +325,20 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     }
     
     // DEFENSIVE: Validate zoom level
-    if (!zoom.isFinite || zoom.isNaN || zoom < 0 || zoom > 20) {
+    var effectiveZoom = zoom;
+    if (!effectiveZoom.isFinite || effectiveZoom.isNaN || effectiveZoom < 0 || effectiveZoom > 20) {
       if (kDebugMode) {
-        debugPrint('[FlutterMapAdapter] ⚠️ Invalid zoom level: $zoom, using default');
+        debugPrint('[FlutterMapAdapter] ⚠️ Invalid zoom level: $effectiveZoom, using default');
       }
-      zoom = 13.0;
+      effectiveZoom = 13.0;
     }
     
     if (immediate) {
       // Immediate camera move without throttling - for user selection
-      _animatedMove(target, zoom);
+      _animatedMove(target, effectiveZoom);
     } else {
       // Throttled move - for automatic fits
-      _moveThrottler.run(() => _animatedMove(target, zoom));
+      _moveThrottler.run(() => _animatedMove(target, effectiveZoom));
     }
   }
 
@@ -392,7 +395,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
   // Toggle FMTC cache behavior according to connectivity by recreating tile providers
   // Offline -> cacheOnly loadingStrategy (serve cache only, no network)
   // Online  -> onlineFirst loadingStrategy (fetch + cache)
-  void _updateCacheMode(bool isOffline) {
+  void _updateCacheMode({required bool isOffline}) {
     // Clearing providers ensures next build creates providers with correct loadingStrategy
     _tileProviderCache.clear();
     if (kDebugMode) {
@@ -500,7 +503,7 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
           // Update local offline flag for tile behavior
           _isOffline = nowOffline;
           // Update FMTC cache mode on every transition
-          _updateCacheMode(nowOffline);
+          _updateCacheMode(isOffline: nowOffline);
 
           if (wasOffline && !nowOffline) {
             if (kDebugMode) {
@@ -882,7 +885,7 @@ class _NoInternetWatermarkPainter extends CustomPainter {
     // Draw a repeated diagonal text watermark
     const text = 'NO INTERNET';
     final textStyle = TextStyle(
-      color: Colors.black.withOpacity(0.15),
+      color: Colors.black.withValues(alpha: 0.15),
       fontSize: 24,
       fontWeight: FontWeight.w700,
       letterSpacing: 1.5,

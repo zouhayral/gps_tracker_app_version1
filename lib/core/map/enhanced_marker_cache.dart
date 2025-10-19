@@ -359,6 +359,7 @@ class MarkerDiffResult {
 }
 
 /// Lightweight snapshot of marker state for diffing
+@immutable
 class _MarkerSnapshot {
   const _MarkerSnapshot({
     required this.lat,

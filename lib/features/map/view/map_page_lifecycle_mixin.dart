@@ -40,10 +40,19 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
     switch (state) {
       case AppLifecycleState.resumed:
         _onAppResumed();
+        return; // no other cases should run
       case AppLifecycleState.paused:
         _onAppPaused();
-      default:
-        break;
+        return;
+      case AppLifecycleState.inactive:
+        // No action needed
+        return;
+      case AppLifecycleState.detached:
+        // No action needed
+        return;
+      case AppLifecycleState.hidden:
+        // No action needed
+        return;
     }
   }
 

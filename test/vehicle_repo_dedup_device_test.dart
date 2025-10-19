@@ -71,7 +71,7 @@ void main() {
       deviceServiceProvider.overrideWith((ref) => DeviceService(Dio(BaseOptions(baseUrl: 'https://example.com')))),
       positionsServiceProvider.overrideWith((ref) => PositionsService(Dio(BaseOptions(baseUrl: 'https://example.com')))),
       telemetryDaoProvider.overrideWithValue(_FakeTelemetryDao()),
-    ]);
+    ],);
 
     addTearDown(container.dispose);
 
@@ -100,12 +100,16 @@ void main() {
     };
 
     // Send the same device payload 5 times via socket
-    final text = jsonEncode({'devices': [devicePayload]});
+    final text = jsonEncode({
+      'devices': [devicePayload],
+    });
     for (var i = 0; i < 5; i++) {
       // The TraccarSocketService normally parses incoming text and emits
       // TraccarSocketMessage.devices(payload). For the fake socket, we directly
-      // create the message the repository listens for.
-      socket.push(TraccarSocketMessage.devices(jsonDecode(text)['devices']));
+    // create the message the repository listens for.
+    final decoded = jsonDecode(text) as Map<String, dynamic>;
+      final devices = decoded['devices'] as List<dynamic>;
+      socket.push(TraccarSocketMessage.devices(devices));
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
 
@@ -118,5 +122,6 @@ void main() {
     // Summary log
     // ignore: avoid_print
     print('✅ Device payload dedup test passed (1 update from 5 messages)');
-  },);
+  },
+  );
 }

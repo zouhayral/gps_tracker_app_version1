@@ -88,28 +88,40 @@ class RebuildTracker {
     final sorted = _rebuildCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    for (final entry in sorted) {
+  for (final entry in sorted) {
       final count = entry.value;
       final rate = elapsed > 0 ? (count / elapsed).toStringAsFixed(1) : '0.0';
       final padding = ' ' * (35 - entry.key.length);
-      debugPrint('║ ${entry.key}$padding $count rebuilds ($rate/s)');
+      assert(() {
+        debugPrint('║ ${entry.key}$padding $count rebuilds ($rate/s)');
+        return true;
+      }(), 'RebuildTracker printSummary loop for ${entry.key}',);
     }
 
-    debugPrint('╚═══════════════════════════════════════════════════════════╝');
-    debugPrint('');
+    assert(() {
+      debugPrint('╚═══════════════════════════════════════════════════════════╝');
+      debugPrint('');
+      return true;
+    }(), 'RebuildTracker printSummary footer',);
   }
 
   /// Print compact one-line summary
   void printCompact() {
     if (_rebuildCounts.isEmpty) {
-      debugPrint('[RebuildTracker] No rebuilds');
+      assert(() {
+        debugPrint('[RebuildTracker] No rebuilds');
+        return true;
+      }(), 'RebuildTracker printCompact with empty counts',);
       return;
     }
 
     final total = _rebuildCounts.values.reduce((a, b) => a + b);
     final widgetCount = _rebuildCounts.length;
-    debugPrint(
-        '[RebuildTracker] Total: $total rebuilds across $widgetCount widgets',);
+    assert(() {
+      debugPrint(
+          '[RebuildTracker] Total: $total rebuilds across $widgetCount widgets',);
+      return true;
+    }(), 'RebuildTracker printCompact summary',);
   }
 
   /// Reset tracking data
@@ -174,12 +186,18 @@ bool debugPrintRebuildDirtyWidgets = false;
 /// Enable detailed rebuild logging
 void enableRebuildLogging() {
   debugPrintRebuildDirtyWidgets = true;
-  debugPrint('[RebuildTracker] ✅ Rebuild logging enabled');
-  debugPrint('[RebuildTracker] Set debugPrintRebuildDirtyWidgets = true');
+  assert(() {
+    debugPrint('[RebuildTracker] ✅ Rebuild logging enabled');
+    debugPrint('[RebuildTracker] Set debugPrintRebuildDirtyWidgets = true');
+    return true;
+  }(), 'enableRebuildLogging',);
 }
 
 /// Disable rebuild logging
 void disableRebuildLogging() {
   debugPrintRebuildDirtyWidgets = false;
-  debugPrint('[RebuildTracker] Rebuild logging disabled');
+  assert(() {
+    debugPrint('[RebuildTracker] Rebuild logging disabled');
+    return true;
+  }(), 'disableRebuildLogging',);
 }

@@ -30,7 +30,7 @@ class SafeWakelock {
       final lifecycle = WidgetsBinding.instance.lifecycleState;
 
       if (lifecycle == AppLifecycleState.resumed) {
-        // TODO: Uncomment when wakelock_plus is added to dependencies
+  // TODO(zouhayral): Uncomment when wakelock_plus is added to dependencies
         // await WakelockPlus.enable();
         _enabled = true;
 
@@ -58,7 +58,7 @@ class SafeWakelock {
   static Future<void> disable() async {
     try {
       if (_enabled) {
-        // TODO: Uncomment when wakelock_plus is added to dependencies
+  // TODO(zouhayral): Uncomment when wakelock_plus is added to dependencies
         // await WakelockPlus.disable();
         _enabled = false;
 

@@ -58,7 +58,7 @@ class PrefetchPanel extends ConsumerWidget {
               subtitle: const Text('Download tiles for offline use'),
               value: settings.enabled,
               onChanged: (enabled) {
-                ref.read(prefetchSettingsProvider.notifier).setEnabled(enabled);
+                ref.read(prefetchSettingsProvider.notifier).setEnabled(enabled: enabled);
               },
             ),
 

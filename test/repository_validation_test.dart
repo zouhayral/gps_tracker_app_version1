@@ -49,7 +49,7 @@ void main() {
         lastUpdate: pos1.deviceTime,
       );
 
-      cache.put(snapshot1);
+      await cache.put(snapshot1);
 
       // Create new cache instance (simulates app restart)
       final newCache = VehicleDataCache(prefs: prefs);
@@ -255,7 +255,7 @@ void main() {
           lastUpdate: pos.deviceTime,
         );
 
-        cache.put(snapshot);
+        await cache.put(snapshot);
       }
 
       // Benchmark reload

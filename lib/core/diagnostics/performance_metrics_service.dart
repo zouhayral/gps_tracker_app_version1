@@ -92,10 +92,13 @@ class PerformanceMetricsService {
     latestMetrics.dispose();
   }
 
-  /// Register a callback that returns the current markers count
-  void setMarkerCountSupplier(int Function() supplier) {
+  // Intentional explicit getter/setter pair for API clarity used across the app.
+  // ignore: unnecessary_getters_setters
+  set markerCountSupplier(int Function()? supplier) {
     _markerCountSupplier = supplier;
   }
+  // ignore: unnecessary_getters_setters
+  int Function()? get markerCountSupplier => _markerCountSupplier;
 
   Map<String, dynamic> _collectSnapshot() {
     final fm = FrameMetricsLogger.instance;
@@ -104,8 +107,7 @@ class PerformanceMetricsService {
     final memBytes = _safeCurrentRss();
     final memMb = memBytes != null ? (memBytes / (1024 * 1024)) : null;
 
-    final markers =
-        _markerCountSupplier != null ? _markerCountSupplier!() : null;
+  final markers = _markerCountSupplier?.call();
 
     final now = DateTime.now().toUtc().toIso8601String();
 
@@ -133,13 +135,15 @@ class PerformanceMetricsService {
     }
   }
 
+  // ignore: avoid_slow_async_io
   Future<void> _exportCsv() async {
     try {
       final snap = _collectSnapshot();
       final csvLine = _toCsvLine(snap);
 
-      final file = await _openLogFile();
-      final exists = await file.exists();
+  final file = await _openLogFile();
+  // ignore: avoid_slow_async_io
+  final exists = await file.exists();
       if (!exists) {
         await file.writeAsString('${_csvHeader()}\n');
       }
@@ -189,7 +193,9 @@ class PerformanceMetricsService {
     } catch (_) {
       dir = Directory.systemTemp;
     }
+    // ignore: avoid_slow_async_io
     if (!await dir.exists()) {
+      // ignore: avoid_slow_async_io
       await dir.create(recursive: true);
     }
     return File('${dir.path}/$name');
@@ -210,8 +216,9 @@ class PerformanceMetricsService {
       final now = DateTime.now();
       final name =
           'perf_snapshot_${now.toIso8601String().replaceAll(':', '-')}.json';
-      final file = File('${Directory.current.path}/$name');
-      await file.writeAsString(jsonEncode(snap));
+  final file = File('${Directory.current.path}/$name');
+  // ignore: avoid_slow_async_io
+  await file.writeAsString(jsonEncode(snap));
       return file;
     } catch (e) {
       if (kDebugMode && DiagnosticsConfig.enablePerfLogs) {

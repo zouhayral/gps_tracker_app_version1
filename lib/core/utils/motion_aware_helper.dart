@@ -76,10 +76,10 @@ class MotionAwareHelper {
       );
 
       if (kDebugMode) {
-        debugPrint(
-          '[MotionAware] Device $deviceId: ${wasMoving == null ? "INITIAL" : (wasMoving ? "MOVING" : "IDLE")} → '
-          '${isMoving ? "MOVING" : "IDLE"} (speed: ${snapshot.speed?.toStringAsFixed(1) ?? "N/A"} km/h)',
-        );
+        final prev = wasMoving == null ? 'INITIAL' : (wasMoving ? 'MOVING' : 'IDLE');
+        final next = isMoving ? 'MOVING' : 'IDLE';
+        final spd = snapshot.speed?.toStringAsFixed(1) ?? 'N/A';
+        debugPrint('[MotionAware] Device $deviceId: $prev → $next (speed: $spd km/h)');
       }
 
       return true; // State changed
@@ -293,12 +293,10 @@ class MotionAnalysis {
 
   @override
   String toString() {
-    return 'MotionAnalysis('
-        'isMoving: $isMoving, '
+    return 'MotionAnalysis(isMoving: $isMoving, '
         'avgSpeed: ${averageSpeed.toStringAsFixed(1)} km/h, '
         'accelerating: $isAccelerating, '
         'consistent: $hasConsistentMovement, '
-        'confidence: ${(confidence * 100).toStringAsFixed(0)}%'
-        ')';
+        'confidence: ${(confidence * 100).toStringAsFixed(0)}%)';
   }
 }

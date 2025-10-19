@@ -15,17 +15,24 @@ class MarkerProcessingIsolate {
 
   Isolate? _isolate;
   SendPort? _sendPort;
-  final _receivePort = ReceivePort();
-  final _resultStreamController =
-      StreamController<List<MapMarkerData>>.broadcast();
+  ReceivePort? _receivePort;
+  StreamController<List<MapMarkerData>>? _resultStreamController;
 
   bool _isInitialized = false;
 
   /// Initialize the background isolate
   Future<void> initialize() async {
-    if (_isInitialized) return;
+    if (_isInitialized) {
+      if (kDebugMode) {
+        debugPrint('[ISOLATE] Already initialized, skipping');
+      }
+      return;
+    }
 
-    _receivePort.listen((message) {
+    _receivePort = ReceivePort();
+    _resultStreamController = StreamController<List<MapMarkerData>>.broadcast();
+
+    _receivePort!.listen((message) {
       if (message is SendPort) {
         _sendPort = message;
         _isInitialized = true;
@@ -33,13 +40,13 @@ class MarkerProcessingIsolate {
           debugPrint('[MarkerIsolate] Initialized and ready');
         }
       } else if (message is List<MapMarkerData>) {
-        _resultStreamController.add(message);
+        _resultStreamController?.add(message);
       }
     });
 
     _isolate = await Isolate.spawn(
       _isolateEntry,
-      _receivePort.sendPort,
+      _receivePort!.sendPort,
       debugName: 'MarkerProcessingIsolate',
     );
 
@@ -64,7 +71,7 @@ class MarkerProcessingIsolate {
 
       // Listen for result
       StreamSubscription<List<MapMarkerData>>? subscription;
-      subscription = _resultStreamController.stream.listen((markers) {
+      subscription = _resultStreamController?.stream.listen((markers) {
         if (!completer.isCompleted) {
           completer.complete(markers);
           subscription?.cancel();
@@ -99,8 +106,11 @@ class MarkerProcessingIsolate {
   void dispose() {
     _isolate?.kill(priority: Isolate.immediate);
     _isolate = null;
-    _receivePort.close();
-    _resultStreamController.close();
+    _receivePort?.close();
+    _receivePort = null;
+    _resultStreamController?.close();
+    _resultStreamController = null;
+    _sendPort = null;
     _isInitialized = false;
   }
 

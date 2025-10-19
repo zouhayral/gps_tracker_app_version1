@@ -14,7 +14,7 @@ void main() {
       cache.clear();
     });
 
-    Position _makePosition({
+  Position makePosition({
       required int id,
       required int deviceId,
       required double lat,
@@ -36,17 +36,17 @@ void main() {
       );
     }
 
-    Map<String, dynamic> _makeDevice(int id, String name) {
+  Map<String, dynamic> makeDevice(int id, String name) {
       return {'id': id, 'name': name};
     }
 
     test('only rebuilds changed markers', () async {
       // Initial update: 2 markers should be created
-      final pos1 = _makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
-      final pos2 = _makePosition(id: 2, deviceId: 2, lat: 1, lon: 1);
+  final pos1 = makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
+  final pos2 = makePosition(id: 2, deviceId: 2, lat: 1, lon: 1);
       final devices = [
-        _makeDevice(1, 'Device 1'),
-        _makeDevice(2, 'Device 2'),
+  makeDevice(1, 'Device 1'),
+  makeDevice(2, 'Device 2'),
       ];
 
       var result = cache.getMarkersWithDiff(
@@ -81,15 +81,15 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 350));
 
       // Change one position slightly → only one rebuild
-      final pos1Changed = _makePosition(
+  final pos1Changed = makePosition(
         id: 1,
         deviceId: 1,
         lat: 0.001,
-        lon: 0.0,
+  lon: 0,
       );
 
       result = cache.getMarkersWithDiff(
-        {1: pos1Changed, 2: pos2},
+  {1: pos1Changed, 2: pos2},
         devices,
         const {},
         '',
@@ -102,14 +102,14 @@ void main() {
     });
 
     test('detects speed changes', () async {
-      final pos1 = _makePosition(
+  final pos1 = makePosition(
         id: 1,
         deviceId: 1,
         lat: 0,
         lon: 0,
         speed: 50,
       );
-      final devices = [_makeDevice(1, 'Device 1')];
+  final devices = [makeDevice(1, 'Device 1')];
 
       var result = cache.getMarkersWithDiff(
         {1: pos1},
@@ -124,7 +124,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 350));
 
       // Same position, different speed
-      final pos1Faster = _makePosition(
+  final pos1Faster = makePosition(
         id: 1,
         deviceId: 1,
         lat: 0,
@@ -144,14 +144,14 @@ void main() {
     });
 
     test('detects course/heading changes', () async {
-      final pos1 = _makePosition(
+  final pos1 = makePosition(
         id: 1,
         deviceId: 1,
         lat: 0,
         lon: 0,
         course: 90,
       );
-      final devices = [_makeDevice(1, 'Device 1')];
+  final devices = [makeDevice(1, 'Device 1')];
 
       var result = cache.getMarkersWithDiff(
         {1: pos1},
@@ -165,7 +165,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 350));
 
       // Same position, different course
-      final pos1Turned = _makePosition(
+  final pos1Turned = makePosition(
         id: 1,
         deviceId: 1,
         lat: 0,
@@ -184,8 +184,8 @@ void main() {
     });
 
     test('detects selection state changes', () async {
-      final pos1 = _makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
-      final devices = [_makeDevice(1, 'Device 1')];
+  final pos1 = makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
+  final devices = [makeDevice(1, 'Device 1')];
 
       // Not selected
       var result = cache.getMarkersWithDiff(
@@ -212,11 +212,11 @@ void main() {
     });
 
     test('handles marker removal', () async {
-      final pos1 = _makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
-      final pos2 = _makePosition(id: 2, deviceId: 2, lat: 1, lon: 1);
+  final pos1 = makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
+  final pos2 = makePosition(id: 2, deviceId: 2, lat: 1, lon: 1);
       final devices = [
-        _makeDevice(1, 'Device 1'),
-        _makeDevice(2, 'Device 2'),
+  makeDevice(1, 'Device 1'),
+  makeDevice(2, 'Device 2'),
       ];
 
       // Create both markers
@@ -250,13 +250,13 @@ void main() {
 
       // Create 50 markers
       for (var i = 1; i <= 50; i++) {
-        positions[i] = _makePosition(
+  positions[i] = makePosition(
           id: i,
           deviceId: i,
           lat: i.toDouble(),
           lon: i.toDouble(),
         );
-        devices.add(_makeDevice(i, 'Device $i'));
+  devices.add(makeDevice(i, 'Device $i'));
       }
 
       var result = cache.getMarkersWithDiff(
@@ -271,17 +271,17 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 350));
 
       // Update only 2 markers
-      positions[1] = _makePosition(
+  positions[1] = makePosition(
         id: 1,
         deviceId: 1,
-        lat: 1.001,
-        lon: 1.0,
+  lat: 1.001,
+  lon: 1,
       );
-      positions[25] = _makePosition(
+  positions[25] = makePosition(
         id: 25,
         deviceId: 25,
-        lat: 25.001,
-        lon: 25.0,
+  lat: 25.001,
+  lon: 25,
       );
 
       result = cache.getMarkersWithDiff(
@@ -301,11 +301,11 @@ void main() {
     });
 
     test('query filter reduces marker count', () async {
-      final pos1 = _makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
-      final pos2 = _makePosition(id: 2, deviceId: 2, lat: 1, lon: 1);
+  final pos1 = makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
+  final pos2 = makePosition(id: 2, deviceId: 2, lat: 1, lon: 1);
       final devices = [
-        _makeDevice(1, 'Alpha'),
-        _makeDevice(2, 'Beta'),
+  makeDevice(1, 'Alpha'),
+  makeDevice(2, 'Beta'),
       ];
 
       // No filter

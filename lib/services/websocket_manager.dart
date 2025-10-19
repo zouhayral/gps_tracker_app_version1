@@ -35,7 +35,8 @@ class WebSocketState {
 }
 
 class WebSocketManager extends Notifier<WebSocketState> {
-  static const _wsUrl = 'wss://your.server/ws'; // TODO: Replace with actual URL
+  // TODO(app): Replace with actual URL configured for your deployment.
+  static const _wsUrl = 'wss://your.server/ws';
   static const _pingInterval = Duration(seconds: 30);
   static const _maxRetries = 10; // Increased for better exponential backoff
   static const _circuitBreakerTimeout = Duration(minutes: 2);
@@ -317,7 +318,9 @@ class WebSocketManager extends Notifier<WebSocketState> {
   }
 
   void _log(String msg) {
-    debugPrint('${DateTime.now().toIso8601String()} $msg');
+    if (kDebugMode) {
+      debugPrint('${DateTime.now().toIso8601String()} $msg');
+    }
   }
 }
 

@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/providers/map_rebuild_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider for managing the currently selected map tile source
 /// Persists user selection using SharedPreferences

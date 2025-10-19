@@ -1,3 +1,5 @@
+// ignore_for_file: unawaited_futures
+
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -100,7 +102,9 @@ class AsyncMarkerWarmCache {
 
       return image;
     } catch (e, s) {
-      debugPrint('[MARKER-CACHE] ❌ Error rendering marker: $e');
+      if (kDebugMode) {
+        debugPrint('[MARKER-CACHE] ❌ Error rendering marker: $e');
+      }
       completer.completeError(e, s);
       rethrow;
     } finally {
@@ -176,16 +180,20 @@ class AsyncMarkerWarmCache {
     }
 
     if (toRender.isEmpty) {
-      debugPrint(
-        '[MARKER-CACHE] 🔁 All ${states.length} markers already cached or enqueued',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[MARKER-CACHE] 🔁 All ${states.length} markers already cached or enqueued',
+        );
+      }
       return;
     }
 
-    debugPrint(
-      '[MARKER-CACHE] 🧊 Warm-up enqueued: +${toRender.length} markers '
-      '(${states.length - toRender.length} already cached)',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '[MARKER-CACHE] 🧊 Warm-up enqueued: +${toRender.length} markers '
+        '(${states.length - toRender.length} already cached)',
+      );
+    }
 
     // Add to queue
     _warmUpQueue.addAll(toRender);
@@ -207,7 +215,7 @@ class AsyncMarkerWarmCache {
 
     // Use post-frame callback to avoid blocking current frame
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      _processBatch();
+      unawaited(_processBatch());
     });
   }
 
@@ -236,7 +244,9 @@ class AsyncMarkerWarmCache {
           rendered++;
         }
       } catch (e) {
-        debugPrint('[MARKER-CACHE] ⚠️ Failed to render ${queued.key}: $e');
+        if (kDebugMode) {
+          debugPrint('[MARKER-CACHE] ⚠️ Failed to render ${queued.key}: $e');
+        }
       }
 
       // Yield to allow other microtasks if we've been running a while
@@ -249,10 +259,12 @@ class AsyncMarkerWarmCache {
     _batchCount++;
 
     if (rendered > 0) {
-      debugPrint(
-        '[MARKER-CACHE] ✅ Warmed $rendered markers in ${stopwatch.elapsedMilliseconds}ms; '
-        'remaining=${_warmUpQueue.length}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[MARKER-CACHE] ✅ Warmed $rendered markers in ${stopwatch.elapsedMilliseconds}ms; '
+          'remaining=${_warmUpQueue.length}',
+        );
+      }
     }
 
     // Schedule next batch if queue not empty
@@ -260,7 +272,9 @@ class AsyncMarkerWarmCache {
       _scheduleNextBatch();
     } else {
       _isWarmUpScheduled = false;
-      debugPrint('[MARKER-CACHE] 🎉 Warm-up complete! Total warmed: $_warmUpCount');
+      if (kDebugMode) {
+        debugPrint('[MARKER-CACHE] 🎉 Warm-up complete! Total warmed: $_warmUpCount');
+      }
     }
   }
 
@@ -350,7 +364,9 @@ class AsyncMarkerWarmCache {
     _warmUpCount = 0;
     _batchCount = 0;
     
-    debugPrint('[MARKER-CACHE] 🗑️ Cache cleared');
+    if (kDebugMode) {
+      debugPrint('[MARKER-CACHE] 🗑️ Cache cleared');
+    }
   }
 
   /// Remove markers for specific vehicle
@@ -368,9 +384,11 @@ class AsyncMarkerWarmCache {
     _warmUpQueue.removeWhere((q) => q.state.name == name);
 
     if (keysToRemove.isNotEmpty) {
-      debugPrint(
-        '[MARKER-CACHE] 🗑️ Cleared ${keysToRemove.length} markers for vehicle: $name',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[MARKER-CACHE] 🗑️ Cleared ${keysToRemove.length} markers for vehicle: $name',
+        );
+      }
     }
   }
 
@@ -422,8 +440,9 @@ class _QueuedMarker {
 /// Marker render state (for isolate communication)
 ///
 /// Must be simple data types (no ui.Image, no BuildContext) for compute()
+@immutable
 class MarkerRenderState {
-  MarkerRenderState({
+  const MarkerRenderState({
     required this.name,
     required this.online,
     required this.engineOn,
@@ -449,13 +468,15 @@ class MarkerRenderState {
   }) {
     final name = (device['name']?.toString() ?? '').trim();
     final statusStr = (device['status']?.toString() ?? '').toLowerCase();
-    final online = statusStr.isEmpty ? true : statusStr == 'online';
+    final online = statusStr.isEmpty || statusStr == 'online';
 
     // Extract engine state
+    final attrs = device['attributes'];
+    final attrsMap =
+        attrs is Map<String, dynamic> ? attrs : const <String, dynamic>{};
     final engineOn = device['ignition'] == true ||
         device['engineOn'] == true ||
-        (device['attributes']?['ignition'] == true) ||
-        false;
+        (attrsMap['ignition'] == true);
 
     // Extract motion state
     final speed = _parseSpeed(device);

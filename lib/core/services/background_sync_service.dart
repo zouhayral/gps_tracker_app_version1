@@ -239,8 +239,8 @@ class BackgroundSyncService {
         debugPrint('[BackgroundSync] 🔄 Starting sync...');
       }
 
-      // Execute sync on main isolate (for now)
-      // TODO: For production, use Isolate.spawn() or WorkManager
+  // Execute sync on main isolate (for now)
+  // TODO(zouhayral): For production, use Isolate.spawn() or WorkManager
       await repository.refreshAll();
 
       success = true;

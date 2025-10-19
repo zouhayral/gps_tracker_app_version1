@@ -254,8 +254,8 @@ class _MapPageState extends ConsumerState<MapPage>
 
       // Register marker count supplier for performance overlay (disabled by default)
       if (MapDebugFlags.enablePerfMetrics) {
-        final perfSvc = ref.read(performanceMetricsServiceProvider);
-        perfSvc.setMarkerCountSupplier(() => _markersNotifier.value.length);
+  final perfSvc = ref.read(performanceMetricsServiceProvider);
+  perfSvc.markerCountSupplier = () => _markersNotifier.value.length;
         perfSvc.start();
       }
 
@@ -267,9 +267,13 @@ class _MapPageState extends ConsumerState<MapPage>
 
     // Warm up FMTC asynchronously - do not await here to avoid blocking initState
     unawaited(FMTCInitializer.warmup().then((_) {
-      debugPrint('[FMTC] warmup finished');
+      if (kDebugMode) {
+        debugPrint('[FMTC] warmup finished');
+      }
     }).catchError((Object e, StackTrace? st) {
-      debugPrint('[FMTC] warmup error: $e');
+      if (kDebugMode) {
+        debugPrint('[FMTC] warmup error: $e');
+      }
     }),);
 
     // NEW: Warm up per-source FMTC stores used by FlutterMapAdapter
@@ -277,9 +281,13 @@ class _MapPageState extends ConsumerState<MapPage>
     unawaited(FMTCInitializer
         .warmupStoresForSources(MapTileProviders.all)
         .then((_) {
-      debugPrint('[FMTC] per-source store warmup finished');
+      if (kDebugMode) {
+        debugPrint('[FMTC] per-source store warmup finished');
+      }
     }).catchError((Object e, StackTrace? st) {
-      debugPrint('[FMTC] per-source warmup error: $e');
+      if (kDebugMode) {
+        debugPrint('[FMTC] per-source warmup error: $e');
+      }
     }),);
 
     // MIGRATION NOTE: Removed old positionsLiveProvider listening
@@ -513,7 +521,9 @@ class _MapPageState extends ConsumerState<MapPage>
         });
       }
     } catch (e) {
-      debugPrint('[MapPage] Prefetch init error: $e');
+      if (kDebugMode) {
+        debugPrint('[MapPage] Prefetch init error: $e');
+      }
     }
   }
 
@@ -532,7 +542,9 @@ class _MapPageState extends ConsumerState<MapPage>
         debugPrint('[MapPage] Prefetch completed for cached region');
       }
     } catch (e) {
-      debugPrint('[MapPage] Prefetch error: $e');
+      if (kDebugMode) {
+        debugPrint('[MapPage] Prefetch error: $e');
+      }
     }
   }
 
@@ -552,7 +564,9 @@ class _MapPageState extends ConsumerState<MapPage>
       zoom: zoom,
     )
         .catchError((Object e) {
-      debugPrint('[MapPage] Snapshot capture error: $e');
+      if (kDebugMode) {
+        debugPrint('[MapPage] Snapshot capture error: $e');
+      }
     });
   }
 
@@ -1892,7 +1906,7 @@ class _MapPageState extends ConsumerState<MapPage>
                       gaplessPlayback: true,
                     ),
                   ),
-                // TODO(my_app): Add full UI overlay (search bar, bottom panel, etc.)
+                // TODO(owner): Add full UI overlay (search bar, bottom panel, etc.)
                 // For now, this shows the map with markers
               ],
             ),

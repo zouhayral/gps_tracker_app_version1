@@ -192,44 +192,47 @@ class VehicleRepositoryBenchmark {
   void printReport() {
     final report = generateReport();
 
-    debugPrint('\n${'=' * 60}');
-    debugPrint('VEHICLE REPOSITORY BENCHMARK REPORT');
-    debugPrint('=' * 60);
+    assert(() {
+      debugPrint('\n${'=' * 60}');
+      debugPrint('VEHICLE REPOSITORY BENCHMARK REPORT');
+      debugPrint('=' * 60);
 
-    debugPrint('\n📊 Position Update Latency:');
-    final posLatency = report['position_latency'] as Map;
-    debugPrint(
-        '  Average: ${posLatency['average_ms']}ms (target: <${posLatency['target_ms']}ms)',);
-    debugPrint('  P95: ${posLatency['p95_ms']}ms');
-    debugPrint('  Max: ${posLatency['max_ms']}ms');
-    debugPrint('  Status: ${posLatency['pass'] == true ? '✅ PASS' : '❌ FAIL'}');
+      debugPrint('\n📊 Position Update Latency:');
+      final posLatency = report['position_latency'] as Map;
+      debugPrint(
+          '  Average: ${posLatency['average_ms']}ms (target: <${posLatency['target_ms']}ms)',);
+      debugPrint('  P95: ${posLatency['p95_ms']}ms');
+      debugPrint('  Max: ${posLatency['max_ms']}ms');
+      debugPrint('  Status: ${posLatency['pass'] == true ? '✅ PASS' : '❌ FAIL'}');
 
-    debugPrint('\n⚡ Engine State Extraction:');
-    final engineLatency = report['engine_latency'] as Map;
-    debugPrint('  Average: ${engineLatency['average_us']}μs (<1ms)');
-    debugPrint('  Status: ✅ PASS (instant)');
+      debugPrint('\n⚡ Engine State Extraction:');
+      final engineLatency = report['engine_latency'] as Map;
+      debugPrint('  Average: ${engineLatency['average_us']}μs (<1ms)');
+      debugPrint('  Status: ✅ PASS (instant)');
 
-    debugPrint('\n🌐 API Calls:');
-    final apiCalls = report['api_calls'] as Map;
-    debugPrint('  Total: ${apiCalls['total']}');
-    debugPrint(
-        '  Estimated Reduction: ${apiCalls['estimated_reduction_pct']}%',);
-    final apiReduction = apiCalls['estimated_reduction_pct'] as double;
-    debugPrint('  Status: ${apiReduction >= 70 ? '✅ PASS' : '⚠️  CHECK'}');
+      debugPrint('\n🌐 API Calls:');
+      final apiCalls = report['api_calls'] as Map;
+      debugPrint('  Total: ${apiCalls['total']}');
+      debugPrint(
+          '  Estimated Reduction: ${apiCalls['estimated_reduction_pct']}%',);
+      final apiReduction = apiCalls['estimated_reduction_pct'] as double;
+      debugPrint('  Status: ${apiReduction >= 70 ? '✅ PASS' : '⚠️  CHECK'}');
 
-    debugPrint('\n💾 Cache Performance:');
-    final cache = report['cache'] as Map;
-    debugPrint(
-        '  Hit Ratio: ${cache['hit_ratio_pct']}% (target: >${cache['target_hit_ratio_pct']}%)',);
-    debugPrint('  Hits: ${cache['hits']}');
-    debugPrint('  Misses: ${cache['misses']}');
-    debugPrint('  Hot Cache Size: ${cache['hot_cache_size']}');
-    debugPrint('  Status: ${cache['pass'] == true ? '✅ PASS' : '❌ FAIL'}');
+      debugPrint('\n💾 Cache Performance:');
+      final cache = report['cache'] as Map;
+      debugPrint(
+          '  Hit Ratio: ${cache['hit_ratio_pct']}% (target: >${cache['target_hit_ratio_pct']}%)',);
+      debugPrint('  Hits: ${cache['hits']}');
+      debugPrint('  Misses: ${cache['misses']}');
+      debugPrint('  Hot Cache Size: ${cache['hot_cache_size']}');
+      debugPrint('  Status: ${cache['pass'] == true ? '✅ PASS' : '❌ FAIL'}');
 
-    debugPrint('\n${'=' * 60}');
-    debugPrint(
-        'Overall: ${_allTestsPass(report) ? '✅ ALL TESTS PASSED' : '⚠️  SOME TESTS FAILED'}',);
-    debugPrint('=' * 60 + '\n');
+      debugPrint('\n${'=' * 60}');
+      debugPrint(
+          'Overall: ${_allTestsPass(report) ? '✅ ALL TESTS PASSED' : '⚠️  SOME TESTS FAILED'}',);
+      debugPrint('=' * 60 + '\n');
+      return true;
+    }(), 'VehicleRepositoryBenchmark.printReport',);
   }
 
   /// Estimate API call reduction percentage
