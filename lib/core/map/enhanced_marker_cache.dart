@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/core/map/marker_performance_monitor.dart';
@@ -10,6 +12,7 @@ import 'package:my_app_gps/features/map/data/position_model.dart';
 /// - Smart diff-based updates (70-95% marker reuse)
 /// - Bitmap descriptor cache integration (zero icon loading delays)
 /// - Throttled updates (minimum 300ms between updates)
+/// - PHASE 2: Async microtask batching (prevents overlapping rebuilds)
 /// - Performance monitoring with reuse ratio logging
 ///
 /// **Performance:**
@@ -17,6 +20,7 @@ import 'package:my_app_gps/features/map/data/position_model.dart';
 /// - Update time: <10ms for 50 markers
 /// - Icon creation: <1ms (cached bitmap descriptors)
 /// - Memory overhead: Minimal (only changed markers created)
+/// - Batching: Sub-frame update coalescing via microtask queue
 class EnhancedMarkerCache {
   final Map<String, MapMarkerData> _cache = {};
   final Map<String, _MarkerSnapshot> _snapshots = {};
@@ -24,6 +28,9 @@ class EnhancedMarkerCache {
   // Throttling
   DateTime? _lastUpdate;
   static const _minUpdateInterval = Duration(milliseconds: 300);
+
+  // PERF PHASE 2: Async batching flag to prevent overlapping updates
+  bool _updateQueued = false;
 
   /// Determine if marker should be rebuilt based on snapshot changes
   /// 
@@ -336,6 +343,69 @@ class EnhancedMarkerCache {
     }
 
     return result;
+  }
+
+  /// PERF PHASE 2: Async marker update with microtask batching
+  /// Prevents overlapping rebuilds and leverages Dart microtask queue for sub-frame batching
+  Future<MarkerDiffResult> updateMarkersAsync(
+    Map<int, Position> positions,
+    List<Map<String, dynamic>> devices,
+    Set<int> selectedIds,
+    String query, {
+    bool forceUpdate = false,
+  }) async {
+    // Prevent overlapping updates
+    if (_updateQueued && !forceUpdate) {
+      if (kDebugMode) {
+        debugPrint('[PERF] Marker update already queued, skipping duplicate');
+      }
+      // Return current cached state
+      return MarkerDiffResult(
+        markers: _cache.values.toList(),
+        created: 0,
+        reused: _cache.length,
+        removed: 0,
+        totalCached: _cache.length,
+      );
+    }
+
+    _updateQueued = true;
+    
+    // Use microtask to batch updates within same frame
+    final completer = Completer<MarkerDiffResult>();
+    
+    scheduleMicrotask(() async {
+      try {
+        final stopwatch = Stopwatch()..start();
+        
+        // Perform diff computation
+        final result = getMarkersWithDiff(
+          positions,
+          devices,
+          selectedIds,
+          query,
+          forceUpdate: forceUpdate,
+        );
+        
+        stopwatch.stop();
+        
+        if (kDebugMode && (result.created > 0 || result.modified > 0)) {
+          debugPrint(
+            '[PERF] Marker diff batched: ${result.markers.length} markers '
+            '(created: ${result.created}, modified: ${result.modified}, '
+            'reused: ${result.reused}) in ${stopwatch.elapsedMilliseconds}ms',
+          );
+        }
+        
+        _updateQueued = false;
+        completer.complete(result);
+      } catch (e) {
+        _updateQueued = false;
+        completer.completeError(e);
+      }
+    });
+    
+    return completer.future;
   }
 
   /// Clear all cached markers

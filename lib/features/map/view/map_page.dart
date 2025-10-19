@@ -160,6 +160,14 @@ class _MapPageState extends ConsumerState<MapPage>
   // OPTIMIZATION: Enhanced marker cache with intelligent diffing
   final _enhancedMarkerCache = EnhancedMarkerCache();
 
+  // PERF PHASE 2: Marker update debouncing (collapses rapid bursts into single rebuild)
+  Timer? _markerUpdateDebounce;
+  static const _kMarkerUpdateDelay = Duration(milliseconds: 120);
+
+  // PERF PHASE 2: Map repaint throttling (caps re-paints to ~6 fps during heavy bursts)
+  DateTime? _lastRepaint;
+  static const _kMinRepaintInterval = Duration(milliseconds: 180);
+
   // Instant sheet has no controller; no fields required
   // 7B.2: Instant sheet control key + debounce
   final GlobalKey<_InstantInfoSheetState> _sheetKey =
@@ -378,7 +386,7 @@ class _MapPageState extends ConsumerState<MapPage>
         }
         // When any position updates, refresh all markers
         final currentDevices = ref.read(devicesNotifierProvider);
-        currentDevices.whenData(_triggerMarkerUpdate);
+        currentDevices.whenData(_scheduleMarkerUpdate);
       });
     }
     
@@ -395,7 +403,7 @@ class _MapPageState extends ConsumerState<MapPage>
           }
         }
         
-        _triggerMarkerUpdate(devices);
+        _scheduleMarkerUpdate(devices);
       });
     });
 
@@ -410,7 +418,7 @@ class _MapPageState extends ConsumerState<MapPage>
       }
       final devices = ref.read(devicesNotifierProvider).asData?.value ?? const <Map<String, dynamic>>[];
       if (devices.isNotEmpty) {
-        _triggerMarkerUpdate(devices);
+        _scheduleMarkerUpdate(devices);
       }
     });
 
@@ -431,8 +439,23 @@ class _MapPageState extends ConsumerState<MapPage>
           }
         }
         
-        _triggerMarkerUpdate(devices);
+        _scheduleMarkerUpdate(devices);
       }
+    });
+  }
+
+  /// PERF PHASE 2: Schedule a debounced marker update
+  /// Collapses multiple rapid updates into a single rebuild frame
+  void _scheduleMarkerUpdate(List<Map<String, dynamic>> devices) {
+    // Cancel any pending update
+    _markerUpdateDebounce?.cancel();
+    
+    // Schedule new update after delay
+    _markerUpdateDebounce = Timer(_kMarkerUpdateDelay, () {
+      if (kDebugMode) {
+        debugPrint('[PERF] Executing debounced marker update for ${devices.length} devices');
+      }
+      _triggerMarkerUpdate(devices);
     });
   }
 
@@ -705,6 +728,7 @@ class _MapPageState extends ConsumerState<MapPage>
     // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
     _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
+    _markerUpdateDebounce?.cancel(); // PERF PHASE 2: Cancel marker update debounce timer
     _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
@@ -837,6 +861,32 @@ class _MapPageState extends ConsumerState<MapPage>
   }
 
   // ---------- Marker Processing Helpers ----------
+
+  /// PERF PHASE 2: Throttled setState to limit map repaints
+  /// Caps map re-paints to ~6 fps during heavy bursts, smoothing GPU load
+  /// 
+  /// Note: Available for use in setState() calls that trigger frequent repaints.
+  /// Currently marker updates use ThrottledValueNotifier instead.
+  // ignore: unused_element
+  void _throttledRepaint(VoidCallback fn) {
+    final now = DateTime.now();
+    
+    // Skip repaint if too soon after last one
+    if (_lastRepaint != null &&
+        now.difference(_lastRepaint!) < _kMinRepaintInterval) {
+      if (kDebugMode) {
+        debugPrint(
+          '[PERF] Map repaint skipped (too soon: ${now.difference(_lastRepaint!).inMilliseconds}ms)',
+        );
+      }
+      return;
+    }
+    
+    _lastRepaint = now;
+    if (mounted) {
+      setState(fn);
+    }
+  }
 
   /// OPTIMIZATION: Process markers with intelligent diffing and caching
   /// Uses EnhancedMarkerCache to minimize marker object creation
@@ -976,7 +1026,7 @@ class _MapPageState extends ConsumerState<MapPage>
 
     // OPTIMIZATION: Trigger marker update with new selection state
     final devicesAsync = ref.read(devicesNotifierProvider);
-    devicesAsync.whenData(_triggerMarkerUpdate);
+    devicesAsync.whenData(_scheduleMarkerUpdate);
 
     if (kDebugMode) {
       debugPrint('[MARKER_TAP] Selected deviceId=$n');
@@ -1053,7 +1103,7 @@ class _MapPageState extends ConsumerState<MapPage>
 
       // OPTIMIZATION: Trigger marker update when selection cleared
       final devicesAsync = ref.read(devicesNotifierProvider);
-      devicesAsync.whenData(_triggerMarkerUpdate);
+      devicesAsync.whenData(_scheduleMarkerUpdate);
     }
     if (!_editing && _showSuggestions) {
       _showSuggestions = false;
@@ -1131,7 +1181,7 @@ class _MapPageState extends ConsumerState<MapPage>
       // Trigger marker update after enrichment
       final devices = ref.read(devicesNotifierProvider).asData?.value;
       if (devices != null) {
-        _triggerMarkerUpdate(devices);
+        _scheduleMarkerUpdate(devices);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -1230,7 +1280,7 @@ class _MapPageState extends ConsumerState<MapPage>
         
         // Trigger marker update when position changes
         final currentDevices = ref.read(devicesNotifierProvider).asData?.value ?? [];
-        _triggerMarkerUpdate(currentDevices);
+        _scheduleMarkerUpdate(currentDevices);
       });
       _positionListenerIds.add(deviceId);
       newlyAdded++;
@@ -1522,7 +1572,7 @@ class _MapPageState extends ConsumerState<MapPage>
                             // OPTIMIZATION: Trigger marker update with new query
                             final devicesAsync =
                                 ref.read(devicesNotifierProvider);
-                            devicesAsync.whenData(_triggerMarkerUpdate);
+                            devicesAsync.whenData(_scheduleMarkerUpdate);
                           },
                         ),
                         onClear: () {
@@ -1532,7 +1582,7 @@ class _MapPageState extends ConsumerState<MapPage>
                             // OPTIMIZATION: Trigger marker update when query cleared
                             final devicesAsync =
                                 ref.read(devicesNotifierProvider);
-                            devicesAsync.whenData(_triggerMarkerUpdate);
+                            devicesAsync.whenData(_scheduleMarkerUpdate);
                           });
                         },
                         onRequestEdit: () {
@@ -1629,7 +1679,7 @@ class _MapPageState extends ConsumerState<MapPage>
                                                 });
                                                 // Trigger marker update after selection change
                                                 final devicesAsync = ref.read(devicesNotifierProvider);
-                                                devicesAsync.whenData(_triggerMarkerUpdate);
+                                                devicesAsync.whenData(_scheduleMarkerUpdate);
                                                 // Ensure we have positions for selected devices (fire-and-forget)
                                                 if (!allSelected && _selectedIds.isNotEmpty) {
                                                   unawaited(_ensureSelectedDevicePositions(_selectedIds));
@@ -1708,7 +1758,7 @@ class _MapPageState extends ConsumerState<MapPage>
                                                     }
                                                     // Trigger marker update after selection change
                                                     final devicesAsync = ref.read(devicesNotifierProvider);
-                                                    devicesAsync.whenData(_triggerMarkerUpdate);
+                                                    devicesAsync.whenData(_scheduleMarkerUpdate);
                                                     // 7B.2: Auto expand/collapse based on selection
                                                     _scheduleSheetForSelection();
                                                   },
