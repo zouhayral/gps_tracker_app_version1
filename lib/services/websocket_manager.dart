@@ -317,7 +317,9 @@ class WebSocketManager extends Notifier<WebSocketState> {
   }
 
   void _log(String msg) {
-    debugPrint('${DateTime.now().toIso8601String()} $msg');
+    if (kDebugMode) {
+      debugPrint('${DateTime.now().toIso8601String()} $msg');
+    }
   }
 }
 

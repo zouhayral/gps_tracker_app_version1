@@ -92,24 +92,36 @@ class RebuildTracker {
       final count = entry.value;
       final rate = elapsed > 0 ? (count / elapsed).toStringAsFixed(1) : '0.0';
       final padding = ' ' * (35 - entry.key.length);
-      debugPrint('║ ${entry.key}$padding $count rebuilds ($rate/s)');
+      assert(() {
+        debugPrint('║ ${entry.key}$padding $count rebuilds ($rate/s)');
+        return true;
+      }());
     }
 
-    debugPrint('╚═══════════════════════════════════════════════════════════╝');
-    debugPrint('');
+    assert(() {
+      debugPrint('╚═══════════════════════════════════════════════════════════╝');
+      debugPrint('');
+      return true;
+    }());
   }
 
   /// Print compact one-line summary
   void printCompact() {
     if (_rebuildCounts.isEmpty) {
-      debugPrint('[RebuildTracker] No rebuilds');
+      assert(() {
+        debugPrint('[RebuildTracker] No rebuilds');
+        return true;
+      }());
       return;
     }
 
     final total = _rebuildCounts.values.reduce((a, b) => a + b);
     final widgetCount = _rebuildCounts.length;
-    debugPrint(
-        '[RebuildTracker] Total: $total rebuilds across $widgetCount widgets',);
+    assert(() {
+      debugPrint(
+          '[RebuildTracker] Total: $total rebuilds across $widgetCount widgets',);
+      return true;
+    }());
   }
 
   /// Reset tracking data
@@ -174,12 +186,18 @@ bool debugPrintRebuildDirtyWidgets = false;
 /// Enable detailed rebuild logging
 void enableRebuildLogging() {
   debugPrintRebuildDirtyWidgets = true;
-  debugPrint('[RebuildTracker] ✅ Rebuild logging enabled');
-  debugPrint('[RebuildTracker] Set debugPrintRebuildDirtyWidgets = true');
+  assert(() {
+    debugPrint('[RebuildTracker] ✅ Rebuild logging enabled');
+    debugPrint('[RebuildTracker] Set debugPrintRebuildDirtyWidgets = true');
+    return true;
+  }());
 }
 
 /// Disable rebuild logging
 void disableRebuildLogging() {
   debugPrintRebuildDirtyWidgets = false;
-  debugPrint('[RebuildTracker] Rebuild logging disabled');
+  assert(() {
+    debugPrint('[RebuildTracker] Rebuild logging disabled');
+    return true;
+  }());
 }
