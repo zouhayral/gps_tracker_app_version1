@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 // import 'package:flutter_map/flutter_map.dart';
 // import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,6 +42,40 @@ import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+// Smooth spring-based snapping controller for the bottom sheet
+class SmoothSheetController {
+  final DraggableScrollableController controller;
+  final double min;
+  final double max;
+
+  SmoothSheetController({
+    required this.controller,
+    this.min = 0.05,
+    this.max = 0.45,
+  });
+
+  void snapToNearest(double currentSize, double velocity) {
+    // Decide target based on which anchor is closer
+  final target = (currentSize - min).abs() < (max - currentSize).abs()
+        ? min
+        : max;
+
+    // Optionally compute a spring simulation (for future fine‑tuning)
+    // ignore: unused_local_variable
+    final simulation = SpringSimulation(
+      const SpringDescription(mass: 1, stiffness: 250, damping: 30),
+      currentSize,
+      target,
+      velocity,
+    );
+    // We keep animateTo with a friendly easing for now; simulation reserved for custom ticker use
+    controller.animateTo(
+      target,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+    );
+  }
+}
 // import 'package:my_app_gps/services/websocket_manager.dart';
 
 // Clean rebuilt MapPage implementation
@@ -159,6 +194,10 @@ class _MapPageState extends ConsumerState<MapPage>
 
   // Bottom panel controller for smooth swipe animation
   late final DraggableScrollableController _sheetController;
+  late final SmoothSheetController _smoothSheet;
+  bool _isSnapping = false;
+  Timer? _sheetSnapDebounce;
+  double _lastNotifiedExtent = 0.05;
 
   // Refresh state
   bool _isRefreshing = false;
@@ -171,6 +210,29 @@ class _MapPageState extends ConsumerState<MapPage>
 
     // Initialize draggable sheet controller for smooth bottom panel animation
     _sheetController = DraggableScrollableController();
+  _smoothSheet = SmoothSheetController(controller: _sheetController);
+
+    // Listen to size changes and debounce snapping to nearest anchor
+    _sheetController.addListener(() {
+      if (!mounted) return;
+      final extent = _sheetController.size;
+      _lastNotifiedExtent = extent;
+      // Guard against re-entrant triggers during snapping animations
+      if (_isSnapping) return;
+
+      // Only consider snapping when not at anchors
+      if (extent != 0.05 && extent != 0.45) {
+        _sheetSnapDebounce?.cancel();
+        _sheetSnapDebounce = Timer(const Duration(milliseconds: 90), () {
+          if (!mounted) return;
+          _isSnapping = true;
+          _smoothSheet.snapToNearest(_lastNotifiedExtent, 0);
+          Future<void>.delayed(const Duration(milliseconds: 420), () {
+            if (mounted) _isSnapping = false;
+          });
+        });
+      }
+    });
 
     // OPTIMIZATION: Initialize throttled marker notifier
     // Raised throttle to 80ms to reduce UI thread load
@@ -1650,127 +1712,118 @@ class _MapPageState extends ConsumerState<MapPage>
                 if (_selectedIds.isNotEmpty)
                   DraggableScrollableSheet(
                     controller: _sheetController,
-                    initialChildSize: 0.05, // 5% of screen height (collapsed)
+                    initialChildSize: 0.05,
                     minChildSize: 0.05,
-                    maxChildSize: 0.45, // 45% of screen height (expanded)
-                    snap: true,
-                    snapSizes: const [0.05, 0.45],
+                    maxChildSize: 0.45,
                     builder: (context, scrollController) {
                       return AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOutCubic,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(24),
-                          ),
-                          border: Border.all(
-                            color: const Color(0xFFA6CD27),
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 10,
-                              offset: const Offset(0, -3),
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOutCubic,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(24),
                             ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            // Grab line - always visible
-                            GestureDetector(
-                              onTap: () {
-                                // Toggle between collapsed and expanded
-                                final currentSize =
-                                    _sheetController.size;
-                                if (currentSize < 0.25) {
-                                  _sheetController.animateTo(
-                                    0.45,
-                                    duration: const Duration(milliseconds: 400),
-                                    curve: Curves.easeOutCubic,
-                                  );
-                                } else {
-                                  _sheetController.animateTo(
-                                    0.05,
-                                    duration: const Duration(milliseconds: 400),
-                                    curve: Curves.easeOutCubic,
-                                  );
-                                }
-                              },
-                              child: Container(
-                                width: 56,
-                                height: 6,
-                                margin: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                  horizontal: 16,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[400],
-                                  borderRadius: BorderRadius.circular(40),
-                                ),
+                            border: Border.all(
+                              color: const Color(0xFFA6CD27),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 10,
+                                offset: const Offset(0, -3),
                               ),
-                            ),
-
-                            // Scrollable content
-                            Expanded(
-                              child: SingleChildScrollView(
-                                controller: scrollController,
-                                physics: const BouncingScrollPhysics(),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                child: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 220),
-                                  switchInCurve: Curves.easeInOut,
-                                  switchOutCurve: Curves.easeInOut,
-                                  transitionBuilder: (child, animation) {
-                                    final slide = Tween<Offset>(
-                                      begin: const Offset(0, 0.02),
-                                      end: Offset.zero,
-                                    ).animate(animation);
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: SlideTransition(
-                                        position: slide,
-                                        child: child,
-                                      ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  final currentSize = _sheetController.size;
+                                  if (currentSize < 0.25) {
+                                    _sheetController.animateTo(
+                                      0.45,
+                                      duration: const Duration(milliseconds: 400),
+                                      curve: Curves.easeOutCubic,
                                     );
-                                  },
-                                  child: _selectedIds.length == 1
-                                      ? _InfoBox(
-                                          key: const ValueKey('single-info'),
-                                          deviceId: _selectedIds.first,
-                                          devices: devices,
-                                          position: ref.watch(
-                                            positionByDeviceProvider(
-                                              _selectedIds.first,
-                                            ),
-                                          ),
-                                          statusResolver: _deviceStatus,
-                                          statusColorBuilder: _statusColor,
-                                          onClose: () =>
-                                              setState(_selectedIds.clear),
-                                          onFocus: _focusSelected,
-                                        )
-                                      : _MultiSelectionInfoBox(
-                                          key: const ValueKey('multi-info'),
-                                          selectedIds: _selectedIds,
-                                          devices: devices,
-                                          positions: positions,
-                                          statusResolver: _deviceStatus,
-                                          statusColorBuilder: _statusColor,
-                                          onClear: () =>
-                                              setState(_selectedIds.clear),
-                                          onFocus: _focusSelected,
-                                        ),
+                                  } else {
+                                    _sheetController.animateTo(
+                                      0.05,
+                                      duration: const Duration(milliseconds: 400),
+                                      curve: Curves.easeOutCubic,
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  width: 56,
+                                  height: 6,
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                    horizontal: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[400],
+                                    borderRadius: BorderRadius.circular(40),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  controller: scrollController,
+                                  physics: const BouncingScrollPhysics(),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 220),
+                                    switchInCurve: Curves.easeInOut,
+                                    switchOutCurve: Curves.easeInOut,
+                                    transitionBuilder: (child, animation) {
+                                      final slide = Tween<Offset>(
+                                        begin: const Offset(0, 0.02),
+                                        end: Offset.zero,
+                                      ).animate(animation);
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: slide,
+                                          child: child,
+                                        ),
+                                      );
+                                    },
+                                    child: _selectedIds.length == 1
+                                        ? _InfoBox(
+                                            key: const ValueKey('single-info'),
+                                            deviceId: _selectedIds.first,
+                                            devices: devices,
+                                            position: ref.watch(
+                                              positionByDeviceProvider(
+                                                _selectedIds.first,
+                                              ),
+                                            ),
+                                            statusResolver: _deviceStatus,
+                                            statusColorBuilder: _statusColor,
+                                            onClose: () => setState(_selectedIds.clear),
+                                            onFocus: _focusSelected,
+                                          )
+                                        : _MultiSelectionInfoBox(
+                                            key: const ValueKey('multi-info'),
+                                            selectedIds: _selectedIds,
+                                            devices: devices,
+                                            positions: positions,
+                                            statusResolver: _deviceStatus,
+                                            statusColorBuilder: _statusColor,
+                                            onClear: () => setState(_selectedIds.clear),
+                                            onFocus: _focusSelected,
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
                     },
                   ),
               ],
