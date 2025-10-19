@@ -68,9 +68,9 @@ class MapTileProviders {
   static const openStreetMap = MapTileSource(
     id: 'osm',
     name: 'OpenStreetMap',
-    // Use a community mirror suitable for app traffic (verify availability/policy)
-    urlTemplate: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-    attribution: '© OpenStreetMap contributors | Tiles: HOT OSM',
+    // Default OSM tile server (verify usage policy for production)
+    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '© OpenStreetMap contributors',
   );
 
   /// Esri World Imagery satellite layer

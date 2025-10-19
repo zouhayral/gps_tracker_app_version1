@@ -33,6 +33,7 @@ import 'package:my_app_gps/features/map/data/granular_providers.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart';
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
+import 'package:my_app_gps/features/map/view/map_debug_overlay.dart';
 import 'package:my_app_gps/features/map/view/map_page_lifecycle_mixin.dart';
 import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
@@ -289,6 +290,20 @@ class _MapPageState extends ConsumerState<MapPage>
       }),
     );
 
+    // Initialize FMTC debug overlay with current tile source and network status
+    if (kDebugMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final currentSource = ref.read(mapTileSourceProvider);
+        MapDebugInfo.instance.updateTileSource(currentSource.name);
+        
+        final networkState = ref.read(networkStateProvider);
+        MapDebugInfo.instance.updateNetworkStatus(
+          networkState == NetworkState.online ? 'Online' : 'Offline',
+        );
+      });
+    }
+
     // MIGRATION NOTE: Removed old positionsLiveProvider listening
     // VehicleDataRepository handles WebSocket → Cache → Notifiers internally
 
@@ -455,7 +470,7 @@ class _MapPageState extends ConsumerState<MapPage>
   }
 
   /// Open the selected device location in native maps app
-  /// iOS: Apple Maps, Android/Web: Google Maps
+  /// Uses geo: URI for native app launch with web URL fallback
   Future<void> _openInMaps() async {
     if (_selectedIds.length != 1) return;
 
@@ -492,25 +507,26 @@ class _MapPageState extends ConsumerState<MapPage>
       return;
     }
     
-    // Generate platform-specific URL
-    final platform = Theme.of(context).platform;
-    final Uri mapsUrl;
-    
-    if (platform == TargetPlatform.iOS) {
-      // Apple Maps
-      mapsUrl = Uri.parse('http://maps.apple.com/?ll=$lat,$lon');
-    } else {
-      // Google Maps (Android, web, desktop)
-      mapsUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lon');
-    }
+    // Try geo: URI first for native map app, fallback to web URL
+    final geoUri = Uri.parse('geo:${lat.toStringAsFixed(6)},${lon.toStringAsFixed(6)}');
+    final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lon');
     
     try {
-      if (await canLaunchUrl(mapsUrl)) {
-        await launchUrl(mapsUrl, mode: LaunchMode.externalApplication);
+      if (await canLaunchUrl(geoUri)) {
+        await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+        if (kDebugMode) {
+          debugPrint('[MAP] ✅ Opened native Maps app (geo:)');
+        }
       } else {
-        throw Exception('Cannot launch maps app');
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+        if (kDebugMode) {
+          debugPrint('[MAP] 🌐 Opened Google Maps web');
+        }
       }
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[MAP][ERROR] Failed to launch map: $e');
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -919,6 +935,7 @@ class _MapPageState extends ConsumerState<MapPage>
       if (selectedSource != null) {
         if (kDebugMode) {
           debugPrint('[TOGGLE] User switched to ${selectedSource.id} (${selectedSource.name})');
+          MapDebugInfo.instance.updateTileSource(selectedSource.name);
         }
         notifier.setSource(selectedSource);
       }
@@ -1238,6 +1255,8 @@ class _MapPageState extends ConsumerState<MapPage>
                   bottom: 12,
                   child: ClusterHud(),
                 ),
+                // FMTC Diagnostics Overlay (debug-only)
+                const MapDebugOverlay(),
                 // OPTIMIZATION: Show cached snapshot overlay during initial load
                 if (MapDebugFlags.showSnapshotOverlay &&
                     _isShowingSnapshot &&
