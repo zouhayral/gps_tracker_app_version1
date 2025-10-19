@@ -104,6 +104,9 @@ class VehicleDataRepository {
   // REST fallback timer
   Timer? _fallbackTimer;
 
+  // Memory cleanup timer (runs every hour)
+  Timer? _cleanupTimer;
+
   // Connection state flags
   bool _isWebSocketConnected = false;
   bool _isOffline = false; // unified offline flag (network or backend)
@@ -167,6 +170,9 @@ class VehicleDataRepository {
         debugPrint('[VehicleRepo][TEST] Skipping REST fallback timer');
       }
 
+      // Start periodic cleanup timer to prevent memory leaks
+      _startCleanupTimer();
+
       if (kDebugMode) {
         debugPrint('[VehicleRepo] Initialized with deferred WebSocket connection');
       }
@@ -203,6 +209,47 @@ class VehicleDataRepository {
       }
     }
   }
+
+  /// Start periodic cleanup timer (runs every hour)
+  void _startCleanupTimer() {
+    _cleanupTimer?.cancel();
+    if (!VehicleDataRepository.testMode) {
+      _cleanupTimer = Timer.periodic(
+        const Duration(hours: 1),
+        (_) => _cleanupStaleDevices(),
+      );
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] 🧹 Cleanup timer started (every 1 hour)');
+      }
+    }
+  }
+
+  /// Remove and dispose stale device notifiers (older than 7 days)
+  void _cleanupStaleDevices() {
+    final now = DateTime.now();
+    int removed = 0;
+
+    _notifiers.removeWhere((deviceId, notifier) {
+      final snapshot = notifier.value;
+      if (snapshot == null) return false;
+
+      final age = now.difference(snapshot.timestamp);
+      if (age > const Duration(days: 7)) {
+        notifier.dispose();
+        removed++;
+        return true;
+      }
+      return false;
+    });
+
+    if (kDebugMode) {
+      debugPrint('[VehicleRepo] 🧹 Cleaned up $removed stale devices at $now');
+    }
+  }
+
+  /// Test-only method to invoke cleanup (exposed for unit tests)
+  @visibleForTesting
+  void invokeTestCleanup() => _cleanupStaleDevices();
 
   /// Pre-warm cache by loading all cached snapshots into notifiers
   void _prewarmCache() {
@@ -688,6 +735,7 @@ class VehicleDataRepository {
   void dispose() {
     _socketSub?.cancel();
     _fallbackTimer?.cancel();
+    _cleanupTimer?.cancel();
 
     for (final timer in _debounceTimers.values) {
       timer.cancel();
