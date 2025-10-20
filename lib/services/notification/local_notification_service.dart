@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:my_app_gps/data/models/event.dart';
+import 'package:intl/intl.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 
 /// Service for managing local push notifications for Traccar events
@@ -169,9 +170,9 @@ class LocalNotificationService {
     try {
       final notificationData = _getNotificationData(event);
       
-      _log('📤 Showing notification for event: ${event.type}');
-      _log('   Title: ${notificationData.title}');
-      _log('   Device: ${event.deviceId}');
+  _log('📤 Showing notification for event: ${event.type}');
+  _log('   Title: ${notificationData.title}');
+  _log('   Device: ${event.deviceName ?? 'ID ${event.deviceId}'}');
 
       // Use event.id hashCode as notification ID (notifications need int ID)
       final notificationId = event.id.hashCode;
@@ -308,68 +309,58 @@ class LocalNotificationService {
 
   /// Get notification title and body based on event type
   _NotificationData _getNotificationData(Event event) {
+    final device = _deviceLabel(event);
+    final timeText = _formatShortTime(event.timestamp);
+
+    String baseTitle;
     switch (event.type.toLowerCase()) {
       case 'ignitionon':
-        return _NotificationData(
-          title: '🔑 Ignition On',
-          body: 'Vehicle ignition turned on',
-        );
+        baseTitle = '🔑 Ignition On';
+        break;
       case 'ignitionoff':
-        return _NotificationData(
-          title: '🔑 Ignition Off',
-          body: 'Vehicle ignition turned off',
-        );
+        baseTitle = '🔑 Ignition Off';
+        break;
       case 'deviceonline':
-        return _NotificationData(
-          title: '✅ Device Online',
-          body: 'Device is now connected',
-        );
+        baseTitle = '✅ Device Online';
+        break;
       case 'deviceoffline':
-        return _NotificationData(
-          title: '⚠️ Device Offline',
-          body: 'Device has lost connection',
-        );
+        baseTitle = '⚠️ Device Offline';
+        break;
       case 'geofenceenter':
-        return _NotificationData(
-          title: '📍 Geofence Entered',
-          body: 'Vehicle entered a monitored zone',
-        );
+        baseTitle = '📍 Geofence Entered';
+        break;
       case 'geofenceexit':
-        return _NotificationData(
-          title: '📍 Geofence Exited',
-          body: 'Vehicle left a monitored zone',
-        );
+        baseTitle = '📍 Geofence Exited';
+        break;
       case 'alarm':
-        return _NotificationData(
-          title: '🚨 ALARM',
-          body: 'Emergency alarm triggered!',
-        );
+        baseTitle = '🚨 Alarm';
+        break;
       case 'overspeed':
-        return _NotificationData(
-          title: '⚠️ Overspeed Alert',
-          body: 'Vehicle is exceeding speed limit',
-        );
+        baseTitle = '⚠️ Overspeed';
+        break;
       case 'maintenance':
-        return _NotificationData(
-          title: '🔧 Maintenance Due',
-          body: 'Vehicle maintenance is required',
-        );
+        baseTitle = '🔧 Maintenance Due';
+        break;
       case 'devicemoving':
-        return _NotificationData(
-          title: '🚗 Device Moving',
-          body: 'Vehicle has started moving',
-        );
+        baseTitle = '🚗 Device Moving';
+        break;
       case 'devicestopped':
-        return _NotificationData(
-          title: '🛑 Device Stopped',
-          body: 'Vehicle has stopped',
-        );
+        baseTitle = '🛑 Device Stopped';
+        break;
       default:
-        return _NotificationData(
-          title: '📢 ${_formatEventType(event.type)}',
-          body: 'New event from device ${event.deviceId}',
-        );
+        baseTitle = '📢 ${_formatEventType(event.type)}';
+        break;
     }
+
+  // Prefer Event.deviceName but also accept attributes['deviceName'] as fallback
+  final enrichedName = event.deviceName ?? (event.attributes['deviceName'] as String?);
+  final effectiveDevice = (enrichedName != null && enrichedName.trim().isNotEmpty)
+    ? enrichedName
+    : device;
+  final title = '$baseTitle — $effectiveDevice';
+    final body = 'At $timeText';
+
+    return _NotificationData(title: title, body: body);
   }
 
   /// Format event type for display
@@ -397,6 +388,16 @@ class LocalNotificationService {
       }
     }
   }
+
+  /// Prefer a friendly device label
+  String _deviceLabel(Event event) {
+    final name = event.deviceName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    return 'Device ${event.deviceId}';
+  }
+
+  /// Format time like HH:mm in local time
+  String _formatShortTime(DateTime dt) => DateFormat('HH:mm').format(dt.toLocal());
 
   /// Log message with prefix
   void _log(String message) {

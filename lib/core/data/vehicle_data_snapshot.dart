@@ -61,6 +61,13 @@ class VehicleDataSnapshot {
   final bool? blocked; // Device blocked status
   final String? alarm; // Active alarm type
 
+  // === Debug-log guards to reduce duplicate I/O spam (per device) ===
+  // Last observed battery level per device to avoid repeated logs.
+  static final Map<int, double?> _lastBatteryByDevice = <int, double?>{};
+  // Last observed small telemetry (power, sat, rssi) per device.
+  static final Map<int, Map<String, dynamic>> _lastSmallTelemetryByDevice =
+      <int, Map<String, dynamic>>{};
+
   /// Create from Position object by extracting all telemetry attributes
   factory VehicleDataSnapshot.fromPosition(Position position) {
     final attrs = position.attributes;
@@ -173,15 +180,30 @@ class VehicleDataSnapshot {
           '$engineState → ${newer.engineState}');
     }
 
-    // Detect other critical telemetry changes
+    // Detect other critical telemetry changes with guarded logging
     if (kDebugMode) {
-      if (newer.batteryLevel != null && newer.batteryLevel != batteryLevel) {
-        debugPrint(
-            '[VehicleSnapshot] 🔋 Battery change for device $deviceId: $batteryLevel% → ${newer.batteryLevel}%',);
+      // Battery: only log once per actual change per device
+      final newBattery = newer.batteryLevel;
+      if (newBattery != null) {
+        final lastBattery = _lastBatteryByDevice[deviceId];
+        if (lastBattery != newBattery) {
+          debugPrint(
+              '[VehicleSnapshot] 🔋 Battery change for device $deviceId: ${lastBattery ?? batteryLevel}% → $newBattery%',);
+          _lastBatteryByDevice[deviceId] = newBattery;
+        }
       }
-      if (newer.signal != null && newer.signal != signal) {
+
+      // Small telemetry (power, sat, rssi): log concise update only when changed
+      final currentSmall = <String, dynamic>{
+        'power': newer.power ?? power,
+        'sat': newer.sat ?? sat,
+        'rssi': newer.rssi ?? rssi,
+      };
+      final lastSmall = _lastSmallTelemetryByDevice[deviceId];
+      if (lastSmall == null || !mapEquals(lastSmall, currentSmall)) {
+        _lastSmallTelemetryByDevice[deviceId] = currentSmall;
         debugPrint(
-            '[VehicleSnapshot] 📶 Signal change for device $deviceId: $signal → ${newer.signal}',);
+            '[VehicleSnapshot] � Telemetry updated d=$deviceId power=${currentSmall['power']}, sat=${currentSmall['sat']}, rssi=${currentSmall['rssi']}',);
       }
     }
 
@@ -281,6 +303,34 @@ class VehicleDataSnapshot {
         'engine: $engineState, speed: $speed km/h, distance: $distance km, '
         'battery: $batteryLevel%, power: $power V, signal: $signal, sat: $sat)';
   }
+
+  /// Value equality tuned to skip rebuilds unless core data changed.
+  /// Matches the requested minimal set of fields for equality.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VehicleDataSnapshot &&
+          runtimeType == other.runtimeType &&
+          deviceId == other.deviceId &&
+          timestamp == other.timestamp &&
+          engineState == other.engineState &&
+          speed == other.speed &&
+          distance == other.distance &&
+          batteryLevel == other.batteryLevel &&
+          power == other.power &&
+          sat == other.sat;
+
+  @override
+  int get hashCode => Object.hash(
+        deviceId,
+        timestamp,
+        speed,
+        engineState,
+        distance,
+        batteryLevel,
+        power,
+        sat,
+      );
 }
 
 enum EngineState {

@@ -30,6 +30,10 @@ class TraccarSocketService {
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
   bool _manuallyClosed = false;
+  // Optional verbose socket logs to reduce noise in release builds
+  static bool verboseSocketLogs = false;
+  // Fast message-level deduplication (skip identical payloads)
+  int? _lastPayloadHash;
 
   Stream<TraccarSocketMessage> connect() {
     _manuallyClosed = false;
@@ -116,9 +120,20 @@ class TraccarSocketService {
     try {
       final text = data is String ? data : utf8.decode(data as List<int>);
 
-      if (kDebugMode) {
+      // 🔁 Hash-based payload deduplication (skip identical messages fast)
+      final currHash = text.hashCode;
+      if (_lastPayloadHash != null && currHash == _lastPayloadHash) {
+        if (kDebugMode && verboseSocketLogs) {
+          // ignore: avoid_print
+          print('[SOCKET] � Duplicate payload skipped (hash=$currHash)');
+        }
+        return;
+      }
+      _lastPayloadHash = currHash;
+
+      if (kDebugMode && verboseSocketLogs) {
         // ignore: avoid_print
-        print('[SOCKET] 📨 RAW WebSocket message received:');
+        print('[SOCKET] �📨 RAW WebSocket message received:');
         print(
             '[SOCKET] ${text.length > 500 ? '${text.substring(0, 500)}...' : text}',);
       }
@@ -126,14 +141,19 @@ class TraccarSocketService {
       final jsonObj = jsonDecode(text);
       if (jsonObj is Map<String, dynamic>) {
         // Diagnostic: Log all keys in the WebSocket message
-        if (kDebugMode) {
+        if (kDebugMode && verboseSocketLogs) {
           final keys = jsonObj.keys.toList();
           // ignore: avoid_print
           print('[SOCKET] 🔑 Message contains keys: ${keys.join(', ')}');
-          if (!keys.contains('events')) {
+        }
+
+        // Event guard logging (skip processing if no events key when desired)
+        if (!jsonObj.containsKey('events')) {
+          if (kDebugMode && verboseSocketLogs) {
             // ignore: avoid_print
-            print('[SOCKET] ⚠️ NO EVENTS KEY - Events not being sent by server');
+            print('[SOCKET] ⚠ No events key - skipping event handling');
           }
+          // Note: do NOT return here as other consumers rely on positions/devices
         }
 
         // positions
@@ -143,7 +163,7 @@ class TraccarSocketService {
                   .toList() ??
               const <Map<String, dynamic>>[];
           final positions = list.map(Position.fromJson).toList();
-          if (kDebugMode) {
+          if (kDebugMode && verboseSocketLogs) {
             // ignore: avoid_print
             print(
                 '[SOCKET] 📍 Received ${positions.length} positions from WebSocket',);
@@ -159,7 +179,7 @@ class TraccarSocketService {
           final eventsCount = jsonObj['events'] is List 
               ? (jsonObj['events'] as List).length 
               : 1;
-          if (kDebugMode) {
+          if (kDebugMode && verboseSocketLogs) {
             // ignore: avoid_print
             print('[SOCKET] 🔔 ✅ EVENTS RECEIVED from WebSocket ($eventsCount events)');
             print('[SOCKET] Events payload: ${jsonObj['events']}');
@@ -168,7 +188,7 @@ class TraccarSocketService {
         }
         // devices updates (optional)
         if (jsonObj.containsKey('devices')) {
-          if (kDebugMode) {
+          if (kDebugMode && verboseSocketLogs) {
             // ignore: avoid_print
             print('[SOCKET] 📱 Received device updates from WebSocket');
             print('[SOCKET] Devices payload: ${jsonObj['devices']}');

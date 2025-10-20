@@ -50,6 +50,8 @@ class WebSocketState {
 class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
   static const _initialRetryDelay = Duration(seconds: 2);
   static const _maxRetryDelay = Duration(seconds: 30);
+  // Toggle to enable very verbose heartbeat logs
+  static bool verboseSocketLogs = false;
 
   // Test-mode toggle: when true, do not auto-connect or schedule timers
   // Set from tests: WebSocketManagerEnhanced.testMode = true;
@@ -177,7 +179,7 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
       }
     } else if (msg.type == 'connected') {
       _log('[WS] Connection confirmed');
-    } else {
+    } else if (kDebugMode && verboseSocketLogs) {
       _log('[WS] Pong');
     }
   }

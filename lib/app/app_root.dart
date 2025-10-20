@@ -33,12 +33,15 @@ class _AppRootState extends ConsumerState<AppRoot> {
     );
     final router = ref.watch(goRouterProvider);
     return RebuildCounterOverlay(
-      child: NotificationToastListener(
-        child: MaterialApp.router(
-          title: 'GPS Tracker',
-          debugShowCheckedModeBanner: false,
-          theme: buildAppTheme(),
-          routerConfig: router,
+      child: MaterialApp.router(
+        title: 'GPS Tracker',
+        debugShowCheckedModeBanner: false,
+        theme: buildAppTheme(),
+        routerConfig: router,
+        // Ensure NotificationToastListener has a context under MaterialApp
+        // so it can access the ScaffoldMessenger/Scaffold safely.
+        builder: (context, child) => NotificationToastListener(
+          child: child ?? const SizedBox.shrink(),
         ),
       ),
     );

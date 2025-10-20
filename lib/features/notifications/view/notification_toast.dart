@@ -55,9 +55,13 @@ class _NotificationToastListenerState
 
   void _showToast(String eventType, String? message) {
     if (!mounted) return;
-
-    final messenger = ScaffoldMessenger.of(context);
+    // Use maybeOf to avoid assertion when there is no Scaffold in the tree yet
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final theme = Theme.of(context);
+    if (messenger == null) {
+      debugPrint('[NotificationToast] No ScaffoldMessenger found in context; skipping toast for "$eventType"');
+      return;
+    }
 
     messenger.showSnackBar(
       SnackBar(

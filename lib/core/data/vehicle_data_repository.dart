@@ -124,8 +124,53 @@ class VehicleDataRepository {
   // === Deduplication state ===
   // Stores last processed payload hash for positions per device
   final Map<int, String> _lastPositionHash = <int, String>{};
+  // Stores last processed position id per device for fast ID-based dedup
+  final Map<int, int> _lastPositionId = <int, int>{};
   // Stores last processed payload hash for device updates per device
   final Map<int, String> _lastDevicePayloadHash = <int, String>{};
+
+  // === Device name cache ===
+  // Holds resolved device names for quick UI use (notifications, lists)
+  final Map<int, String> _deviceNames = <int, String>{};
+
+  /// Resolve a friendly device name with safe fallbacks.
+  /// Returns a user-visible string; never null.
+  String resolveDeviceName(int deviceId) {
+    final name = _deviceNames[deviceId];
+    if (name != null && name.trim().isNotEmpty) {
+      return name;
+    }
+    return 'Unknown Device';
+  }
+
+  /// Cache a device map (e.g., from REST or WebSocket) to update name cache.
+  void cacheDevice(Map<String, dynamic> device) {
+    final id = device['id'];
+    final name = device['name'];
+    if (id is int && name is String && name.trim().isNotEmpty) {
+      _deviceNames[id] = name;
+    }
+  }
+
+  /// Fetch a single device by ID (lazy load) and update name cache.
+  /// Uses existing DeviceService; falls back to scanning the full list.
+  Future<Map<String, dynamic>?> fetchDeviceById(int id) async {
+    try {
+      // Current DeviceService exposes only fetchDevices(); scan for target.
+      final devices = await deviceService.fetchDevices();
+      for (final d in devices) {
+        if (d['id'] == id) {
+          cacheDevice(d);
+          return d;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] ❌ Failed to fetch device $id: $e');
+      }
+    }
+    return null;
+  }
 
   // Compute a stable hash string for a Position
   String _hashPosition(Position p) {
@@ -409,6 +454,14 @@ class VehicleDataRepository {
               debugPrint('[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
             }
 
+            // Update device name cache when present in payload
+            if (deviceId != null) {
+              final name = d['name'];
+              if (name is String && name.trim().isNotEmpty) {
+                _deviceNames[deviceId] = name;
+              }
+            }
+
             // Deduplicate identical device payloads
             if (deviceId != null) {
               final hash = _hashDevicePayload(d);
@@ -486,16 +539,31 @@ class VehicleDataRepository {
     if (positions.isEmpty) return;
 
     for (final pos in positions) {
-      // Deduplicate identical position updates per device
-      final hash = _hashPosition(pos);
-      final prev = _lastPositionHash[pos.deviceId];
-      if (prev != null && prev == hash) {
-        if (kDebugMode) {
-          debugPrint('[WS] 🔁 Duplicate skipped for deviceId=${pos.deviceId}');
+      // 1) Fast path: per-device dedup by last positionId
+      final currentId = pos.id;
+      if (currentId != null) {
+        final lastId = _lastPositionId[pos.deviceId];
+        if (lastId != null && lastId == currentId) {
+          if (kDebugMode) {
+            debugPrint('[WS] 🔁 Duplicate positionId skipped for deviceId=${pos.deviceId} (posId=$currentId)');
+          }
+          continue; // Identical position already processed
         }
-        continue; // Skip duplicate
+        _lastPositionId[pos.deviceId] = currentId;
       }
-      _lastPositionHash[pos.deviceId] = hash;
+
+      // 2) Fallback: hash-based dedup when id is missing/unstable
+      if (currentId == null) {
+        final hash = _hashPosition(pos);
+        final prev = _lastPositionHash[pos.deviceId];
+        if (prev != null && prev == hash) {
+          if (kDebugMode) {
+            debugPrint('[WS] 🔁 Duplicate skipped for deviceId=${pos.deviceId}');
+          }
+          continue; // Skip duplicate
+        }
+        _lastPositionHash[pos.deviceId] = hash;
+      }
 
       final snapshot = VehicleDataSnapshot.fromPosition(pos);
 
@@ -552,12 +620,15 @@ class VehicleDataRepository {
       final existing = notifier.value;
       final merged = existing?.merge(snapshot) ?? snapshot;
 
-      // CRITICAL: Always create a new object reference to trigger ValueNotifier updates
-      notifier.value = merged;
-
-      if (kDebugMode) {
-        debugPrint('[VehicleRepo]   merged: $merged');
-        debugPrint('[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
+      // Prevent redundant updates: only notify when content actually changed
+      if (merged != existing) {
+        notifier.value = merged;
+        if (kDebugMode) {
+          debugPrint('[VehicleRepo]   merged: $merged');
+          debugPrint('[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
+        }
+      } else if (kDebugMode) {
+        debugPrint('[VehicleRepo]   ⏭️ No effective change, notifier not updated');
       }
     } else {
       _notifiers[snapshot.deviceId] = ValueNotifier<VehicleDataSnapshot?>(snapshot);
@@ -601,6 +672,15 @@ class VehicleDataRepository {
     try {
       // Fetch device info
       final devices = await deviceService.fetchDevices();
+      // Cache all device names from this call for faster resolution later
+      for (final d in devices) {
+        final id = d['id'];
+        final name = d['name'];
+        if (id is int && name is String && name.trim().isNotEmpty) {
+          _deviceNames[id] = name;
+        }
+      }
+
       final device = devices.firstWhere(
         (d) => d['id'] == deviceId,
         orElse: () => <String, dynamic>{},
@@ -693,6 +773,15 @@ class VehicleDataRepository {
           .where(deviceMap.containsKey)
           .map((id) => deviceMap[id]!)
           .toList();
+
+      // Update device name cache from fetched devices
+      for (final d in deviceList) {
+        final id = d['id'];
+        final name = d['name'];
+        if (id is int && name is String && name.trim().isNotEmpty) {
+          _deviceNames[id] = name;
+        }
+      }
 
       final positions = await positionsService.latestForDevices(deviceList);
 

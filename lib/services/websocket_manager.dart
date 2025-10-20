@@ -42,6 +42,9 @@ class WebSocketManager extends Notifier<WebSocketState> {
   static const _circuitBreakerTimeout = Duration(minutes: 2);
   static const _maxRetryDelay = Duration(seconds: 60); // Cap exponential backoff
 
+  // Toggle to reduce log spam for heartbeats
+  static bool verboseSocketLogs = false;
+
   static bool testMode = false;
 
   WebSocket? _socket;
@@ -165,7 +168,9 @@ class WebSocketManager extends Notifier<WebSocketState> {
                   .difference(_lastPingSent ?? DateTime.now())
                   .inMilliseconds;
               state = state.copyWith(pingMs: latency);
-              _log('[WS][PONG] latency: ${latency}ms');
+              if (kDebugMode && verboseSocketLogs) {
+                _log('[WS][PONG] latency: ${latency}ms');
+              }
             } else if (msg is Map<String, dynamic>) {
               _controller?.add(msg);
             }

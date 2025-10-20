@@ -7,6 +7,7 @@ import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/entities/event_entity.dart';
 import 'package:my_app_gps/data/models/event.dart';
+import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
 import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart';
@@ -114,19 +115,62 @@ class NotificationsRepository {
   /// Enrich events with device names from cache/DAO
   Future<List<Event>> _enrichEventsWithDeviceNames(List<Event> events) async {
     final enrichedEvents = <Event>[];
-    
+    final vehicleRepo = _ref.read(vehicleDataRepositoryProvider);
+
     for (final event in events) {
-      if (event.deviceName == null) {
-        // Fetch device name if not already present
-        final deviceName = await _getDeviceName(event.deviceId);
-        enrichedEvents.add(event.copyWith(
-          deviceName: deviceName ?? 'Unknown Device',
-        ));
-      } else {
-        enrichedEvents.add(event);
+      var resolvedName = event.deviceName;
+      if (resolvedName == null || resolvedName.trim().isEmpty) {
+        // 1) Try resolve from VehicleRepo cache
+        resolvedName = vehicleRepo.resolveDeviceName(event.deviceId);
+
+        // 2) If still unknown, try local DAO cache once
+        if (resolvedName == 'Unknown Device') {
+          final daoName = await _getDeviceName(event.deviceId);
+          if (daoName != null && daoName.trim().isNotEmpty) {
+            resolvedName = daoName;
+          }
+        }
+
+        // 3) If still unknown, fetch once lazily via VehicleRepo
+        if (resolvedName == 'Unknown Device') {
+          try {
+            final device = await vehicleRepo.fetchDeviceById(event.deviceId);
+            final name = device != null ? device['name'] as String? : null;
+            if (name != null && name.trim().isNotEmpty) {
+              resolvedName = name;
+              vehicleRepo.cacheDevice(device!);
+            }
+          } catch (_) {
+            // ignore
+          }
+        }
       }
+
+      // Attach to attributes as well for downstream consumers
+      final attrs = Map<String, dynamic>.from(event.attributes);
+      attrs['deviceName'] = resolvedName ?? 'Unknown Device';
+
+      if (kDebugMode) {
+        debugPrint('[NotificationsRepository] 🧩 Device name resolved for ${event.deviceId} → ${attrs['deviceName']}');
+      }
+
+      enrichedEvents.add(
+        Event(
+          id: event.id,
+          deviceId: event.deviceId,
+          deviceName: resolvedName ?? event.deviceName,
+          type: event.type,
+          timestamp: event.timestamp,
+          message: event.message,
+          severity: event.severity,
+          positionId: event.positionId,
+          geofenceId: event.geofenceId,
+          attributes: attrs,
+          isRead: event.isRead,
+        ),
+      );
     }
-    
+
     return enrichedEvents;
   }
 
