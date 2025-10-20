@@ -32,7 +32,7 @@ class NotificationTile extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              event.type,
+              '${event.deviceName ?? 'Unknown Device'} – ${event.type}',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
               ),

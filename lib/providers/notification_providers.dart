@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/repositories/notifications_repository.dart';
@@ -95,15 +96,20 @@ class NotificationFilter {
 final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) {
   final eventService = ref.watch(eventServiceProvider);
   final eventsDao = ref.watch(eventsDaoProvider).valueOrNull;
+  final devicesDao = ref.watch(devicesDaoProvider).valueOrNull;
 
-  // If DAO is not ready yet, we need to handle this gracefully
+  // If DAOs are not ready yet, we need to handle this gracefully
   if (eventsDao == null) {
     throw StateError('EventsDao not initialized yet');
+  }
+  if (devicesDao == null) {
+    throw StateError('DevicesDao not initialized yet');
   }
 
   final repository = NotificationsRepository(
     eventService: eventService,
     eventsDao: eventsDao,
+    devicesDao: devicesDao,
     ref: ref,
   );
 

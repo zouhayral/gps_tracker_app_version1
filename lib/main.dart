@@ -12,6 +12,7 @@ import 'package:my_app_gps/map/fmtc_config.dart';
 import 'package:my_app_gps/map/tile_http_overrides.dart';
 import 'package:my_app_gps/map/tile_network_client.dart';
 import 'package:my_app_gps/map/tile_probe.dart';
+import 'package:my_app_gps/services/notification/local_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
@@ -62,6 +63,25 @@ Future<void> main() async {
     // ignore: avoid_print
     print('Hive init failed or already initialized: $e');
   }
+  
+  // Initialize local notification service
+  try {
+    // ignore: avoid_print
+    print('[NOTIFICATIONS] Initializing local notification service...');
+    final notificationInitialized = await LocalNotificationService.instance.initialize();
+    if (notificationInitialized) {
+      // ignore: avoid_print
+      print('[NOTIFICATIONS] ✅ Local notification service initialized');
+    } else {
+      // ignore: avoid_print
+      print('[NOTIFICATIONS] ⚠️ Local notification service initialization failed');
+    }
+  } catch (e) {
+    // ignore: avoid_print
+    print('[NOTIFICATIONS][ERROR] Failed to initialize notifications: $e');
+    // Continue without local notifications (app will still work)
+  }
+  
   // Initialize tile caching (FMTC) with platform-appropriate backend
   try {
     // [FMTC][INIT] Begin

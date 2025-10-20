@@ -180,7 +180,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(3, 1766022952411284427),
     name: 'EventEntity',
-    lastPropertyId: const obx_int.IdUid(13, 4770332729034108313),
+    lastPropertyId: const obx_int.IdUid(14, 3423107385985013590),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -264,6 +264,12 @@ final _entities = <obx_int.ModelEntity>[
         id: const obx_int.IdUid(13, 4770332729034108313),
         name: 'isRead',
         type: 1,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(14, 3423107385985013590),
+        name: 'deviceName',
+        type: 9,
         flags: 0,
       ),
     ],
@@ -777,7 +783,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
             ? null
             : fbb.writeString(object.message!);
         final attributesJsonOffset = fbb.writeString(object.attributesJson);
-        fbb.startTable(14);
+        final deviceNameOffset = object.deviceName == null
+            ? null
+            : fbb.writeString(object.deviceName!);
+        fbb.startTable(15);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, eventIdOffset);
         fbb.addInt64(2, object.deviceId);
@@ -791,6 +800,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addOffset(10, messageOffset);
         fbb.addOffset(11, attributesJsonOffset);
         fbb.addBool(12, object.isRead);
+        fbb.addOffset(13, deviceNameOffset);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -821,6 +831,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
           4,
           0,
         );
+        final deviceNameParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 30);
         final positionIdParam = const fb.Int64Reader().vTableGetNullable(
           buffer,
           rootOffset,
@@ -860,6 +873,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           eventType: eventTypeParam,
           eventTimeMs: eventTimeMsParam,
           id: idParam,
+          deviceName: deviceNameParam,
           positionId: positionIdParam,
           geofenceId: geofenceIdParam,
           maintenanceId: maintenanceIdParam,
@@ -1360,6 +1374,11 @@ class EventEntity_ {
   /// See [EventEntity.isRead].
   static final isRead = obx.QueryBooleanProperty<EventEntity>(
     _entities[2].properties[12],
+  );
+
+  /// See [EventEntity.deviceName].
+  static final deviceName = obx.QueryStringProperty<EventEntity>(
+    _entities[2].properties[13],
   );
 }
 

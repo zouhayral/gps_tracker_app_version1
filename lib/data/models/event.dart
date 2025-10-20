@@ -11,6 +11,7 @@ import 'package:my_app_gps/core/database/entities/event_entity.dart';
 class Event {
   final String id;
   final int deviceId;
+  final String? deviceName; // Device name for UI display
   final String type; // e.g. 'deviceOnline', 'alarm', 'geofenceEnter'
   final DateTime timestamp;
   final String? message;
@@ -23,6 +24,7 @@ class Event {
   const Event({
     required this.id,
     required this.deviceId,
+    this.deviceName,
     required this.type,
     required this.timestamp,
     this.message,
@@ -40,6 +42,7 @@ class Event {
     return Event(
       id: json['id'].toString(),
       deviceId: (json['deviceId'] as num?)?.toInt() ?? 0,
+      deviceName: json['deviceName'] as String?,
       type: json['type'] as String? ?? 'unknown',
       timestamp: DateTime.tryParse(
             (json['serverTime'] ?? json['eventTime'] ?? '') as String,
@@ -59,6 +62,7 @@ class Event {
   Map<String, dynamic> toJson() => {
         'id': id,
         'deviceId': deviceId,
+        'deviceName': deviceName,
         'type': type,
         'serverTime': timestamp.toUtc().toIso8601String(),
         'message': message,
@@ -75,6 +79,7 @@ class Event {
   EventEntity toEntity() => EventEntity(
         eventId: id,
         deviceId: deviceId,
+        deviceName: deviceName,
         eventType: type,
         eventTimeMs: timestamp.millisecondsSinceEpoch,
         positionId: positionId,
@@ -88,6 +93,7 @@ class Event {
   factory Event.fromEntity(EventEntity e) => Event(
         id: e.eventId,
         deviceId: e.deviceId,
+        deviceName: e.deviceName,
         type: e.eventType,
         timestamp: DateTime.fromMillisecondsSinceEpoch(e.eventTimeMs),
         message: e.message,
@@ -174,11 +180,13 @@ class Event {
   // Copy helper
   // -----------------------------
   Event copyWith({
+    String? deviceName,
     bool? isRead,
   }) =>
       Event(
         id: id,
         deviceId: deviceId,
+        deviceName: deviceName ?? this.deviceName,
         type: type,
         timestamp: timestamp,
         message: message,

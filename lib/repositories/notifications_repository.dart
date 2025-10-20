@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/entities/event_entity.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
 import 'package:my_app_gps/services/event_service.dart';
+import 'package:my_app_gps/services/notification/local_notification_service.dart';
 
 /// Repository for managing notification events with live updates.
 ///
@@ -27,15 +29,18 @@ class NotificationsRepository {
   NotificationsRepository({
     required EventService eventService,
     required EventsDaoBase eventsDao,
+    required DevicesDaoBase devicesDao,
     required Ref ref,
   })  : _eventService = eventService,
         _eventsDao = eventsDao,
+        _devicesDao = devicesDao,
         _ref = ref {
     _init();
   }
 
   final EventService _eventService;
   final EventsDaoBase _eventsDao;
+  final DevicesDaoBase _devicesDao;
   final Ref _ref;
 
   // Stream controller for emitting events to UI
@@ -48,6 +53,9 @@ class NotificationsRepository {
   List<Event> _cachedEvents = [];
   bool _initialized = false;
 
+  // Device name cache for fast lookups
+  final Map<int, String> _deviceNameCache = {};
+
   /// Stream of notification events for UI
   Stream<List<Event>> watchEvents() => _eventsController.stream;
 
@@ -58,6 +66,9 @@ class NotificationsRepository {
 
     _log('🚀 Initializing NotificationsRepository');
 
+    // Prefetch device names for fast lookups
+    _prefetchDeviceNames();
+
     // Load initial cached events from ObjectBox
     _loadCachedEvents();
 
@@ -65,12 +76,69 @@ class NotificationsRepository {
     _listenToWebSocket();
   }
 
+  /// Prefetch all device names into cache for fast lookups
+  Future<void> _prefetchDeviceNames() async {
+    try {
+      _log('📋 Prefetching device names...');
+      final devices = await _devicesDao.getAll();
+      for (final device in devices) {
+        _deviceNameCache[device.deviceId] = device.name;
+      }
+      _log('📋 Cached ${_deviceNameCache.length} device names');
+    } catch (e) {
+      _log('⚠️ Failed to prefetch device names: $e');
+    }
+  }
+
+  /// Get device name from cache or fetch from DAO
+  Future<String?> _getDeviceName(int deviceId) async {
+    // Check cache first
+    if (_deviceNameCache.containsKey(deviceId)) {
+      return _deviceNameCache[deviceId];
+    }
+
+    // Fetch from DAO and cache
+    try {
+      final device = await _devicesDao.getById(deviceId);
+      if (device != null) {
+        _deviceNameCache[deviceId] = device.name;
+        return device.name;
+      }
+    } catch (e) {
+      _log('⚠️ Failed to fetch device name for deviceId=$deviceId: $e');
+    }
+
+    return null; // Fallback to null if not found
+  }
+
+  /// Enrich events with device names from cache/DAO
+  Future<List<Event>> _enrichEventsWithDeviceNames(List<Event> events) async {
+    final enrichedEvents = <Event>[];
+    
+    for (final event in events) {
+      if (event.deviceName == null) {
+        // Fetch device name if not already present
+        final deviceName = await _getDeviceName(event.deviceId);
+        enrichedEvents.add(event.copyWith(
+          deviceName: deviceName ?? 'Unknown Device',
+        ));
+      } else {
+        enrichedEvents.add(event);
+      }
+    }
+    
+    return enrichedEvents;
+  }
+
   /// Load cached events from ObjectBox and emit to stream
   Future<void> _loadCachedEvents() async {
     try {
       _log('📦 Loading cached events from ObjectBox');
       final entities = await _eventsDao.getAll();
-      _cachedEvents = entities.map((e) => Event.fromEntity(e)).toList();
+      final events = entities.map((e) => Event.fromEntity(e)).toList();
+
+      // Enrich with device names
+      _cachedEvents = await _enrichEventsWithDeviceNames(events);
 
       // Sort by timestamp (newest first)
       _cachedEvents.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -162,12 +230,15 @@ class NotificationsRepository {
 
       _log('📨 Parsed ${newEvents.length} events from WebSocket');
 
+      // Enrich events with device names
+      final enrichedEvents = await _enrichEventsWithDeviceNames(newEvents);
+
       // Persist to ObjectBox via EventService
-      final entities = newEvents.map((e) => e.toEntity()).toList();
+      final entities = enrichedEvents.map((e) => e.toEntity()).toList();
       await _eventsDao.upsertMany(entities);
 
       // Update in-memory cache
-      for (final event in newEvents) {
+      for (final event in enrichedEvents) {
         // Check if event already exists
         final existingIndex = _cachedEvents.indexWhere((e) => e.id == event.id);
         if (existingIndex >= 0) {
@@ -182,13 +253,61 @@ class NotificationsRepository {
       // Sort again to maintain order
       _cachedEvents.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-      _log('✅ Persisted ${newEvents.length} WebSocket events');
+      _log('✅ Persisted ${enrichedEvents.length} WebSocket events');
+      
+      // Show local push notifications for critical events
+      await _showNotificationsForEvents(enrichedEvents);
+      
       _emitEvents();
     } catch (e, stackTrace) {
       _log('❌ Error handling WebSocket events: $e');
       if (kDebugMode) {
         debugPrint('[NotificationsRepository] Stack trace: $stackTrace');
       }
+    }
+  }
+
+  /// Show local push notifications for critical events
+  /// 
+  /// Only shows notifications for unread events with critical severity.
+  /// Supports: overspeed, ignition on/off, device offline/online, geofence enter/exit
+  Future<void> _showNotificationsForEvents(List<Event> events) async {
+    try {
+      final criticalTypes = [
+        'overspeed',
+        'ignitionon',
+        'ignitionoff',
+        'deviceonline',
+        'deviceoffline',
+        'geofenceenter',
+        'geofenceexit',
+        'alarm',
+      ];
+
+      // Filter events that should trigger notifications
+      final notifiableEvents = events.where((event) {
+        return !event.isRead && 
+               criticalTypes.contains(event.type.toLowerCase());
+      }).toList();
+
+      if (notifiableEvents.isEmpty) {
+        _log('⏭️ No notifiable events in batch');
+        return;
+      }
+
+      _log('🔔 Showing ${notifiableEvents.length} notifications');
+
+      // Show individual notifications
+      for (final event in notifiableEvents) {
+        await LocalNotificationService.instance.showEventNotification(event);
+      }
+
+      // Show batch summary if multiple events
+      if (notifiableEvents.length > 3) {
+        await LocalNotificationService.instance.showBatchSummary(notifiableEvents);
+      }
+    } catch (e) {
+      _log('⚠️ Failed to show notifications: $e');
     }
   }
 

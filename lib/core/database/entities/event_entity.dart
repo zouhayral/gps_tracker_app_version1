@@ -12,6 +12,7 @@ class EventEntity {
     required this.eventType,
     required this.eventTimeMs,
     this.id = 0,
+    this.deviceName,
     this.positionId,
     this.geofenceId,
     this.maintenanceId,
@@ -34,6 +35,9 @@ class EventEntity {
   /// Device ID this event belongs to - indexed for querying events by device
   @Index()
   int deviceId;
+
+  /// Device name for UI display (cached from DeviceEntity)
+  String? deviceName;
 
   /// Event type (e.g., "deviceOnline", "deviceOffline", "geofenceEnter", "geofenceExit", "alarm", etc.)
   @Index()
@@ -74,6 +78,7 @@ class EventEntity {
     required int deviceId,
     required String eventType,
     required DateTime eventTime,
+    String? deviceName,
     int? positionId,
     int? geofenceId,
     int? maintenanceId,
@@ -86,6 +91,7 @@ class EventEntity {
     return EventEntity(
       eventId: eventId,
       deviceId: deviceId,
+      deviceName: deviceName,
       eventType: eventType,
       eventTimeMs: eventTime.toUtc().millisecondsSinceEpoch,
       positionId: positionId,
@@ -104,6 +110,7 @@ class EventEntity {
     return {
       'id': eventId,
       'deviceId': deviceId,
+      'deviceName': deviceName,
       'type': eventType,
       'eventTime': DateTime.fromMillisecondsSinceEpoch(eventTimeMs, isUtc: true)
           .toLocal(),
