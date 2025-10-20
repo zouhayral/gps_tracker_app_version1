@@ -24,6 +24,7 @@ class NotificationsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Use filtered notifications provider instead of raw stream
     final notificationsAsync = ref.watch(filteredNotificationsProvider);
+    final filter = ref.watch(notificationFilterProvider);
 
     return NotificationToastListener(
       child: Scaffold(
@@ -36,6 +37,22 @@ class NotificationsPage extends ConsumerWidget {
                 // Optional: Navigate to unread-only view or mark all as read
               },
             ),
+            const SizedBox(width: 8),
+            // Clear filters button
+            if (filter.isActive)
+              IconButton(
+                icon: const Icon(Icons.filter_alt_off_outlined),
+                iconSize: 24,
+                tooltip: 'Clear Filters',
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                onPressed: () {
+                  // Clear all filters
+                  ref.read(notificationFilterProvider.notifier).state =
+                      const NotificationFilter();
+                  // Refresh the list
+                  ref.invalidate(notificationsStreamProvider);
+                },
+              ),
             const SizedBox(width: 8),
           ],
         ),

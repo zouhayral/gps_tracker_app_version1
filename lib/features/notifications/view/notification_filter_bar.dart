@@ -17,7 +17,6 @@ class NotificationFilterBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(notificationFilterProvider);
-    final theme = Theme.of(context);
 
     return Container(
       color: const Color(0xFFF5FFE2), // Light green background
@@ -26,58 +25,40 @@ class NotificationFilterBar extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Severity filters and mark all read button
-          Row(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildSeverityChip(
-                        context,
-                        ref,
-                        label: 'High',
-                        value: 'critical',
-                        color: const Color(0xFFFF383C),
-                        isSelected: filter.severity == 'critical',
-                      ),
-                      const SizedBox(width: 8),
-                      _buildSeverityChip(
-                        context,
-                        ref,
-                        label: 'Medium',
-                        value: 'warning',
-                        color: const Color(0xFFFFBD28),
-                        isSelected: filter.severity == 'warning',
-                      ),
-                      const SizedBox(width: 8),
-                      _buildSeverityChip(
-                        context,
-                        ref,
-                        label: 'Low',
-                        value: 'info',
-                        color: const Color(0xFF49454F),
-                        isSelected: filter.severity == 'info',
-                      ),
-                    ],
-                  ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildSeverityChip(
+                  context,
+                  ref,
+                  label: 'High',
+                  value: 'critical',
+                  color: const Color(0xFFFF383C),
+                  isSelected: filter.severity == 'critical',
                 ),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () async {
-                  // Mark all as read
-                  await ref.read(markAllAsReadProvider.future);
-                },
-                child: Text(
-                  'Mark all read',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
+                const SizedBox(width: 8),
+                _buildSeverityChip(
+                  context,
+                  ref,
+                  label: 'Medium',
+                  value: 'warning',
+                  color: const Color(0xFFFFBD28),
+                  isSelected: filter.severity == 'warning',
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                _buildSeverityChip(
+                  context,
+                  ref,
+                  label: 'Low',
+                  value: 'info',
+                  color: const Color(0xFF49454F),
+                  isSelected: filter.severity == 'info',
+                ),
+                const SizedBox(width: 8),
+                _buildMarkAllReadChip(context, ref),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           // Date filters
@@ -151,6 +132,47 @@ class NotificationFilterBar extends ConsumerWidget {
       side: BorderSide(color: color, width: 1.5),
       elevation: isSelected ? 4 : 0,
       pressElevation: 2,
+    );
+  }
+
+  Widget _buildMarkAllReadChip(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    
+    return InkWell(
+      onTap: () async {
+        // Mark all as read
+        await ref.read(markAllAsReadProvider.future);
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(
+            color: Colors.grey.shade400,
+            width: 1,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.done_all,
+              size: 18,
+              color: theme.colorScheme.onSurface,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Mark all read',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
