@@ -19,6 +19,7 @@ import 'package:my_app_gps/core/map/fleet_map_prefetch.dart';
 import 'package:my_app_gps/core/map/map_debug_flags.dart';
 import 'package:my_app_gps/core/map/marker_cache.dart';
 import 'package:my_app_gps/core/map/marker_icon_manager.dart';
+import 'package:my_app_gps/core/map/marker_motion_controller.dart';
 import 'package:my_app_gps/core/map/marker_performance_monitor.dart';
 import 'package:my_app_gps/core/map/marker_processing_isolate.dart';
 import 'package:my_app_gps/core/map/rebuild_profiler.dart';
@@ -160,6 +161,10 @@ class _MapPageState extends ConsumerState<MapPage>
   // OPTIMIZATION: Enhanced marker cache with intelligent diffing
   final _enhancedMarkerCache = EnhancedMarkerCache();
 
+  // LIVE MOTION FIX: MarkerMotionController for smooth position interpolation
+  // Provides animated transitions between WebSocket updates (200ms tick, 1200ms interpolation)
+  late final MarkerMotionController _motionController;
+
   // PERF PHASE 2: Marker update debouncing (collapses rapid bursts into single rebuild)
   Timer? _markerUpdateDebounce;
   static const _kMarkerUpdateDelay = Duration(milliseconds: 120);
@@ -191,6 +196,25 @@ class _MapPageState extends ConsumerState<MapPage>
     super.initState();
 
     // No sheet controller to initialize for InstantInfoSheet
+
+    // LIVE MOTION FIX: Initialize motion controller with smooth interpolation
+    // - 200ms tick rate for fluid animation (5 FPS)
+    // - 1200ms interpolation window matches typical WebSocket update intervals
+    // - Cubic easing for natural deceleration
+    // - Dead-reckoning extrapolation for moving vehicles (speed ≥ 3 km/h)
+    _motionController = MarkerMotionController(
+      motionInterval: const Duration(milliseconds: 200),
+      interpolationDuration: const Duration(milliseconds: 1200),
+      curve: Curves.easeOutCubic,
+      enableExtrapolation: true,
+      maxExtrapolation: const Duration(seconds: 8),
+      minSpeedKmhForExtrapolation: 3.0,
+    );
+
+    // LIVE MOTION FIX: Listen to motion controller's global tick
+    // Triggers marker layer rebuild during active animations (any device moving)
+    // This ensures smooth visual updates without widget rebuilds
+    _motionController.globalTick.addListener(_onMotionTick);
 
     // OPTIMIZATION: Initialize throttled marker notifier
     // Raised throttle to 80ms to reduce UI thread load
@@ -725,6 +749,10 @@ class _MapPageState extends ConsumerState<MapPage>
 
   @override
   void dispose() {
+    // LIVE MOTION FIX: Clean up motion controller resources
+    _motionController.globalTick.removeListener(_onMotionTick);
+    _motionController.dispose();
+
     // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
     _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
@@ -905,6 +933,55 @@ class _MapPageState extends ConsumerState<MapPage>
         );
       }
 
+      // LIVE MOTION FIX: Merge motion-controlled positions with static fallbacks
+      // Priority: motion controller's interpolated positions > WebSocket positions > device coords
+      final motionPositions = <int, Position>{};
+      
+      for (final deviceId in devices.map((d) => d['id'] as int?).whereType<int>()) {
+        // First, try motion controller's live interpolated position
+        final motionLatLng = _motionController.currentValue(deviceId);
+        
+        if (motionLatLng != null) {
+          // Use motion controller's animated position
+          final basePos = positions[deviceId] ?? _lastPositions[deviceId];
+          if (basePos != null) {
+            // Create position with interpolated coordinates but original metadata
+            motionPositions[deviceId] = Position(
+              id: basePos.id,
+              deviceId: basePos.deviceId,
+              latitude: motionLatLng.latitude,  // ← ANIMATED coordinate
+              longitude: motionLatLng.longitude, // ← ANIMATED coordinate
+              speed: basePos.speed,
+              course: basePos.course,
+              serverTime: basePos.serverTime,
+              deviceTime: basePos.deviceTime,
+              attributes: basePos.attributes,
+            );
+            
+            if (kDebugMode && positions[deviceId] != null) {
+              final delta = ((motionLatLng.latitude - positions[deviceId]!.latitude).abs() +
+                             (motionLatLng.longitude - positions[deviceId]!.longitude).abs()) * 111000; // rough meters
+              if (delta > 1) {
+                debugPrint(
+                  '[LIVE_MOTION] Device $deviceId: using interpolated position '
+                  '(${motionLatLng.latitude.toStringAsFixed(6)}, ${motionLatLng.longitude.toStringAsFixed(6)}) '
+                  'delta=${delta.toStringAsFixed(1)}m from WebSocket',
+                );
+              }
+            }
+          }
+        } else {
+          // Fallback: use WebSocket position or cached position
+          final pos = positions[deviceId] ?? _lastPositions[deviceId];
+          if (pos != null) {
+            motionPositions[deviceId] = pos;
+          }
+        }
+      }
+
+      // Use motion-controlled positions for marker generation
+      final effectivePositions = motionPositions.isNotEmpty ? motionPositions : positions;
+
       // CRITICAL: Ensure first non-empty dataset is not dropped by throttling.
       // If current UI has no markers yet but we now have positions or devices with
       // valid stored coordinates, force an update to render immediately.
@@ -930,11 +1007,11 @@ class _MapPageState extends ConsumerState<MapPage>
       }
 
       final forceFirstRender = _markersNotifier.value.isEmpty &&
-          (positions.isNotEmpty || hasAnyDeviceStoredCoords());
+          (effectivePositions.isNotEmpty || hasAnyDeviceStoredCoords());
 
       // OPTIMIZATION: Use enhanced marker cache with intelligent diffing
       final diffResult = _enhancedMarkerCache.getMarkersWithDiff(
-        positions,
+        effectivePositions,  // ← Pass motion-controlled positions
         devices,
         selectedIds,
         query,
@@ -1266,19 +1343,40 @@ class _MapPageState extends ConsumerState<MapPage>
       final deviceId = device['id'] as int?;
       if (deviceId == null) continue;
       if (_positionListenerIds.contains(deviceId)) continue;
-      // Watch position changes - this will trigger rebuild and marker update
+
+      // LIVE MOTION FIX: Watch position changes and feed to motion controller
+      // This enables smooth interpolation between WebSocket updates
       ref.listen(vehiclePositionProvider(deviceId), (previous, next) {
         if (!mounted) return;
         
-        if (kDebugMode) {
-          debugPrint('[MAP] Position changed for device $deviceId, triggering marker update');
-        }
         final pos = next.valueOrNull;
         if (pos != null) {
+          // Cache position for fallback
           _lastPositions[deviceId] = pos;
+          
+          // CRITICAL: Feed new position to motion controller for smooth interpolation
+          // - Motion controller will interpolate from current → target over 1200ms
+          // - Extrapolation kicks in for moving vehicles (speed ≥ 3 km/h)
+          // - globalTick will notify when animation is active
+          _motionController.updatePosition(
+            deviceId: deviceId,
+            target: LatLng(pos.latitude, pos.longitude),
+            timestamp: pos.serverTime,
+            speedKmh: pos.speed,
+            courseDeg: pos.course,
+          );
+
+          if (kDebugMode) {
+            debugPrint(
+              '[LIVE_MOTION] Device $deviceId: fed position to motion controller '
+              '(${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}) '
+              'speed=${pos.speed.toStringAsFixed(1)} km/h',
+            );
+          }
         }
         
-        // Trigger marker update when position changes
+        // Also trigger marker update for immediate response (first frame)
+        // Motion controller will handle subsequent animation frames via globalTick
         final currentDevices = ref.read(devicesNotifierProvider).asData?.value ?? [];
         _scheduleMarkerUpdate(currentDevices);
       });
@@ -1288,6 +1386,25 @@ class _MapPageState extends ConsumerState<MapPage>
     if (kDebugMode && newlyAdded > 0) {
       debugPrint('[MAP] Registered $newlyAdded new position listeners (total: ${_positionListenerIds.length})');
     }
+  }
+
+  // LIVE MOTION FIX: Motion tick callback - rebuilds markers during animation
+  // Called by motion controller's globalTick ValueNotifier when any device is animating
+  // This provides smooth visual updates (5 FPS) without triggering full widget rebuilds
+  void _onMotionTick() {
+    if (!mounted) return;
+
+    // Trigger marker layer rebuild with interpolated positions
+    // Motion controller provides currentPositions map with animated coordinates
+    final devicesAsync = ref.read(devicesNotifierProvider);
+    final devices = devicesAsync.asData?.value ?? [];
+    
+    if (kDebugMode) {
+      final animatingCount = _motionController.currentPositions.length;
+      debugPrint('[LIVE_MOTION] Motion tick: $animatingCount devices animating');
+    }
+    
+    _scheduleMarkerUpdate(devices);
   }
 
   Widget _buildMapContent() {
