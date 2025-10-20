@@ -41,6 +41,9 @@ class NotificationsRepository {
   // Stream controller for emitting events to UI
   final _eventsController = StreamController<List<Event>>.broadcast();
 
+  // WebSocket subscription
+  StreamSubscription<CustomerWebSocketMessage>? _wsSubscription;
+
   // Cached events list (in-memory)
   List<Event> _cachedEvents = [];
   bool _initialized = false;
@@ -80,24 +83,39 @@ class NotificationsRepository {
   }
 
   /// Listen to WebSocket for real-time event notifications
+  /// 
+  /// NOTE: We subscribe directly to the stream provider to avoid
+  /// issues with ref.listen() being called from constructor context.
+  /// 
+  /// The use of .stream is deprecated but we suppress the warning as
+  /// this is the correct pattern for subscribing from repository init.
   void _listenToWebSocket() {
     try {
       _log('🔌 Subscribing to WebSocket events');
 
-      // Listen to WebSocket provider changes
-      _ref.listen<AsyncValue<CustomerWebSocketMessage>>(
-        customerWebSocketProvider,
-        (previous, next) {
-          next.whenData((message) {
+      // Subscribe directly to the WebSocket provider stream
+      // The provider returns a Stream<CustomerWebSocketMessage>
+      _ref.read(customerWebSocketProvider.future).then((firstMessage) {
+        _log('✅ WebSocket provider active, first message received');
+        
+        // Now subscribe to ongoing messages
+        // ignore: deprecated_member_use
+        _wsSubscription = _ref.read(customerWebSocketProvider.stream).listen(
+          (message) {
             if (message is CustomerEventsMessage) {
+              _log('🔔 CustomerEventsMessage received');
               _handleWebSocketEvents(message.events);
             }
-          });
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          _log('❌ WebSocket error: $error');
-        },
-      );
+          },
+          onError: (dynamic error) {
+            _log('❌ WebSocket subscription error: $error');
+          },
+        );
+      }).catchError((dynamic error) {
+        _log('❌ Failed to get initial WebSocket message: $error');
+      });
+
+      _log('✅ WebSocket subscription initiated');
     } catch (e) {
       _log('⚠️ Failed to subscribe to WebSocket: $e');
     }
@@ -372,6 +390,7 @@ class NotificationsRepository {
   /// Dispose resources
   void dispose() {
     _log('🛑 Disposing NotificationsRepository');
+    _wsSubscription?.cancel();
     _eventsController.close();
   }
 }

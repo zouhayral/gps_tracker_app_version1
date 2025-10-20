@@ -125,6 +125,17 @@ class TraccarSocketService {
 
       final jsonObj = jsonDecode(text);
       if (jsonObj is Map<String, dynamic>) {
+        // Diagnostic: Log all keys in the WebSocket message
+        if (kDebugMode) {
+          final keys = jsonObj.keys.toList();
+          // ignore: avoid_print
+          print('[SOCKET] 🔑 Message contains keys: ${keys.join(', ')}');
+          if (!keys.contains('events')) {
+            // ignore: avoid_print
+            print('[SOCKET] ⚠️ NO EVENTS KEY - Events not being sent by server');
+          }
+        }
+
         // positions
         if (jsonObj.containsKey('positions')) {
           final list = (jsonObj['positions'] as List<dynamic>?)
@@ -145,9 +156,12 @@ class TraccarSocketService {
         }
         // events (opaque here)
         if (jsonObj.containsKey('events')) {
+          final eventsCount = jsonObj['events'] is List 
+              ? (jsonObj['events'] as List).length 
+              : 1;
           if (kDebugMode) {
             // ignore: avoid_print
-            print('[SOCKET] 🔔 Received events from WebSocket');
+            print('[SOCKET] 🔔 ✅ EVENTS RECEIVED from WebSocket ($eventsCount events)');
             print('[SOCKET] Events payload: ${jsonObj['events']}');
           }
           _controller?.add(TraccarSocketMessage.events(jsonObj['events']));
