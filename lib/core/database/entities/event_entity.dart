@@ -19,6 +19,7 @@ class EventEntity {
     this.severity,
     this.message,
     this.attributesJson = '{}',
+    this.isRead = false,
   });
 
   /// Local ObjectBox ID (auto-increment)
@@ -64,6 +65,9 @@ class EventEntity {
   /// JSON string for additional attributes
   String attributesJson;
 
+  /// Read status for notification tracking
+  bool isRead;
+
   /// Factory constructor from domain entity
   factory EventEntity.fromDomain({
     required String eventId,
@@ -77,6 +81,7 @@ class EventEntity {
     String? severity,
     String? message,
     Map<String, dynamic>? attributes,
+    bool isRead = false,
   }) {
     return EventEntity(
       eventId: eventId,
@@ -90,6 +95,7 @@ class EventEntity {
       severity: severity,
       message: message,
       attributesJson: attributes != null ? _encodeAttributes(attributes) : '{}',
+      isRead: isRead,
     );
   }
 
@@ -108,6 +114,7 @@ class EventEntity {
       'severity': severity,
       'message': message,
       'attributes': _decodeAttributes(attributesJson),
+      'isRead': isRead,
     };
   }
 

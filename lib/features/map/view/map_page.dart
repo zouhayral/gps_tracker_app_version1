@@ -155,6 +155,9 @@ class _MapPageState extends ConsumerState<MapPage>
   // Track last selected device to detect changes
   int? _lastSelectedSingleDevice;
 
+  // Store listener subscriptions for manual disposal
+  final List<ProviderSubscription<dynamic>> _listenerCleanups = [];
+
   // OPTIMIZATION: Throttled ValueNotifier for marker updates (reduces rebuilds when updates <50ms apart)
   late final ThrottledValueNotifier<List<MapMarkerData>> _markersNotifier;
 
@@ -367,7 +370,7 @@ class _MapPageState extends ConsumerState<MapPage>
   /// OPTIMIZATION: Setup marker update listeners outside of build method
   ///
   /// This is critical for performance - marker processing should happen
-  /// in response to data changes (via ref.listen), NOT during widget builds.
+  /// in response to data changes (via ref.listenManual), NOT during widget builds.
   ///
   /// Benefits:
   /// - Build method stays pure and fast
@@ -395,56 +398,68 @@ class _MapPageState extends ConsumerState<MapPage>
         debugPrint('[MAP] Setting up position listener for device $deviceId');
       }
       
-      // Listen to position updates for this device
+      // Listen to position updates for this device using listenManual
       // Note: vehiclePositionProvider is a StreamProvider, so we listen to AsyncValue changes
-      ref.listen(vehiclePositionProvider(deviceId), (previous, next) {
-        if (!mounted) return;
-        if (kDebugMode) {
-          debugPrint('[MAP] Position listener fired for device $deviceId: '
-              'previous=${previous?.valueOrNull != null}, '
-              'next=${next.valueOrNull != null}');
-        }
-        final pos = next.valueOrNull;
-        if (pos != null) {
-          _lastPositions[deviceId] = pos;
-        }
-        // When any position updates, refresh all markers
-        final currentDevices = ref.read(devicesNotifierProvider);
-        currentDevices.whenData(_scheduleMarkerUpdate);
-      });
+      final removeListener = ref.listenManual(
+        vehiclePositionProvider(deviceId),
+        (previous, next) {
+          if (!mounted) return;
+          if (kDebugMode) {
+            debugPrint('[MAP] Position listener fired for device $deviceId: '
+                'previous=${previous?.valueOrNull != null}, '
+                'next=${next.valueOrNull != null}');
+          }
+          final pos = next.valueOrNull;
+          if (pos != null) {
+            _lastPositions[deviceId] = pos;
+          }
+          // When any position updates, refresh all markers
+          final currentDevices = ref.read(devicesNotifierProvider);
+          currentDevices.whenData(_scheduleMarkerUpdate);
+        },
+      );
+      _listenerCleanups.add(removeListener);
     }
     
-    // Listen to device list changes
-    ref.listen(devicesNotifierProvider, (previous, next) {
-      next.whenData((devices) {
-        if (!mounted) return;
-        
-        // Setup position listeners for any new devices
-        for (final device in devices) {
-          final deviceId = device['id'] as int?;
-          if (deviceId != null) {
-            setupPositionListener(deviceId);
+    // Listen to device list changes using listenManual
+    final removeDevicesListener = ref.listenManual(
+      devicesNotifierProvider,
+      (previous, next) {
+        next.whenData((devices) {
+          if (!mounted) return;
+          
+          // Setup position listeners for any new devices
+          for (final device in devices) {
+            final deviceId = device['id'] as int?;
+            if (deviceId != null) {
+              setupPositionListener(deviceId);
+            }
           }
-        }
-        
-        _scheduleMarkerUpdate(devices);
-      });
-    });
+          
+          _scheduleMarkerUpdate(devices);
+        });
+      },
+    );
+    _listenerCleanups.add(removeDevicesListener);
 
-    // Listen to last-known positions updates (REST/DAO seeded)
+    // Listen to last-known positions updates (REST/DAO seeded) using listenManual
     // This ensures markers appear even when WebSocket is disconnected
-    ref.listen(positionsLastKnownProvider, (previous, next) {
-      if (!mounted) return;
-      if (kDebugMode) {
-        final prevCount = previous?.valueOrNull?.length ?? 0;
-        final nextCount = next.valueOrNull?.length ?? 0;
-        debugPrint('[MAP] positionsLastKnown changed: $prevCount -> $nextCount');
-      }
-      final devices = ref.read(devicesNotifierProvider).asData?.value ?? const <Map<String, dynamic>>[];
-      if (devices.isNotEmpty) {
-        _scheduleMarkerUpdate(devices);
-      }
-    });
+    final removeLastKnownListener = ref.listenManual(
+      positionsLastKnownProvider,
+      (previous, next) {
+        if (!mounted) return;
+        if (kDebugMode) {
+          final prevCount = previous?.valueOrNull?.length ?? 0;
+          final nextCount = next.valueOrNull?.length ?? 0;
+          debugPrint('[MAP] positionsLastKnown changed: $prevCount -> $nextCount');
+        }
+        final devices = ref.read(devicesNotifierProvider).asData?.value ?? const <Map<String, dynamic>>[];
+        if (devices.isNotEmpty) {
+          _scheduleMarkerUpdate(devices);
+        }
+      },
+    );
+    _listenerCleanups.add(removeLastKnownListener);
 
     // Prime last-known provider to start background fetch/cache
     // Safe to read here; provider manages its own lifecycle
@@ -749,6 +764,12 @@ class _MapPageState extends ConsumerState<MapPage>
 
   @override
   void dispose() {
+    // Clean up manual listeners first
+    for (final subscription in _listenerCleanups) {
+      subscription.close();
+    }
+    _listenerCleanups.clear();
+
     // LIVE MOTION FIX: Clean up motion controller resources
     _motionController.globalTick.removeListener(_onMotionTick);
     _motionController.dispose();

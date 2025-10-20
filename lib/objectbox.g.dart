@@ -180,7 +180,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(3, 1766022952411284427),
     name: 'EventEntity',
-    lastPropertyId: const obx_int.IdUid(12, 692536996037118197),
+    lastPropertyId: const obx_int.IdUid(13, 4770332729034108313),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -258,6 +258,12 @@ final _entities = <obx_int.ModelEntity>[
         id: const obx_int.IdUid(12, 692536996037118197),
         name: 'attributesJson',
         type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(13, 4770332729034108313),
+        name: 'isRead',
+        type: 1,
         flags: 0,
       ),
     ],
@@ -653,14 +659,18 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final nameOffset = fbb.writeString(object.name);
         final uniqueIdOffset = fbb.writeString(object.uniqueId);
         final statusOffset = fbb.writeString(object.status);
-        final categoryOffset =
-            object.category == null ? null : fbb.writeString(object.category!);
-        final modelOffset =
-            object.model == null ? null : fbb.writeString(object.model!);
-        final contactOffset =
-            object.contact == null ? null : fbb.writeString(object.contact!);
-        final phoneOffset =
-            object.phone == null ? null : fbb.writeString(object.phone!);
+        final categoryOffset = object.category == null
+            ? null
+            : fbb.writeString(object.category!);
+        final modelOffset = object.model == null
+            ? null
+            : fbb.writeString(object.model!);
+        final contactOffset = object.contact == null
+            ? null
+            : fbb.writeString(object.contact!);
+        final phoneOffset = object.phone == null
+            ? null
+            : fbb.writeString(object.phone!);
         final attributesJsonOffset = fbb.writeString(object.attributesJson);
         fbb.startTable(13);
         fbb.addInt64(0, object.id);
@@ -757,14 +767,17 @@ obx_int.ModelDefinition getObjectBoxModel() {
       objectToFB: (EventEntity object, fb.Builder fbb) {
         final eventIdOffset = fbb.writeString(object.eventId);
         final eventTypeOffset = fbb.writeString(object.eventType);
-        final priorityOffset =
-            object.priority == null ? null : fbb.writeString(object.priority!);
-        final severityOffset =
-            object.severity == null ? null : fbb.writeString(object.severity!);
-        final messageOffset =
-            object.message == null ? null : fbb.writeString(object.message!);
+        final priorityOffset = object.priority == null
+            ? null
+            : fbb.writeString(object.priority!);
+        final severityOffset = object.severity == null
+            ? null
+            : fbb.writeString(object.severity!);
+        final messageOffset = object.message == null
+            ? null
+            : fbb.writeString(object.message!);
         final attributesJsonOffset = fbb.writeString(object.attributesJson);
-        fbb.startTable(13);
+        fbb.startTable(14);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, eventIdOffset);
         fbb.addInt64(2, object.deviceId);
@@ -777,6 +790,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addOffset(9, severityOffset);
         fbb.addOffset(10, messageOffset);
         fbb.addOffset(11, attributesJsonOffset);
+        fbb.addBool(12, object.isRead);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -834,6 +848,12 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final attributesJsonParam = const fb.StringReader(
           asciiOptimization: true,
         ).vTableGet(buffer, rootOffset, 26, '');
+        final isReadParam = const fb.BoolReader().vTableGet(
+          buffer,
+          rootOffset,
+          28,
+          false,
+        );
         final object = EventEntity(
           eventId: eventIdParam,
           deviceId: deviceIdParam,
@@ -847,6 +867,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           severity: severityParam,
           message: messageParam,
           attributesJson: attributesJsonParam,
+          isRead: isReadParam,
         );
 
         return object;
@@ -865,8 +886,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final descriptionOffset = object.description == null
             ? null
             : fbb.writeString(object.description!);
-        final areaOffset =
-            object.area == null ? null : fbb.writeString(object.area!);
+        final areaOffset = object.area == null
+            ? null
+            : fbb.writeString(object.area!);
         final attributesJsonOffset = fbb.writeString(object.attributesJson);
         fbb.startTable(8);
         fbb.addInt64(0, object.id);
@@ -1077,8 +1099,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
         object.id = id;
       },
       objectToFB: (TelemetryRecord object, fb.Builder fbb) {
-        final engineOffset =
-            object.engine == null ? null : fbb.writeString(object.engine!);
+        final engineOffset = object.engine == null
+            ? null
+            : fbb.writeString(object.engine!);
         fbb.startTable(10);
         fbb.addInt64(0, object.id);
         fbb.addInt64(1, object.deviceId);
@@ -1095,12 +1118,6 @@ obx_int.ModelDefinition getObjectBoxModel() {
       objectFromFB: (obx.Store store, ByteData fbData) {
         final buffer = fb.BufferContext(fbData);
         final rootOffset = buffer.derefObject(0);
-        final idParam = const fb.Int64Reader().vTableGet(
-          buffer,
-          rootOffset,
-          4,
-          0,
-        );
         final deviceIdParam = const fb.Int64Reader().vTableGet(
           buffer,
           rootOffset,
@@ -1111,6 +1128,12 @@ obx_int.ModelDefinition getObjectBoxModel() {
           buffer,
           rootOffset,
           8,
+          0,
+        );
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
           0,
         );
         final speedParam = const fb.Float64Reader().vTableGetNullable(
@@ -1142,9 +1165,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
           20,
         );
         final object = TelemetryRecord(
-          id: idParam,
           deviceId: deviceIdParam,
           timestampMs: timestampMsParam,
+          id: idParam,
           speed: speedParam,
           battery: batteryParam,
           signal: signalParam,
@@ -1332,6 +1355,11 @@ class EventEntity_ {
   /// See [EventEntity.attributesJson].
   static final attributesJson = obx.QueryStringProperty<EventEntity>(
     _entities[2].properties[11],
+  );
+
+  /// See [EventEntity.isRead].
+  static final isRead = obx.QueryBooleanProperty<EventEntity>(
+    _entities[2].properties[12],
   );
 }
 

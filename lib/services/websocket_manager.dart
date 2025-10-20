@@ -35,8 +35,8 @@ class WebSocketState {
 }
 
 class WebSocketManager extends Notifier<WebSocketState> {
-  // TODO(app): Replace with actual URL configured for your deployment.
-  static const _wsUrl = 'wss://your.server/ws';
+  // WebSocket URL for Traccar server
+  static const _wsUrl = 'ws://37.60.238.215:8082/api/socket';
   static const _pingInterval = Duration(seconds: 30);
   static const _maxRetries = 10; // Increased for better exponential backoff
   static const _circuitBreakerTimeout = Duration(minutes: 2);

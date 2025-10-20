@@ -142,7 +142,7 @@
     },
     {
       "id": "3:1766022952411284427",
-      "lastPropertyId": "12:692536996037118197",
+      "lastPropertyId": "13:4770332729034108313",
       "name": "EventEntity",
       "properties": [
         {
@@ -215,6 +215,11 @@
           "id": "12:692536996037118197",
           "name": "attributesJson",
           "type": 9
+        },
+        {
+          "id": "13:4770332729034108313",
+          "name": "isRead",
+          "type": 1
         }
       ],
       "relations": []
