@@ -371,3 +371,24 @@ final filteredNotificationsProvider =
     error: (error, stack) => Stream.error(error, stack),
   );
 });
+
+/// Visibility state for the bottom notification banner.
+/// Defaults to visible, but can be dismissed by the user and persisted for
+/// the current session via [BannerPrefs].
+// Banner visibility provider removed as the banner feature has been disabled.
+
+/// Boot initializer to start NotificationsRepository only after DAOs are ready.
+///
+/// This avoids throwing "EventsDao not initialized yet" if something tries to
+/// read the repository too early during app startup.
+final notificationsBootInitializer = FutureProvider<void>((ref) async {
+  // Await DAO readiness
+  await ref.watch(eventsDaoProvider.future);
+  await ref.watch(devicesDaoProvider.future);
+
+  // Now initialize the repository (sets up websocket listeners etc.)
+  // ignore: unused_result
+  ref.read(notificationsRepositoryProvider);
+});
+
+

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 
 /// NotificationToastListener listens for new WebSocket events and shows toasts.
 ///
@@ -55,6 +56,14 @@ class _NotificationToastListenerState
 
   void _showToast(String eventType, String? message) {
     if (!mounted) return;
+    // Respect global notification toggle to suppress in-app toasts
+    final enabled = SharedPrefsHolder.isInitialized
+        ? (SharedPrefsHolder.instance.getBool('notifications_enabled') ?? true)
+        : null;
+    if (enabled == false) {
+      debugPrint('[NotificationToast] 🔕 Disabled, skipping toast for "$eventType"');
+      return;
+    }
     // Use maybeOf to avoid assertion when there is no Scaffold in the tree yet
     final messenger = ScaffoldMessenger.maybeOf(context);
     final theme = Theme.of(context);
@@ -104,7 +113,9 @@ class _NotificationToastListenerState
           ],
         ),
         backgroundColor: theme.colorScheme.primaryContainer,
-        behavior: SnackBarBehavior.floating,
+  behavior: SnackBarBehavior.floating,
+  // Allow users to swipe down to dismiss immediately
+  dismissDirection: DismissDirection.down,
         duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'View',

@@ -101,6 +101,9 @@ class VehicleDataRepository {
 
   // WebSocket subscription
   StreamSubscription<TraccarSocketMessage>? _socketSub;
+  // Event broadcast stream (raw event maps from WebSocket)
+  final StreamController<Map<String, dynamic>> _eventController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   // REST fallback timer
   Timer? _fallbackTimer;
@@ -225,6 +228,10 @@ class VehicleDataRepository {
       }
     });
   }
+
+  /// Expose a stream of raw event maps coming from the WebSocket 'events' payload.
+  /// Consumers can transform these into domain models as needed.
+  Stream<Map<String, dynamic>> get onEvent => _eventController.stream;
 
   /// Update offline state from connectivity provider
   void setOffline({required bool offline}) {
@@ -364,6 +371,13 @@ class VehicleDataRepository {
             payload is List ? List<dynamic>.from(payload) : <dynamic>[payload];
         for (final e in events) {
           if (e is Map<String, dynamic>) {
+            // Broadcast raw event to listeners (Notifications pipeline)
+            if (!_eventController.isClosed) {
+              _eventController.add(e);
+              if (kDebugMode) {
+                debugPrint('[VehicleRepo] Broadcasting event ${(e['type'] ?? '').toString()}');
+              }
+            }
             final posId = e['positionId'] as int?;
             final deviceId = e['deviceId'] as int?;
             if (kDebugMode) {
@@ -855,6 +869,7 @@ class VehicleDataRepository {
     _socketSub?.cancel();
     _fallbackTimer?.cancel();
     _cleanupTimer?.cancel();
+  _eventController.close();
 
     for (final timer in _debounceTimers.values) {
       timer.cancel();

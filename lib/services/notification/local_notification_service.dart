@@ -31,6 +31,26 @@ class LocalNotificationService {
   
   bool _initialized = false;
 
+  /// Global gate for notifications, persisted via SharedPreferences
+  static Future<bool> isNotificationsEnabled() async {
+    try {
+      if (SharedPrefsHolder.isInitialized) {
+        return SharedPrefsHolder.instance.getBool('notifications_enabled') ?? true;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('notifications_enabled') ?? true;
+    } catch (_) {
+      // Fail-open: if reading prefs fails, treat as enabled to avoid missing critical alerts silently
+      return true;
+    }
+  }
+
+  /// Convenience helper to attempt showing a notification using the global gate.
+  /// This delegates to instance.showEventNotification which already performs the check.
+  static Future<void> tryShowEventNotification(Event event) async {
+    await instance.showEventNotification(event);
+  }
+
   /// Initialize the notification service
   /// 
   /// Must be called during app startup, typically in main().
@@ -158,20 +178,9 @@ class LocalNotificationService {
     }
 
     // Respect global notification toggle
-    try {
-      bool enabled = true;
-      if (SharedPrefsHolder.isInitialized) {
-        enabled = SharedPrefsHolder.instance.getBool('notifications_enabled') ?? true;
-      } else {
-        final prefs = await SharedPreferences.getInstance();
-        enabled = prefs.getBool('notifications_enabled') ?? true;
-      }
-      if (!enabled) {
-        _log('🔕 Notifications disabled, skipping push for event ${event.id}');
-        return;
-      }
-    } catch (_) {
-      // If prefs read fails, assume enabled to avoid silent miss due to prefs error
+    if (!await isNotificationsEnabled()) {
+      _log('� System notification suppressed (toggle OFF)');
+      return;
     }
 
     // Prevent duplicate notifications
@@ -227,6 +236,10 @@ class LocalNotificationService {
   /// Useful when multiple events arrive simultaneously.
   Future<void> showBatchSummary(List<Event> events) async {
     if (!_initialized || events.isEmpty) return;
+    if (!await isNotificationsEnabled()) {
+      _log('🔕 Notifications disabled, skipping batch summary');
+      return;
+    }
 
     try {
       final criticalCount = events.where((e) => e.severity == 'critical').length;

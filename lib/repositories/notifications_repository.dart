@@ -46,6 +46,8 @@ class NotificationsRepository {
 
   // Stream controller for emitting events to UI
   final _eventsController = StreamController<List<Event>>.broadcast();
+  // Stream controller for emitting individual enriched events (banner usage)
+  final _newEventsController = StreamController<Event>.broadcast();
 
   // WebSocket subscription
   StreamSubscription<CustomerWebSocketMessage>? _wsSubscription;
@@ -59,6 +61,8 @@ class NotificationsRepository {
 
   /// Stream of notification events for UI
   Stream<List<Event>> watchEvents() => _eventsController.stream;
+  /// Stream of enriched events as they are added (for banner/toast usage)
+  Stream<Event> watchNewEvents() => _newEventsController.stream;
 
   /// Initialize the repository
   void _init() {
@@ -377,9 +381,9 @@ class NotificationsRepository {
 
       _log('🔔 Showing ${notifiableEvents.length} notifications');
 
-      // Show individual notifications
+      // Show individual notifications (deviceName already enriched)
       for (final event in notifiableEvents) {
-        await LocalNotificationService.instance.showEventNotification(event);
+        await LocalNotificationService.tryShowEventNotification(event);
       }
 
       // Show batch summary if multiple events
@@ -388,6 +392,54 @@ class NotificationsRepository {
       }
     } catch (e) {
       _log('⚠️ Failed to show notifications: $e');
+    }
+  }
+
+  /// Add a single event coming from an external stream (e.g., VehicleRepo.onEvent)
+  /// Always caches/persists the event, regardless of toggle. Banner/system push
+  /// remains controlled elsewhere (LocalNotificationService already checks the toggle).
+  Future<void> addEvent(Event event) async {
+    try {
+      _log('addEvent called for ${event.type}');
+      // Enrich with device name and priority
+      final enrichedList = await _enrichEventsWithDeviceNames([event]);
+      final enriched = enrichedList.first;
+
+      // Persist to ObjectBox
+      await _eventsDao.upsertMany([enriched.toEntity()]);
+
+      // Update in-memory cache (dedupe by id)
+      final existingIndex = _cachedEvents.indexWhere((e) => e.id == enriched.id);
+      if (existingIndex >= 0) {
+        _cachedEvents[existingIndex] = enriched;
+      } else {
+        _cachedEvents.insert(0, enriched);
+      }
+      _cachedEvents.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      _log('✅ Cached ${enriched.type}');
+
+      // Show any system notifications (toggle checked inside LocalNotificationService too)
+      await _showNotificationsForEvents([enriched]);
+
+      // Emit single enriched event for banner listeners
+      if (!_newEventsController.isClosed) {
+        _log('🔁 Emitting event to banner stream');
+        // Ensure delivery occurs on the next microtask to avoid race conditions
+        Future.microtask(() {
+          if (!_newEventsController.isClosed) {
+            _newEventsController.add(enriched);
+          }
+        });
+      }
+
+      // Emit updated list
+      _emitEvents();
+    } catch (e, st) {
+      _log('❌ addEvent error: $e');
+      if (kDebugMode) {
+        debugPrint('[NotificationsRepository] addEvent stack: $st');
+      }
     }
   }
 
@@ -591,5 +643,6 @@ class NotificationsRepository {
     _log('🛑 Disposing NotificationsRepository');
     _wsSubscription?.cancel();
     _eventsController.close();
+    _newEventsController.close();
   }
 }

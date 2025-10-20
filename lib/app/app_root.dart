@@ -1,11 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/debug/rebuild_counter_overlay.dart';
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
-import 'package:my_app_gps/features/notifications/view/notification_toast.dart';
 import 'package:my_app_gps/theme/app_theme.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
+import 'dart:async';
+import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/data/models/event.dart';
 
 class AppRoot extends ConsumerStatefulWidget {
   const AppRoot({super.key});
@@ -14,6 +18,7 @@ class AppRoot extends ConsumerStatefulWidget {
 }
 
 class _AppRootState extends ConsumerState<AppRoot> {
+  StreamSubscription<Map<String, dynamic>>? _eventSub;
   @override
   void initState() {
     super.initState();
@@ -23,6 +28,66 @@ class _AppRootState extends ConsumerState<AppRoot> {
         precacheCommonMarkers(context);
       }
     });
+
+    // Kick off notifications boot initializer (await DAOs then init repo)
+    // ignore: unused_result
+    ref.read(notificationsBootInitializer);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Rebind to VehicleRepo.onEvent on every rebuild to survive reconnects
+    _subscribeToVehicleEvents();
+  }
+
+  /// Subscribe to VehicleRepo.onEvent stream with reconnection-awareness.
+  /// Cancels any existing subscription and creates a new one to ensure
+  /// notifications continue flowing even after WebSocket reconnects.
+  void _subscribeToVehicleEvents() {
+    // Cancel existing subscription to avoid double-listening
+    _eventSub?.cancel();
+
+    final repo = ref.read(vehicleDataRepositoryProvider);
+    
+    if (kDebugMode) {
+      debugPrint('[AppRoot] 🔗 Subscribing to VehicleRepo.onEvent stream');
+    }
+
+    _eventSub = repo.onEvent.listen(
+      (raw) async {
+        try {
+          final event = Event.fromJson(raw);
+          await ref.read(notificationsRepositoryProvider).addEvent(event);
+          if (kDebugMode) {
+            debugPrint('[AppRoot] 📩 Forwarded ${event.type} → NotificationsRepository');
+          }
+        } catch (e, st) {
+          if (kDebugMode) {
+            debugPrint('[AppRoot] ⚠️ Failed to forward WS event: $e');
+            debugPrint('[AppRoot] Stack trace: $st');
+          }
+        }
+      },
+      onError: (dynamic err, StackTrace st) {
+        if (kDebugMode) {
+          debugPrint('[AppRoot] ❌ VehicleRepo.onEvent error: $err');
+          debugPrint('[AppRoot] Stack trace: $st');
+        }
+      },
+      onDone: () {
+        if (kDebugMode) {
+          debugPrint('[AppRoot] ⚠️ VehicleRepo stream closed, will rebind on next rebuild');
+        }
+        // Optionally retry after a short delay
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            _subscribeToVehicleEvents();
+          }
+        });
+      },
+      cancelOnError: false,
+    );
   }
 
   @override
@@ -38,12 +103,15 @@ class _AppRootState extends ConsumerState<AppRoot> {
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
         routerConfig: router,
-        // Ensure NotificationToastListener has a context under MaterialApp
-        // so it can access the ScaffoldMessenger/Scaffold safely.
-        builder: (context, child) => NotificationToastListener(
-          child: child ?? const SizedBox.shrink(),
-        ),
+        // No global NotificationToastListener here; pages can add locally
+        builder: (context, child) => child ?? const SizedBox.shrink(),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _eventSub?.cancel();
+    super.dispose();
   }
 }

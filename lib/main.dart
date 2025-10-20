@@ -14,6 +14,7 @@ import 'package:my_app_gps/map/tile_network_client.dart';
 import 'package:my_app_gps/map/tile_probe.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,13 +38,17 @@ Future<void> main() async {
   late final SharedPreferences prefs;
   try {
     prefs = await SharedPreferences.getInstance();
-    // ignore: avoid_print
-    print('[CACHE] SharedPreferences initialized');
+      // Inject into SharedPrefsHolder for synchronous access across the app
+      // ignore: avoid_print
+      print('[CACHE] SharedPreferences initialized');
+    // Assign to holder
+    SharedPrefsHolder.instance = prefs;
   } catch (e) {
     // ignore: avoid_print
     print('[CACHE][ERROR] Failed to init SharedPreferences: $e');
     rethrow;
   }
+
 
   // Limit global image cache to reduce memory pressure on low-end devices.
   try {

@@ -6,7 +6,7 @@ import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/features/notifications/view/notification_filter_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_tile.dart';
-import 'package:my_app_gps/features/notifications/view/notification_toast.dart';
+import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// NotificationsPage displays a list of notification events with live updates.
@@ -26,8 +26,7 @@ class NotificationsPage extends ConsumerWidget {
     final notificationsAsync = ref.watch(filteredNotificationsProvider);
     final filter = ref.watch(notificationFilterProvider);
 
-    return NotificationToastListener(
-      child: Scaffold(
+    return Scaffold(
         appBar: AppBar(
           title: const Text('Notifications'),
           actions: [
@@ -56,24 +55,33 @@ class NotificationsPage extends ConsumerWidget {
             const SizedBox(width: 8),
           ],
         ),
-        body: Column(
+        body: Stack(
           children: [
-            // Filter bar
-            const NotificationFilterBar(),
-            // Events list
-            Expanded(
-              child: notificationsAsync.when(
-                data: (events) => _buildEventsList(context, ref, events),
-                loading: () => const Center(
-                  child: CircularProgressIndicator(),
+            Column(
+              children: [
+                // Filter bar
+                const NotificationFilterBar(),
+                // Events list
+                Expanded(
+                  child: notificationsAsync.when(
+                    data: (events) => _buildEventsList(context, ref, events),
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                    error: (error, stack) => _buildErrorView(context, ref, error),
+                  ),
                 ),
-                error: (error, stack) => _buildErrorView(context, ref, error),
-              ),
+              ],
+            ),
+            // Notification banner: also visible on Notifications page
+            const Align(
+              alignment: Alignment.bottomCenter,
+              child: NotificationBanner(),
             ),
           ],
         ),
-      ),
-    );
+      );
+    
   }
 
   Widget _buildEventsList(

@@ -39,6 +39,7 @@ import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart'
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
 import 'package:my_app_gps/features/map/view/map_debug_overlay.dart';
 import 'package:my_app_gps/features/map/view/map_page_lifecycle_mixin.dart';
+import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
 import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
@@ -1630,6 +1631,8 @@ class _MapPageState extends ConsumerState<MapPage>
                       );
                     },
                   ),
+                  // Notification banner: shows on Map page (bottom)
+                  const NotificationBanner(),
                 // OPTIMIZATION: Show cached snapshot overlay during initial load
                 if (MapDebugFlags.showSnapshotOverlay &&
                     _isShowingSnapshot &&
