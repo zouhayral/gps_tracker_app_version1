@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/debug/rebuild_counter_overlay.dart';
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
+import 'package:my_app_gps/features/notifications/view/notification_toast.dart';
 import 'package:my_app_gps/theme/app_theme.dart';
 
 class AppRoot extends ConsumerStatefulWidget {
@@ -32,11 +33,13 @@ class _AppRootState extends ConsumerState<AppRoot> {
     );
     final router = ref.watch(goRouterProvider);
     return RebuildCounterOverlay(
-      child: MaterialApp.router(
-        title: 'GPS Tracker',
-        debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        routerConfig: router,
+      child: NotificationToastListener(
+        child: MaterialApp.router(
+          title: 'GPS Tracker',
+          debugShowCheckedModeBanner: false,
+          theme: buildAppTheme(),
+          routerConfig: router,
+        ),
       ),
     );
   }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
+import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/services/traccar_connection_provider.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -22,7 +25,14 @@ class SettingsPage extends ConsumerWidget {
       ),
     );
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Text('Settings'),
+        actions: [
+          NotificationBadge(
+            onTap: () => context.go(AppRoutes.alerts),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

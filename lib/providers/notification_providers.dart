@@ -1,9 +1,91 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/repositories/notifications_repository.dart';
 import 'package:my_app_gps/services/event_service.dart';
+
+/// Filter model for notification list
+@immutable
+class NotificationFilter {
+  final String? severity; // 'high', 'medium', 'low'
+  final DateTime? date;
+  final DateTimeRange? dateRange;
+
+  const NotificationFilter({
+    this.severity,
+    this.date,
+    this.dateRange,
+  });
+
+  NotificationFilter copyWith({
+    String? Function()? severity,
+    DateTime? Function()? date,
+    DateTimeRange? Function()? dateRange,
+  }) {
+    return NotificationFilter(
+      severity: severity != null ? severity() : this.severity,
+      date: date != null ? date() : this.date,
+      dateRange: dateRange != null ? dateRange() : this.dateRange,
+    );
+  }
+
+  /// Check if any filter is active
+  bool get isActive => severity != null || date != null || dateRange != null;
+
+  /// Clear all filters
+  NotificationFilter clear() => const NotificationFilter();
+
+  /// Apply this filter to a list of events
+  List<Event> apply(List<Event> events) {
+    var filtered = events;
+
+    // Filter by severity
+    if (severity != null) {
+      filtered = filtered.where((event) {
+        return event.severity?.toLowerCase() == severity?.toLowerCase();
+      }).toList();
+    }
+
+    // Filter by date
+    if (date != null) {
+      final targetDate = DateTime(date!.year, date!.month, date!.day);
+      filtered = filtered.where((event) {
+        final eventDate = DateTime(
+          event.timestamp.year,
+          event.timestamp.month,
+          event.timestamp.day,
+        );
+        return eventDate == targetDate;
+      }).toList();
+    }
+
+    // Filter by date range
+    if (dateRange != null) {
+      filtered = filtered.where((event) {
+        return event.timestamp.isAfter(dateRange!.start) &&
+            event.timestamp.isBefore(
+              dateRange!.end.add(const Duration(days: 1)),
+            );
+      }).toList();
+    }
+
+    return filtered;
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is NotificationFilter &&
+        other.severity == severity &&
+        other.date == date &&
+        other.dateRange == dateRange;
+  }
+
+  @override
+  int get hashCode => Object.hash(severity, date, dateRange);
+}
 
 /// Provider for the NotificationsRepository
 ///
@@ -208,4 +290,55 @@ final notificationStatsProvider =
   }
 
   return stats;
+});
+
+/// Provider for notification filter state
+///
+/// Manages the current filter applied to the notifications list.
+/// Use this to get/set severity, date, or date range filters.
+///
+/// Example:
+/// ```dart
+/// // Set severity filter
+/// ref.read(notificationFilterProvider.notifier).state =
+///   NotificationFilter(severity: 'high');
+///
+/// // Clear all filters
+/// ref.read(notificationFilterProvider.notifier).state =
+///   const NotificationFilter();
+/// ```
+final notificationFilterProvider =
+    StateProvider.autoDispose<NotificationFilter>((ref) {
+  return const NotificationFilter();
+});
+
+/// Provider for filtered notifications stream
+///
+/// Applies the current filter from notificationFilterProvider
+/// to the notifications stream.
+///
+/// Example:
+/// ```dart
+/// final filteredEvents = ref.watch(filteredNotificationsProvider);
+/// filteredEvents.when(
+///   data: (events) => ListView.builder(...),
+///   ...
+/// )
+/// ```
+final filteredNotificationsProvider =
+    StreamProvider.autoDispose<List<Event>>((ref) {
+  final notificationsAsync = ref.watch(notificationsStreamProvider);
+  final filter = ref.watch(notificationFilterProvider);
+
+  return notificationsAsync.when(
+    data: (events) {
+      // Apply filter if active
+      if (filter.isActive) {
+        return Stream.value(filter.apply(events));
+      }
+      return Stream.value(events);
+    },
+    loading: () => Stream.value([]),
+    error: (error, stack) => Stream.error(error, stack),
+  );
 });
