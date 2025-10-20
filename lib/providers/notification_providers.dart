@@ -45,7 +45,30 @@ class NotificationFilter {
     // Filter by severity
     if (severity != null) {
       filtered = filtered.where((event) {
-        return event.severity?.toLowerCase() == severity?.toLowerCase();
+        final sel = severity!.toLowerCase();
+        final evSeverity = event.severity?.toLowerCase();
+        // First support new priority chip values via attributes['priority']
+        final attrPriority = (event.attributes['priority'] as String?)?.toLowerCase();
+        if (attrPriority != null) {
+          return attrPriority == sel; // 'high'|'medium'|'low'
+        }
+        // Backward compatibility: if severity is used directly ('critical'|'warning'|'info')
+        // Map selected chip ('high'|'medium'|'low') to severity buckets
+        String? mappedSeverity;
+        switch (sel) {
+          case 'high':
+            mappedSeverity = 'critical';
+            break;
+          case 'medium':
+            mappedSeverity = 'warning';
+            break;
+          case 'low':
+            mappedSeverity = 'info';
+            break;
+          default:
+            mappedSeverity = sel;
+        }
+        return evSeverity == mappedSeverity;
       }).toList();
     }
 

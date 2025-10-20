@@ -84,7 +84,9 @@ class Event {
         eventTimeMs: timestamp.millisecondsSinceEpoch,
         positionId: positionId,
         geofenceId: geofenceId,
-        priority: severity,
+        // Persist both severity and priority correctly
+        severity: severity,
+        priority: _priorityForSeverity(severity),
         message: message ?? '',
         attributesJson: attributes.isNotEmpty ? attributes.toString() : '{}',
         isRead: isRead,
@@ -97,10 +99,14 @@ class Event {
         type: e.eventType,
         timestamp: DateTime.fromMillisecondsSinceEpoch(e.eventTimeMs),
         message: e.message,
-        severity: e.priority,
+        // Read proper severity from entity
+        severity: e.severity,
         positionId: e.positionId,
         geofenceId: e.geofenceId,
-        attributes: {},
+        // Ensure priority is available in attributes for filtering
+        attributes: {
+          if (e.priority != null) 'priority': e.priority,
+        },
         isRead: e.isRead,
       );
 
@@ -196,6 +202,18 @@ class Event {
         attributes: attributes,
         isRead: isRead ?? this.isRead,
       );
+}
+
+/// Helper to map severity buckets to priority labels used by UI chips
+String _priorityForSeverity(String? severity) {
+  switch ((severity ?? '').toLowerCase()) {
+    case 'critical':
+      return 'high';
+    case 'warning':
+      return 'medium';
+    default:
+      return 'low';
+  }
 }
 
 

@@ -6,6 +6,18 @@ import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/services/traccar_connection_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' show StateProvider;
+
+/// Persistent notification toggle provider (default ON)
+final notificationEnabledProvider = StateProvider<bool>((ref) {
+  if (SharedPrefsHolder.isInitialized) {
+    final prefs = SharedPrefsHolder.instance;
+    return prefs.getBool('notifications_enabled') ?? true;
+  }
+  return true; // fallback when SharedPrefs not yet injected
+});
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -43,6 +55,30 @@ class SettingsPage extends ConsumerWidget {
               connected ? Icons.cloud_done : Icons.cloud_off,
               color: connected ? Colors.green : Colors.red,
             ),
+          ),
+          const SizedBox(height: 8),
+          // Notifications toggle
+          Consumer(
+            builder: (context, ref, _) {
+              final enabled = ref.watch(notificationEnabledProvider);
+              return SwitchListTile.adaptive(
+                value: enabled,
+                onChanged: (value) async {
+                  ref.read(notificationEnabledProvider.notifier).state = value;
+                  final prefs = SharedPrefsHolder.isInitialized
+                      ? SharedPrefsHolder.instance
+                      : await SharedPreferences.getInstance();
+                  await prefs.setBool('notifications_enabled', value);
+                  debugPrint('[Settings] Notifications ${value ? 'enabled' : 'disabled'}');
+                },
+                title: const Text('Notifications'),
+                subtitle: const Text(
+                  'Turn off to stop receiving live alerts. You can still view them in the Alerts tab.',
+                ),
+                secondary: const Icon(Icons.notifications),
+                activeColor: Colors.lightGreen,
+              );
+            },
           ),
           const SizedBox(height: 8),
           ElevatedButton.icon(

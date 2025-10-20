@@ -146,9 +146,16 @@ class NotificationsRepository {
         }
       }
 
+      // Determine severity based on type if missing
+      final resolvedSeverity = (event.severity != null && event.severity!.trim().isNotEmpty)
+          ? event.severity!.toLowerCase()
+          : _severityForEventType(event.type);
+
       // Attach to attributes as well for downstream consumers
       final attrs = Map<String, dynamic>.from(event.attributes);
       attrs['deviceName'] = resolvedName ?? 'Unknown Device';
+      // Also attach priority in high/medium/low form for UI chips using attributes
+      attrs['priority'] = _priorityForSeverity(resolvedSeverity);
 
       if (kDebugMode) {
         debugPrint('[NotificationsRepository] 🧩 Device name resolved for ${event.deviceId} → ${attrs['deviceName']}');
@@ -162,7 +169,7 @@ class NotificationsRepository {
           type: event.type,
           timestamp: event.timestamp,
           message: event.message,
-          severity: event.severity,
+          severity: resolvedSeverity,
           positionId: event.positionId,
           geofenceId: event.geofenceId,
           attributes: attrs,
@@ -172,6 +179,35 @@ class NotificationsRepository {
     }
 
     return enrichedEvents;
+  }
+
+  /// Map event type to severity buckets used by UI filtering ('critical','warning','info').
+  String _severityForEventType(String type) {
+    switch (type) {
+      case 'deviceOffline':
+      case 'geofenceExit':
+      case 'alarm':
+      case 'sos':
+        return 'critical';
+      case 'ignitionOn':
+      case 'ignitionOff':
+      case 'overspeed':
+        return 'warning';
+      default:
+        return 'info';
+    }
+  }
+
+  /// Map severity to priority chip values ('high','medium','low')
+  String _priorityForSeverity(String severity) {
+    switch (severity.toLowerCase()) {
+      case 'critical':
+        return 'high';
+      case 'warning':
+        return 'medium';
+      default:
+        return 'low';
+    }
   }
 
   /// Load cached events from ObjectBox and emit to stream

@@ -106,8 +106,11 @@ class NotificationsPage extends ConsumerWidget {
                     .call(event.id);
               }
               
-              // Optional: Navigate to event details or related device
+              // Close any open bottom overlays/toasts before showing details
               if (context.mounted) {
+                ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+                // If you use overlay support or Flushbar elsewhere, add dismiss hooks here
+                await Future<void>.delayed(const Duration(milliseconds: 150));
                 _showEventDetails(context, event);
               }
             },
@@ -188,6 +191,8 @@ class NotificationsPage extends ConsumerWidget {
   }
 
   void _showEventDetails(BuildContext context, Event event) {
+    // Defensive: ensure any SnackBars are hidden when opening details
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     showModalBottomSheet<void>(
       context: context,
       builder: (context) => Padding(

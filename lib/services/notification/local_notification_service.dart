@@ -6,6 +6,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:intl/intl.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 
 /// Service for managing local push notifications for Traccar events
 /// 
@@ -153,6 +155,23 @@ class LocalNotificationService {
     if (!_initialized) {
       _log('⚠️ Service not initialized, call initialize() first');
       return;
+    }
+
+    // Respect global notification toggle
+    try {
+      bool enabled = true;
+      if (SharedPrefsHolder.isInitialized) {
+        enabled = SharedPrefsHolder.instance.getBool('notifications_enabled') ?? true;
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        enabled = prefs.getBool('notifications_enabled') ?? true;
+      }
+      if (!enabled) {
+        _log('🔕 Notifications disabled, skipping push for event ${event.id}');
+        return;
+      }
+    } catch (_) {
+      // If prefs read fails, assume enabled to avoid silent miss due to prefs error
     }
 
     // Prevent duplicate notifications
