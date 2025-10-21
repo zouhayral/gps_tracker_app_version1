@@ -566,11 +566,24 @@ class VehicleDataRepository {
     final replayAnchor = await eventService.getReplayAnchor();
     // Fallback to latest cached event timestamp
     final cachedTs = await eventService.getLatestCachedEventTimestamp();
-    // Final fallback to 30-minute window
-    final since = replayAnchor ?? cachedTs ?? DateTime.now().subtract(const Duration(minutes: 30));
-    
+
+    // Establish bounded backfill window [from, to]
+    var to = DateTime.now();
+    var from = replayAnchor ?? cachedTs ?? to.subtract(const Duration(minutes: 30));
+
+    // Guard against clock skew or invalid range
+    if (!from.isBefore(to)) {
+      // If from >= to, pull a small safety window
+      from = to.subtract(const Duration(minutes: 15));
+    }
+    // Cap the maximum window to avoid oversized responses (max 12 hours)
+    const maxWindow = Duration(hours: 12);
+    if (to.difference(from) > maxWindow) {
+      from = to.subtract(maxWindow);
+    }
+
     if (kDebugMode) {
-      debugPrint('[VehicleRepo] 🔄 Reconnected — backfilling events since $since');
+      debugPrint('[VehicleRepo] 🔄 Reconnected — backfilling events from $from to $to');
       if (replayAnchor != null) {
         debugPrint('[VehicleRepo] ⏱️ Using replay anchor from last processed event');
       } else if (cachedTs != null) {
@@ -579,9 +592,9 @@ class VehicleDataRepository {
         debugPrint('[VehicleRepo] ⏰ Using 30-minute fallback window');
       }
     }
-    
+
     try {
-      final missed = await eventService.fetchEvents(from: since);
+      final missed = await eventService.fetchEvents(from: from, to: to);
       if (missed.isEmpty) {
         if (kDebugMode) debugPrint('[VehicleRepo] ✅ No missed events');
         return;

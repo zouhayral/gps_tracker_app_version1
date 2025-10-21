@@ -189,6 +189,13 @@ final markAllAsReadProvider = FutureProvider.autoDispose<void>((ref) async {
   }
 });
 
+/// Provider for deleting a single notification by id
+final deleteNotificationProvider =
+    FutureProvider.autoDispose.family<void, String>((ref, eventId) async {
+  final repository = ref.watch(notificationsRepositoryProvider);
+  await repository.deleteEvent(eventId);
+});
+
 /// Provider for clearing all notifications
 ///
 /// Use with caution - this will delete all cached events from ObjectBox.

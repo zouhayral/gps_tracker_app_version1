@@ -827,6 +827,26 @@ class NotificationsRepository {
     }
   }
 
+  /// Delete a single event by id from local cache and ObjectBox
+  Future<void> deleteEvent(String eventId) async {
+    try {
+      _log('🗑️ Deleting event $eventId');
+      await _eventsDao.delete(eventId);
+
+      // Remove from in-memory cache
+      _cachedEvents.removeWhere((e) => e.id == eventId);
+
+      // Also clean from recent dedup set
+      _recentEventIds.remove(eventId);
+
+      _emitEvents();
+      _log('✅ Event $eventId deleted');
+    } catch (e) {
+      _log('❌ Failed to delete event: $e');
+      rethrow;
+    }
+  }
+
   /// Emit current events to stream
   void _emitEvents() {
     if (_disposed) {

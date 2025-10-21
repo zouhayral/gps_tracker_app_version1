@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
-import 'package:my_app_gps/features/notifications/view/notification_filter_bar.dart';
+import 'package:my_app_gps/features/notifications/view/notification_action_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_tile.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 
@@ -85,32 +85,71 @@ class NotificationsPage extends ConsumerWidget {
         // Trigger refresh from API
         final _ = await ref.refresh(refreshNotificationsProvider.future);
       },
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         itemCount: events.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final event = events[index];
-          return NotificationTile(
-            event: event,
-            onTap: () async {
-              // Mark as read when tapped
-              if (!event.isRead) {
-                await ref
-                    .read(markEventAsReadProvider.notifier)
-                    .call(event.id);
-              }
-              
-              // Close any open bottom overlays/toasts before showing details
-              if (context.mounted) {
-                ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
-                // If you use overlay support or Flushbar elsewhere, add dismiss hooks here
-                await Future<void>.delayed(const Duration(milliseconds: 150));
-                _showEventDetails(context, event);
-              }
-            },
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Dismissible(
+              key: ValueKey('event-${event.id}'),
+              direction: DismissDirection.horizontal,
+              background: _buildSwipeBackground(context, true),
+              secondaryBackground: _buildSwipeBackground(context, false),
+              onDismissed: (_) async {
+                // Delete the notification locally
+                await ref.read(deleteNotificationProvider(event.id).future);
+                // Optional: SnackBar undo could be implemented by re-inserting if needed
+              },
+              child: NotificationTile(
+                event: event,
+                onTap: () async {
+                  // Mark as read when tapped
+                  if (!event.isRead) {
+                    await ref
+                        .read(markEventAsReadProvider.notifier)
+                        .call(event.id);
+                  }
+
+                  // Close any open bottom overlays/toasts before showing details
+                  if (context.mounted) {
+                    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+                    await Future<void>.delayed(const Duration(milliseconds: 150));
+                    _showEventDetails(context, event);
+                  }
+                },
+              ),
+            ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSwipeBackground(BuildContext context, bool leftToRight) {
+    final color = Colors.redAccent;
+    final alignment = leftToRight ? Alignment.centerLeft : Alignment.centerRight;
+    final icon = Icons.delete_forever_rounded;
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      alignment: alignment,
+      child: Row(
+        mainAxisAlignment:
+            leftToRight ? MainAxisAlignment.start : MainAxisAlignment.end,
+        children: [
+          Icon(icon, color: Colors.white, size: 28),
+          const SizedBox(width: 8),
+          Text(
+            'Delete',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }

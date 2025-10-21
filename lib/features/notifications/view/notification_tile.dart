@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+// import 'package:intl/intl.dart';
 
 import 'package:my_app_gps/data/models/event.dart';
 
@@ -24,106 +24,229 @@ class NotificationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isUnread = !event.isRead;
+    final priority = (event.attributes['priority']?.toString() ??
+            event.severity?.toLowerCase() ??
+            'low')
+        .toLowerCase();
+    final colors = _paletteForPriority(context, priority);
 
-    return ListTile(
+    return InkWell(
       onTap: onTap,
-      leading: _buildLeadingIcon(context, isUnread),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '${event.deviceName ?? 'Unknown Device'} – ${event.type}',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
-              ),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.background,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: colors.border, width: 1),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildLeadingIcon(context, isUnread, bg: colors.iconBg, fg: colors.iconFg),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _titleForEvent(),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                          _PriorityBadge(label: priority, color: colors.badgeBg, textColor: colors.badgeFg),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _subtitleForEvent(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-          if (isUnread)
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                shape: BoxShape.circle,
-              ),
-            ),
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (event.message != null && event.message!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              event.message!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: isUnread
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  'dismiss',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  _relativeTime(event.timestamp),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.notifications_active_outlined,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ],
             ),
           ],
-          const SizedBox(height: 4),
-          Text(
-            _formatTimestamp(event.timestamp),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
-          ),
-        ],
+        ),
       ),
-      trailing: Icon(
-        isUnread ? Icons.mark_email_unread : Icons.done,
-        color: isUnread ? theme.colorScheme.primary : theme.colorScheme.outline,
-        size: 20,
-      ),
-      tileColor: isUnread
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.1)
-          : null,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
     );
   }
 
-  Widget _buildLeadingIcon(BuildContext context, bool isUnread) {
-    final theme = Theme.of(context);
-    final iconColor = isUnread
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurfaceVariant;
-
+  Widget _buildLeadingIcon(BuildContext context, bool isUnread,
+      {required Color bg, required Color fg}) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
-        color: event.color.withValues(alpha: 0.15),
+        color: bg,
         shape: BoxShape.circle,
       ),
+      alignment: Alignment.center,
       child: Icon(
         event.icon,
-        color: iconColor,
+        color: fg,
         size: 24,
       ),
     );
   }
 
-  String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
+  // _formatTimestamp retained in previous design; replaced by _relativeTime
 
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inHours < 1) {
-      final minutes = difference.inMinutes;
-      return '$minutes ${minutes == 1 ? 'minute' : 'minutes'} ago';
-    } else if (difference.inHours < 24) {
-      final hours = difference.inHours;
-      return '$hours ${hours == 1 ? 'hour' : 'hours'} ago';
-    } else if (difference.inDays < 7) {
-      final days = difference.inDays;
-      return '$days ${days == 1 ? 'day' : 'days'} ago';
-    } else {
-      return DateFormat('MMM d, y • HH:mm').format(timestamp);
+  String _relativeTime(DateTime timestamp) {
+    final now = DateTime.now();
+    final diff = now.difference(timestamp);
+    if (diff.inMinutes < 60) {
+      final m = diff.inMinutes.clamp(0, 59);
+      return '$m min';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours} h';
+    }
+    return '${diff.inDays} d';
+  }
+
+  String _titleForEvent() {
+    // Map known types to user-friendly titles similar to the mock
+    final t = event.type.toLowerCase();
+    switch (t) {
+      case 'deviceoffline':
+      case 'device offline':
+        return 'device off line';
+      case 'geofenceexit':
+      case 'geofence exit':
+        return 'Geo-fence exit';
+      case 'geofenceenter':
+        return 'Geo-fence enter';
+      case 'ignitionon':
+        return 'Ignition on';
+      case 'ignitionoff':
+        return 'Ignition off';
+      default:
+        return event.type;
     }
   }
+
+  String _subtitleForEvent() {
+    final name = event.deviceName ?? 'Unknown Device';
+    final msg = (event.message != null && event.message!.trim().isNotEmpty)
+        ? event.message!
+        : '';
+    if (msg.isEmpty) return '#$name';
+    return '#$name ,${msg.trim()}';
+  }
+
+  _PriorityPalette _paletteForPriority(BuildContext context, String priority) {
+    // Colors inspired by the mock: high(red), medium(orange), low(purple)
+    switch (priority) {
+      case 'high':
+        return _PriorityPalette(
+          background: const Color(0xFFF1F8E9), // light green background like mock
+          border: const Color(0xFFE0E6D6),
+          iconBg: const Color(0xFFFFEBEE),
+          iconFg: const Color(0xFFD32F2F),
+          badgeBg: const Color(0xFFE53935),
+          badgeFg: Colors.white,
+        );
+      case 'medium':
+        return _PriorityPalette(
+          background: const Color(0xFFF1F8E9),
+          border: const Color(0xFFE0E6D6),
+          iconBg: const Color(0xFFFFF3E0),
+          iconFg: const Color(0xFFEF6C00),
+          badgeBg: const Color(0xFFFF8F00),
+          badgeFg: Colors.white,
+        );
+      default:
+        return _PriorityPalette(
+          background: const Color(0xFFF1F8E9),
+          border: const Color(0xFFE0E6D6),
+          iconBg: const Color(0xFFEDE7F6),
+          iconFg: const Color(0xFF5E35B1),
+          badgeBg: const Color(0xFF4E3E67),
+          badgeFg: Colors.white,
+        );
+    }
+  }
+}
+
+class _PriorityBadge extends StatelessWidget {
+  const _PriorityBadge({required this.label, required this.color, required this.textColor});
+  final String label;
+  final Color color;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _PriorityPalette {
+  const _PriorityPalette({
+    required this.background,
+    required this.border,
+    required this.iconBg,
+    required this.iconFg,
+    required this.badgeBg,
+    required this.badgeFg,
+  });
+  final Color background;
+  final Color border;
+  final Color iconBg;
+  final Color iconFg;
+  final Color badgeBg;
+  final Color badgeFg;
 }
