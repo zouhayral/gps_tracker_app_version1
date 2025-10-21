@@ -8,6 +8,7 @@ import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/providers/connectivity_provider.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/event_service.dart';
@@ -593,28 +594,66 @@ class VehicleDataRepository {
         debugPrint('[VehicleRepo] ⏱️ Using replay anchor from last processed event');
       } else if (cachedTs != null) {
         debugPrint('[VehicleRepo] 📦 Using latest cached event timestamp');
-      } else {
-        debugPrint('[VehicleRepo] ⏰ Using 30-minute fallback window');
       }
     }
 
     try {
-      final missed = await eventService.fetchEvents(from: from, to: to);
-      if (missed.isEmpty) {
+      // Some backends require deviceId to return events. Fetch per-device.
+      // Prefer active device notifiers; fallback to full device list.
+      var deviceIds = _notifiers.keys.toList();
+      if (deviceIds.isEmpty) {
+        try {
+          final devices = await deviceService.fetchDevices();
+          deviceIds = devices.map((d) => d['id']).whereType<int>().toList();
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[VehicleRepo] ⚠️ Failed to load devices for backfill: $e');
+          }
+        }
+      }
+
+      if (deviceIds.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('[VehicleRepo] ⚠️ No deviceIds available for backfill');
+        }
+        return;
+      }
+
+      // Add a small safety margin to the from time to avoid off-by-one gaps
+      final safeFrom = from.subtract(const Duration(minutes: 1));
+
+      final allMissed = <Event>[];
+      for (final id in deviceIds) {
+        try {
+          final list = await eventService.fetchEvents(
+            deviceId: id,
+            from: safeFrom,
+            to: to,
+          );
+          if (list.isNotEmpty) allMissed.addAll(list);
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[VehicleRepo] ⚠️ Backfill fetch failed for device $id: $e');
+          }
+        }
+      }
+
+      if (allMissed.isEmpty) {
         if (kDebugMode) debugPrint('[VehicleRepo] ✅ No missed events');
         return;
       }
+
       // Notify recovered count once per backfill
       if (!_recoveredEventsController.isClosed) {
-        _recoveredEventsController.add(missed.length);
+        _recoveredEventsController.add(allMissed.length);
       }
-      for (final e in missed) {
+      for (final e in allMissed) {
         if (!_eventController.isClosed) {
           _eventController.add(e.toJson());
         }
       }
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] ✅ Replayed ${missed.length} missed events');
+        debugPrint('[VehicleRepo] ✅ Replayed ${allMissed.length} missed events');
       }
     } catch (e) {
       if (kDebugMode) {
