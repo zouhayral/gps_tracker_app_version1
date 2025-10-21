@@ -134,7 +134,7 @@ class _RecoveredEventsBannerState extends ConsumerState<RecoveredEventsBanner> {
                   const SizedBox(width: 8),
                   TextButton(
                     onPressed: _onView,
-                    child: const Text('View'),
+                    child: const Text('New'),
                   ),
                 ],
               ),

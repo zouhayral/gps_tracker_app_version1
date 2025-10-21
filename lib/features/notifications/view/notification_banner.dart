@@ -174,7 +174,7 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
 										const SizedBox(width: 8),
 										TextButton(
 											onPressed: _onViewPressed,
-											child: const Text('View'),
+											child: const Text('New'),
 										),
 									],
 								),
