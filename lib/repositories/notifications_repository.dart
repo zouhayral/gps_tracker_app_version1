@@ -8,6 +8,7 @@ import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/entities/event_entity.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -525,6 +526,9 @@ class NotificationsRepository {
         // Deduplicate recently seen events by id
         if (_recentEventIds.contains(event.id)) {
           _log('🔁 Skipping duplicate event ${event.id}');
+          if (kDebugMode) {
+            DevDiagnostics.instance.incrementDedupSkipped();
+          }
           continue;
         }
         _recentEventIds.add(event.id);
@@ -614,6 +618,9 @@ class NotificationsRepository {
       // Deduplicate by id
       if (_recentEventIds.contains(event.id)) {
         _log('🔁 Skipping duplicate addEvent ${event.id}');
+        if (kDebugMode) {
+          DevDiagnostics.instance.incrementDedupSkipped();
+        }
         return;
       }
       _recentEventIds.add(event.id);

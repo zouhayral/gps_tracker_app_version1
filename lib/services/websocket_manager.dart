@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 
 enum WebSocketStatus { connecting, connected, disconnected, retrying }
 
@@ -161,6 +162,10 @@ class WebSocketManager extends Notifier<WebSocketState> {
               _isFullyConnected = true;
               state = state.copyWith(status: WebSocketStatus.connected);
               _log('[WS] ✅ Connection confirmed (first message received)');
+              // Dev diagnostics: count successful (re)connects in debug
+              if (kDebugMode) {
+                DevDiagnostics.instance.onWsConnected();
+              }
             }
             
             if (msg is Map<String, dynamic> && msg['type'] == 'pong') {
@@ -170,6 +175,9 @@ class WebSocketManager extends Notifier<WebSocketState> {
               state = state.copyWith(pingMs: latency);
               if (kDebugMode && verboseSocketLogs) {
                 _log('[WS][PONG] latency: ${latency}ms');
+              }
+              if (kDebugMode) {
+                DevDiagnostics.instance.recordPingLatency(latency.toDouble());
               }
             } else if (msg is Map<String, dynamic>) {
               _controller?.add(msg);

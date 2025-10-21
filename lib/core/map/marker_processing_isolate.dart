@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 
 /// Background isolate for heavy marker processing operations
 /// Moves position filtering and marker creation off the main thread
@@ -63,7 +64,13 @@ class MarkerProcessingIsolate {
   ) async {
     if (!_isInitialized || _sendPort == null) {
       // Fallback to main thread if isolate not ready
-      return _processMarkersSync(positions, devices, selectedIds, query);
+      final sw = Stopwatch()..start();
+      final result = _processMarkersSync(positions, devices, selectedIds, query);
+      sw.stop();
+      if (kDebugMode) {
+        DevDiagnostics.instance.recordClusterCompute(sw.elapsedMilliseconds);
+      }
+      return result;
     }
 
     try {
@@ -79,6 +86,7 @@ class MarkerProcessingIsolate {
       });
 
       // Send work to isolate
+      final sw = Stopwatch()..start();
       _sendPort!.send(_MarkerProcessingRequest(
         positions: positions,
         devices: devices,
@@ -87,13 +95,24 @@ class MarkerProcessingIsolate {
       ),);
 
       // Timeout after 100ms and fall back to sync
-      return await completer.future.timeout(
+      final res = await completer.future.timeout(
         const Duration(milliseconds: 100),
         onTimeout: () {
           subscription?.cancel();
-          return _processMarkersSync(positions, devices, selectedIds, query);
+          final sw2 = Stopwatch()..start();
+          final r = _processMarkersSync(positions, devices, selectedIds, query);
+          sw2.stop();
+          if (kDebugMode) {
+            DevDiagnostics.instance.recordClusterCompute(sw2.elapsedMilliseconds);
+          }
+          return r;
         },
       );
+      sw.stop();
+      if (kDebugMode) {
+        DevDiagnostics.instance.recordClusterCompute(sw.elapsedMilliseconds);
+      }
+      return res;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[MarkerIsolate] Error: $e, falling back to sync');

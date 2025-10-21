@@ -15,6 +15,7 @@ import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider for cache (requires SharedPreferences) - PUBLIC for override in main
@@ -638,6 +639,19 @@ class VehicleDataRepository {
         debugPrint('[VehicleRepo] 🧭 Backfilling per-device for ${deviceIds.length} device(s): $deviceIds');
       }
 
+      // Diagnostics: mark a backfill request
+      assert(() {
+        try {
+          // Import inline to avoid release overhead
+          // ignore: unused_result
+          () => true; // placeholder to keep assert body valid
+        } catch (_) {}
+        return true;
+      }());
+      // Mark a backfill request in diagnostics (counting once per reconnect)
+      if (kDebugMode) {
+        DevDiagnostics.instance.onBackfillRequested(deviceIds.length);
+      }
       final allMissed = <Event>[];
       for (final id in deviceIds) {
         try {
@@ -673,6 +687,14 @@ class VehicleDataRepository {
       }
       if (kDebugMode) {
         debugPrint('[VehicleRepo] ✅ Replayed ${allMissed.length} missed events');
+      }
+      // Diagnostics: applied backfilled events
+      if (kDebugMode) {
+        try {
+          // Avoid a hard dependency in release builds
+          // ignore: unnecessary_statements
+          DevDiagnostics.instance.onBackfillApplied(allMissed.length);
+        } catch (_) {}
       }
     } catch (e) {
       if (kDebugMode) {
