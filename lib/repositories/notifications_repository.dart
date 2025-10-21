@@ -51,6 +51,8 @@ class NotificationsRepository {
 
   // WebSocket subscription
   StreamSubscription<CustomerWebSocketMessage>? _wsSubscription;
+  // Vehicle repo backfill subscription (raw event maps rebroadcast on reconnect)
+  StreamSubscription<Map<String, dynamic>>? _vehicleEventSubscription;
   // Provider subscription to customerWebSocketProvider to avoid dispose race
   ProviderSubscription<AsyncValue<CustomerWebSocketMessage>>? _wsProviderSubscription;
 
@@ -130,6 +132,9 @@ class NotificationsRepository {
 
       // Listen to WebSocket for real-time events
       _listenToWebSocket();
+
+  // Also listen to VehicleDataRepository.onEvent to capture backfilled events
+  _listenToVehicleRepoEvents();
 
       // Periodically persist the dedup set to disk and prune old entries
       _recentIdsCleanupTimer?.cancel();
@@ -305,15 +310,28 @@ class NotificationsRepository {
 
   /// Map event type to severity buckets used by UI filtering ('critical','warning','info').
   String _severityForEventType(String type) {
-    switch (type) {
-      case 'deviceOffline':
-      case 'geofenceExit':
+    // Normalize for robust matching
+    final t = type.trim().toLowerCase();
+
+    // High priority (critical): moving/stopped, overspeed, alarms
+    if (t == 'devicemoving' || t == 'devicestopped' || t == 'moving' || t == 'stopped') {
+      return 'critical';
+    }
+    switch (t) {
+      case 'overspeed':
       case 'alarm':
       case 'sos':
         return 'critical';
-      case 'ignitionOn':
-      case 'ignitionOff':
-      case 'overspeed':
+      // Medium priority (warning): device online/offline, geofence exits if desired
+      case 'deviceonline':
+      case 'deviceoffline':
+        return 'warning';
+      // Low priority (info): ignition changes
+      case 'ignitionon':
+      case 'ignitionoff':
+        return 'info';
+      // Keep previously treated geofence exits as medium to align with mock variety
+      case 'geofenceexit':
         return 'warning';
       default:
         return 'info';
@@ -399,6 +417,32 @@ class NotificationsRepository {
       _log('✅ WebSocket subscription (ref.listen) initiated');
     } catch (e) {
       _log('⚠️ Failed to subscribe to WebSocket: $e');
+    }
+  }
+
+  /// Listen to VehicleDataRepository raw events stream.
+  ///
+  /// VehicleDataRepository emits raw event maps on reconnect backfill.
+  /// We convert them into Event models and push through the same pipeline
+  /// as live WebSocket events to update cache/UI immediately.
+  void _listenToVehicleRepoEvents() {
+    try {
+      _log('🧩 Subscribing to VehicleDataRepository.onEvent');
+      _vehicleEventSubscription?.cancel();
+      final vehicleRepo = _ref.read(vehicleDataRepositoryProvider);
+      _vehicleEventSubscription = vehicleRepo.onEvent.listen((raw) {
+        if (_disposed) return;
+        try {
+          final event = Event.fromJson(raw);
+          // Reuse common addEvent path (enriches, persists, updates cache, anchor, notifications)
+          unawaited(addEvent(event));
+        } catch (e) {
+          _log('⚠️ Failed to parse VehicleRepo event: $e');
+        }
+      });
+      _log('✅ VehicleRepo events subscription started');
+    } catch (e) {
+      _log('⚠️ Failed to subscribe to VehicleRepo events: $e');
     }
   }
 
@@ -895,6 +939,7 @@ class NotificationsRepository {
     // Cancel WebSocket subscriptions
     _wsSubscription?.cancel();
     _wsProviderSubscription?.close();
+  _vehicleEventSubscription?.cancel();
 
     // Close stream controllers
     _eventsController.close();

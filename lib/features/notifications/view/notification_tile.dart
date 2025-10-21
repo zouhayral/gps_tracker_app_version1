@@ -68,14 +68,40 @@ class NotificationTile extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      Text(
-                        _subtitleForEvent(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurface,
-                        ),
+                      // Device name row with device icon and bold name
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.devices_other_outlined,
+                            size: 16,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              event.deviceName ?? 'Unknown Device',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
+                      if ((event.message ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          (event.message ?? '').trim(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -84,13 +110,6 @@ class NotificationTile extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Text(
-                  'dismiss',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
                 const Spacer(),
                 Text(
                   _relativeTime(event.timestamp),
@@ -166,14 +185,7 @@ class NotificationTile extends StatelessWidget {
     }
   }
 
-  String _subtitleForEvent() {
-    final name = event.deviceName ?? 'Unknown Device';
-    final msg = (event.message != null && event.message!.trim().isNotEmpty)
-        ? event.message!
-        : '';
-    if (msg.isEmpty) return '#$name';
-    return '#$name ,${msg.trim()}';
-  }
+  // Subtitle format replaced by explicit device name row + message text
 
   _PriorityPalette _paletteForPriority(BuildContext context, String priority) {
     // Colors inspired by the mock: high(red), medium(orange), low(purple)
