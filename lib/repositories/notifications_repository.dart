@@ -2,12 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/entities/event_entity.dart';
 import 'package:my_app_gps/data/models/event.dart';
-import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
 import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart';
@@ -51,16 +50,43 @@ class NotificationsRepository {
 
   // WebSocket subscription
   StreamSubscription<CustomerWebSocketMessage>? _wsSubscription;
+  // Provider subscription to customerWebSocketProvider to avoid dispose race
+  ProviderSubscription<AsyncValue<CustomerWebSocketMessage>>? _wsProviderSubscription;
 
   // Cached events list (in-memory)
   List<Event> _cachedEvents = [];
   bool _initialized = false;
+  bool _disposed = false; // Disposal guard
+  // Recent event IDs for deduplication (rolling window)
+  final Set<String> _recentEventIds = <String>{};
+  Timer? _recentIdsCleanupTimer;
 
   // Device name cache for fast lookups
   final Map<int, String> _deviceNameCache = {};
 
   /// Stream of notification events for UI
-  Stream<List<Event>> watchEvents() => _eventsController.stream;
+  ///
+  /// Important: Emit a first value immediately (cached or empty) so any
+  /// StreamProvider listening does not stay in the loading state waiting
+  /// for the first onData from the broadcast controller.
+  Stream<List<Event>> watchEvents() async* {
+    _log('👀 watchEvents() called - someone is listening to the stream');
+
+    // Emit current cache (or empty) right away to unblock UI
+    if (_disposed) {
+      _log('⏭️ Repository disposed, emitting empty list');
+      yield const <Event>[];
+    } else if (_cachedEvents.isNotEmpty) {
+      _log('📤 Emitting initial cached events: ${_cachedEvents.length}');
+      yield List.unmodifiable(_cachedEvents);
+    } else {
+      _log('📤 Emitting initial empty list');
+      yield const <Event>[];
+    }
+
+    // Then forward any subsequent updates from the broadcast controller
+    yield* _eventsController.stream;
+  }
   /// Stream of enriched events as they are added (for banner/toast usage)
   Stream<Event> watchNewEvents() => _newEventsController.stream;
 
@@ -71,14 +97,30 @@ class NotificationsRepository {
 
     _log('🚀 Initializing NotificationsRepository');
 
-    // Prefetch device names for fast lookups
-    _prefetchDeviceNames();
+    // Start async initialization without blocking constructor
+    _initAsync();
 
-    // Load initial cached events from ObjectBox
-    _loadCachedEvents();
+    // Periodically cleanup the dedup set to prevent unbounded growth
+    _recentIdsCleanupTimer?.cancel();
+    _recentIdsCleanupTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      _recentEventIds.clear();
+    });
+  }
 
-    // Listen to WebSocket for real-time events
-    _listenToWebSocket();
+  /// Async initialization to properly handle await operations
+  Future<void> _initAsync() async {
+    try {
+      // Prefetch device names for fast lookups
+      await _prefetchDeviceNames();
+
+      // Load initial cached events from ObjectBox
+      await _loadCachedEvents();
+
+      // Listen to WebSocket for real-time events
+      _listenToWebSocket();
+    } catch (e) {
+      _log('❌ Failed to initialize repository: $e');
+    }
   }
 
   /// Prefetch all device names into cache for fast lookups
@@ -161,10 +203,6 @@ class NotificationsRepository {
       // Also attach priority in high/medium/low form for UI chips using attributes
       attrs['priority'] = _priorityForSeverity(resolvedSeverity);
 
-      if (kDebugMode) {
-        debugPrint('[NotificationsRepository] 🧩 Device name resolved for ${event.deviceId} → ${attrs['deviceName']}');
-      }
-
       enrichedEvents.add(
         Event(
           id: event.id,
@@ -219,7 +257,7 @@ class NotificationsRepository {
     try {
       _log('📦 Loading cached events from ObjectBox');
       final entities = await _eventsDao.getAll();
-      final events = entities.map((e) => Event.fromEntity(e)).toList();
+      final events = entities.map(Event.fromEntity).toList();
 
       // Enrich with device names
       _cachedEvents = await _enrichEventsWithDeviceNames(events);
@@ -235,39 +273,50 @@ class NotificationsRepository {
   }
 
   /// Listen to WebSocket for real-time event notifications
-  /// 
-  /// NOTE: We subscribe directly to the stream provider to avoid
-  /// issues with ref.listen() being called from constructor context.
-  /// 
-  /// The use of .stream is deprecated but we suppress the warning as
-  /// this is the correct pattern for subscribing from repository init.
+  ///
+  /// Uses Riverpod's ref.listen to subscribe to the StreamProvider in a
+  /// lifecycle-safe manner, avoiding awaiting the provider's future which can
+  /// be disposed during initialization and cause state errors.
   void _listenToWebSocket() {
     try {
       _log('🔌 Subscribing to WebSocket events');
 
-      // Subscribe directly to the WebSocket provider stream
-      // The provider returns a Stream<CustomerWebSocketMessage>
-      _ref.read(customerWebSocketProvider.future).then((firstMessage) {
-        _log('✅ WebSocket provider active, first message received');
-        
-        // Now subscribe to ongoing messages
-        // ignore: deprecated_member_use
-        _wsSubscription = _ref.read(customerWebSocketProvider.stream).listen(
-          (message) {
-            if (message is CustomerEventsMessage) {
-              _log('🔔 CustomerEventsMessage received');
-              _handleWebSocketEvents(message.events);
-            }
-          },
-          onError: (dynamic error) {
-            _log('❌ WebSocket subscription error: $error');
-          },
-        );
-      }).catchError((dynamic error) {
-        _log('❌ Failed to get initial WebSocket message: $error');
-      });
+      if (_disposed) {
+        _log('⏭️ Skipping WebSocket subscription: repository already disposed');
+        return;
+      }
 
-      _log('✅ WebSocket subscription initiated');
+      // Close any existing subscription before creating a new one
+      _wsProviderSubscription?.close();
+      _wsSubscription?.cancel();
+
+      _wsProviderSubscription = _ref.listen<AsyncValue<CustomerWebSocketMessage>>(
+        customerWebSocketProvider,
+        (AsyncValue<CustomerWebSocketMessage>? prev, AsyncValue<CustomerWebSocketMessage> next) {
+          if (_disposed) return;
+
+          next.when(
+            data: (CustomerWebSocketMessage message) {
+              if (message is CustomerEventsMessage) {
+                _log('🔔 CustomerEventsMessage received');
+                unawaited(_handleWebSocketEvents(message.events));
+              }
+            },
+            error: (Object err, StackTrace st) {
+              _log('❌ WebSocket provider error: $err');
+              if (kDebugMode) {
+                debugPrint('[NotificationsRepository] WebSocket error stack: $st');
+              }
+            },
+            loading: () {
+              // No-op
+            },
+          );
+        },
+        fireImmediately: false,
+      );
+
+      _log('✅ WebSocket subscription (ref.listen) initiated');
     } catch (e) {
       _log('⚠️ Failed to subscribe to WebSocket: $e');
     }
@@ -284,7 +333,7 @@ class NotificationsRepository {
       }
 
       // Parse events from WebSocket payload
-      final List<Event> newEvents = [];
+      final newEvents = <Event>[];
 
       if (eventsData is List) {
         for (final eventJson in eventsData) {
@@ -314,8 +363,8 @@ class NotificationsRepository {
 
       _log('📨 Parsed ${newEvents.length} events from WebSocket');
 
-      // Enrich events with device names
-      final enrichedEvents = await _enrichEventsWithDeviceNames(newEvents);
+    // Enrich events with device names (timestamps already local in Event.fromJson)
+    final enrichedEvents = await _enrichEventsWithDeviceNames(newEvents);
 
       // Persist to ObjectBox via EventService
       final entities = enrichedEvents.map((e) => e.toEntity()).toList();
@@ -323,6 +372,12 @@ class NotificationsRepository {
 
       // Update in-memory cache
       for (final event in enrichedEvents) {
+        // Deduplicate recently seen events by id
+        if (_recentEventIds.contains(event.id)) {
+          _log('🔁 Skipping duplicate event ${event.id}');
+          continue;
+        }
+        _recentEventIds.add(event.id);
         // Check if event already exists
         final existingIndex = _cachedEvents.indexWhere((e) => e.id == event.id);
         if (existingIndex >= 0) {
@@ -401,6 +456,13 @@ class NotificationsRepository {
   Future<void> addEvent(Event event) async {
     try {
       _log('addEvent called for ${event.type}');
+      // Deduplicate by id
+      if (_recentEventIds.contains(event.id)) {
+        _log('🔁 Skipping duplicate addEvent ${event.id}');
+        return;
+      }
+      _recentEventIds.add(event.id);
+      // Timestamps already normalized in Event.fromJson
       // Enrich with device name and priority
       final enrichedList = await _enrichEventsWithDeviceNames([event]);
       final enriched = enrichedList.first;
@@ -476,11 +538,27 @@ class NotificationsRepository {
 
         events = entities
             .cast<EventEntity>()
-            .map((e) => Event.fromEntity(e))
+            .map(Event.fromEntity)
             .toList();
       } else {
-        // Use cached events
-        events = List.from(_cachedEvents);
+        // Use cached events when available; if empty (for example very early
+        // during app startup before _loadCachedEvents() finishes), fall back to
+        // querying ObjectBox directly so callers like unread-only counts don't
+        // temporarily see zero.
+        if (_cachedEvents.isNotEmpty) {
+          events = List.from(_cachedEvents);
+        } else {
+          _log('📦 In-memory cache empty → falling back to DAO.getAll()');
+          final entities = await _eventsDao.getAll();
+          events = entities
+              .cast<EventEntity>()
+              .map(Event.fromEntity)
+              .toList();
+          // Note: We intentionally skip enrichment here for speed since most
+          // callers (e.g., unread counts) don't require deviceName/priority.
+          // Full enrichment is performed by _loadCachedEvents() and for
+          // live updates via WebSocket.
+        }
       }
 
       // Filter by read status if requested
@@ -528,7 +606,8 @@ class NotificationsRepository {
       await _loadCachedEvents();
     } catch (e) {
       _log('❌ Failed to refresh events: $e');
-      rethrow; // Propagate error to UI for error handling
+      // Fallback to local cache so UI still shows something
+      await _loadCachedEvents();
     }
   }
 
@@ -608,6 +687,29 @@ class NotificationsRepository {
     }
   }
 
+  /// Returns the timestamp of the most recent event known to the app (local time).
+  ///
+  /// Uses in-memory cache if present; otherwise queries ObjectBox directly.
+  Future<DateTime?> getLatestEventTimestamp() async {
+    try {
+      if (_cachedEvents.isNotEmpty) {
+        // _cachedEvents is maintained newest-first
+        return _cachedEvents.first.timestamp;
+      }
+
+      final entities = await _eventsDao.getAll();
+      if (entities.isEmpty) return null;
+      final latestMs = entities
+          .cast<EventEntity>()
+          .map((e) => e.eventTimeMs)
+          .reduce((a, b) => a > b ? a : b);
+      return DateTime.fromMillisecondsSinceEpoch(latestMs).toLocal();
+    } catch (e) {
+      _log('⚠️ Failed to get latest event timestamp: $e');
+      return null;
+    }
+  }
+
   /// Clear all events from cache and ObjectBox
   Future<void> clearAllEvents() async {
     try {
@@ -626,8 +728,16 @@ class NotificationsRepository {
 
   /// Emit current events to stream
   void _emitEvents() {
+    if (_disposed) {
+      _log('⏭️ Skipping emit: repository disposed');
+      return;
+    }
+    
     if (!_eventsController.isClosed) {
+      _log('📤 Emitting ${_cachedEvents.length} events to stream');
       _eventsController.add(List.unmodifiable(_cachedEvents));
+    } else {
+      _log('⚠️ Cannot emit: events controller is closed');
     }
   }
 
@@ -640,9 +750,27 @@ class NotificationsRepository {
 
   /// Dispose resources
   void dispose() {
+    if (_disposed) {
+      _log('⚠️ Double dispose prevented');
+      return;
+    }
+    _disposed = true;
+
     _log('🛑 Disposing NotificationsRepository');
+
+    // Cancel WebSocket subscriptions
     _wsSubscription?.cancel();
+    _wsProviderSubscription?.close();
+
+    // Close stream controllers
     _eventsController.close();
     _newEventsController.close();
+  _recentIdsCleanupTimer?.cancel();
+
+    // Clear caches
+    _cachedEvents.clear();
+    _deviceNameCache.clear();
+
+    _log('✅ Repository disposed');
   }
 }

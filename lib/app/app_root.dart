@@ -1,15 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:my_app_gps/app/app_router.dart';
-import 'package:my_app_gps/core/debug/rebuild_counter_overlay.dart';
-import 'package:my_app_gps/features/map/view/marker_assets.dart';
-import 'package:my_app_gps/theme/app_theme.dart';
-import 'package:my_app_gps/providers/notification_providers.dart';
-import 'dart:async';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/debug/rebuild_counter_overlay.dart';
 import 'package:my_app_gps/data/models/event.dart';
+import 'package:my_app_gps/features/map/view/marker_assets.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
+import 'package:my_app_gps/theme/app_theme.dart';
 
 class AppRoot extends ConsumerStatefulWidget {
   const AppRoot({super.key});

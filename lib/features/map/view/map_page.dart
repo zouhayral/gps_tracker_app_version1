@@ -207,12 +207,7 @@ class _MapPageState extends ConsumerState<MapPage>
     // - Cubic easing for natural deceleration
     // - Dead-reckoning extrapolation for moving vehicles (speed ≥ 3 km/h)
     _motionController = MarkerMotionController(
-      motionInterval: const Duration(milliseconds: 200),
-      interpolationDuration: const Duration(milliseconds: 1200),
-      curve: Curves.easeOutCubic,
-      enableExtrapolation: true,
-      maxExtrapolation: const Duration(seconds: 8),
-      minSpeedKmhForExtrapolation: 3.0,
+      
     );
 
     // LIVE MOTION FIX: Listen to motion controller's global tick

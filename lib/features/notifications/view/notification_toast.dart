@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import 'package:my_app_gps/services/customer/customer_websocket.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
+import 'package:my_app_gps/services/customer/customer_websocket.dart';
 
 /// NotificationToastListener listens for new WebSocket events and shows toasts.
 ///
@@ -116,7 +115,6 @@ class _NotificationToastListenerState
   behavior: SnackBarBehavior.floating,
   // Allow users to swipe down to dismiss immediately
   dismissDirection: DismissDirection.down,
-        duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'View',
           textColor: theme.colorScheme.primary,

@@ -13,6 +13,7 @@ import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
+import 'package:my_app_gps/services/event_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider for cache (requires SharedPreferences) - PUBLIC for override in main
@@ -36,6 +37,7 @@ final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
   final posSvc = ref.watch(positionsServiceProvider);
   final socketSvc = ref.watch(traccarSocketServiceProvider);
   final telemetryDao = ref.watch(telemetryDaoProvider);
+  final eventService = ref.watch(eventServiceProvider);
 
   final repo = VehicleDataRepository(
     cache: cache,
@@ -43,6 +45,7 @@ final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
     positionsService: posSvc,
     socketService: socketSvc,
     telemetryDao: telemetryDao,
+    eventService: eventService,
   );
 
   // Listen to unified connectivity and update repository/WS behavior
@@ -80,6 +83,7 @@ class VehicleDataRepository {
     required this.positionsService,
     required this.socketService,
     required this.telemetryDao,
+    required this.eventService,
   }) {
     _init();
   }
@@ -89,6 +93,7 @@ class VehicleDataRepository {
   final PositionsService positionsService;
   final TraccarSocketService socketService;
   final TelemetryDaoBase telemetryDao;
+  final EventService eventService;
 
   // Per-device notifiers
   final Map<int, ValueNotifier<VehicleDataSnapshot?>> _notifiers = {};
@@ -115,6 +120,7 @@ class VehicleDataRepository {
   bool _isWebSocketConnected = false;
   bool _isOffline = false; // unified offline flag (network or backend)
   bool _isDisposed = false; // Safety guard for async operations
+  bool _everConnected = false; // Track initial connect vs reconnect
 
   static const _debounceDelay = Duration(milliseconds: 300);
   static const _minFetchInterval = Duration(seconds: 5);
@@ -351,6 +357,12 @@ class VehicleDataRepository {
       if (kDebugMode) {
         debugPrint('[VehicleRepo] WebSocket connected');
       }
+      // If this is a reconnect (not the very first connection), backfill missed events.
+      if (_everConnected) {
+        unawaited(_onWebSocketReconnect());
+      } else {
+        _everConnected = true;
+      }
       return;
     }
 
@@ -375,7 +387,7 @@ class VehicleDataRepository {
             if (!_eventController.isClosed) {
               _eventController.add(e);
               if (kDebugMode) {
-                debugPrint('[VehicleRepo] Broadcasting event ${(e['type'] ?? '').toString()}');
+                debugPrint('[VehicleRepo] Broadcasting event ${e['type'] ?? ''}');
               }
             }
             final posId = e['positionId'] as int?;
@@ -545,6 +557,34 @@ class VehicleDataRepository {
         if (kDebugMode) debugPrint('[VehicleRepo] Devices handling error: $e');
       }
       return;
+    }
+  }
+
+  /// On WebSocket reconnect, fetch and replay missed events to downstream consumers
+  Future<void> _onWebSocketReconnect() async {
+    final lastTs = await eventService.getLatestCachedEventTimestamp();
+    final since = lastTs ?? DateTime.now().subtract(const Duration(minutes: 30));
+    if (kDebugMode) {
+      debugPrint('[VehicleRepo] 🔄 Reconnected — backfilling events since $since');
+    }
+    try {
+      final missed = await eventService.fetchEvents(from: since);
+      if (missed.isEmpty) {
+        if (kDebugMode) debugPrint('[VehicleRepo] ✅ No missed events');
+        return;
+      }
+      for (final e in missed) {
+        if (!_eventController.isClosed) {
+          _eventController.add(e.toJson());
+        }
+      }
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] ✅ Replayed ${missed.length} missed events');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] ⚠️ Missed-event fetch failed: $e');
+      }
     }
   }
 

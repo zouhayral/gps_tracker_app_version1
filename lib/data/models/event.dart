@@ -24,9 +24,7 @@ class Event {
   const Event({
     required this.id,
     required this.deviceId,
-    this.deviceName,
-    required this.type,
-    required this.timestamp,
+    required this.type, required this.timestamp, this.deviceName,
     this.message,
     this.severity,
     this.positionId,
@@ -39,15 +37,18 @@ class Event {
   // JSON serialization
   // -----------------------------
   factory Event.fromJson(Map<String, dynamic> json) {
+    final rawTime = (json['serverTime'] ?? json['eventTime'] ?? '') as String?;
+    final parsedTime = rawTime != null && rawTime.isNotEmpty
+        ? DateTime.tryParse(rawTime)
+        : null;
+    final localTs = (parsedTime ?? DateTime.now()).toLocal();
+
     return Event(
       id: json['id'].toString(),
       deviceId: (json['deviceId'] as num?)?.toInt() ?? 0,
       deviceName: json['deviceName'] as String?,
       type: json['type'] as String? ?? 'unknown',
-      timestamp: DateTime.tryParse(
-            (json['serverTime'] ?? json['eventTime'] ?? '') as String,
-          ) ??
-          DateTime.now(),
+      timestamp: localTs,
       message: json['message'] as String?,
       severity: json['severity'] as String?,
       positionId: (json['positionId'] as num?)?.toInt(),
@@ -81,7 +82,7 @@ class Event {
         deviceId: deviceId,
         deviceName: deviceName,
         eventType: type,
-        eventTimeMs: timestamp.millisecondsSinceEpoch,
+    eventTimeMs: timestamp.toLocal().millisecondsSinceEpoch,
         positionId: positionId,
         geofenceId: geofenceId,
         // Persist both severity and priority correctly

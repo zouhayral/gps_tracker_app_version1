@@ -8,13 +8,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_app_gps/app/app_root.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/map/fmtc_config.dart';
 import 'package:my_app_gps/map/tile_http_overrides.dart';
 import 'package:my_app_gps/map/tile_network_client.dart';
 import 'package:my_app_gps/map/tile_probe.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -51,4 +51,4 @@ class CustomerManager {
   }
 }
 
-final customerManagerProvider = Provider<CustomerManager>((ref) => CustomerManager(ref));
+final customerManagerProvider = Provider<CustomerManager>(CustomerManager.new);

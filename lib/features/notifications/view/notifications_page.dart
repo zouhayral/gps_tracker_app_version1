@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
+import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
 import 'package:my_app_gps/features/notifications/view/notification_filter_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_tile.dart';
-import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// NotificationsPage displays a list of notification events with live updates.
@@ -22,8 +21,8 @@ class NotificationsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Use filtered notifications provider instead of raw stream
-    final notificationsAsync = ref.watch(filteredNotificationsProvider);
+  // Use value provider that never stays in loading
+  final events = ref.watch(filteredNotificationsValueProvider);
     final filter = ref.watch(notificationFilterProvider);
 
     return Scaffold(
@@ -48,8 +47,6 @@ class NotificationsPage extends ConsumerWidget {
                   // Clear all filters
                   ref.read(notificationFilterProvider.notifier).state =
                       const NotificationFilter();
-                  // Refresh the list
-                  ref.invalidate(notificationsStreamProvider);
                 },
               ),
             const SizedBox(width: 8),
@@ -62,15 +59,7 @@ class NotificationsPage extends ConsumerWidget {
                 // Filter bar
                 const NotificationFilterBar(),
                 // Events list
-                Expanded(
-                  child: notificationsAsync.when(
-                    data: (events) => _buildEventsList(context, ref, events),
-                    loading: () => const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                    error: (error, stack) => _buildErrorView(context, ref, error),
-                  ),
-                ),
+                Expanded(child: _buildEventsList(context, ref, events)),
               ],
             ),
             // Notification banner: also visible on Notifications page
@@ -157,41 +146,8 @@ class NotificationsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildErrorView(BuildContext context, WidgetRef ref, Object error) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Theme.of(context).colorScheme.error,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Failed to load notifications',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            error.toString(),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: () {
-              ref.invalidate(notificationsStreamProvider);
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
+  // Removed _buildErrorView: with value provider the UI doesn't
+  // block on loading/errors; we always show list/empty state.
 
   String _formatTimestamp(DateTime timestamp) {
     final formatter = DateFormat('MMM d, y • HH:mm');

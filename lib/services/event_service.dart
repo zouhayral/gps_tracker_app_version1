@@ -212,7 +212,7 @@ class EventService {
       // Convert entities to domain models
       final events = entities
           .cast<EventEntity>()
-          .map((entity) => Event.fromEntity(entity))
+          .map(Event.fromEntity)
           .take(limit)
           .toList();
 
@@ -399,6 +399,27 @@ class EventService {
         debugPrint('[EventService] ⚠️ Failed to get unread count: $e');
       }
       return 0;
+    }
+  }
+
+  /// Return the latest cached Event timestamp from ObjectBox (in local time).
+  ///
+  /// Useful to compute an accurate backfill window on reconnect.
+  Future<DateTime?> getLatestCachedEventTimestamp() async {
+    try {
+      final dao = await _getDao();
+      final entities = await dao.getAll();
+      if (entities.isEmpty) return null;
+      final latestMs = entities
+          .cast<EventEntity>()
+          .map((e) => e.eventTimeMs)
+          .reduce((a, b) => a > b ? a : b);
+      return DateTime.fromMillisecondsSinceEpoch(latestMs).toLocal();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[EventService] ⚠️ Failed to get latest cached timestamp: $e');
+      }
+      return null;
     }
   }
 }

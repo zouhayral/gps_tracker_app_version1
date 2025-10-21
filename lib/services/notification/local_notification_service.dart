@@ -72,9 +72,7 @@ class LocalNotificationService {
       
       // iOS initialization settings
       const iosSettings = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
+        
       );
 
       const initSettings = InitializationSettings(
@@ -124,10 +122,7 @@ class LocalNotificationService {
       'Traccar Alerts', // Channel name
       description: 'Critical alerts from Traccar devices',
       importance: Importance.high,
-      enableVibration: true,
       enableLights: true,
-      playSound: true,
-      showBadge: true,
     );
 
     await _plugin
@@ -299,34 +294,28 @@ class LocalNotificationService {
   AndroidNotificationDetails _getAndroidDetails(String severity) {
     switch (severity.toLowerCase()) {
       case 'critical':
-        return AndroidNotificationDetails(
+        return const AndroidNotificationDetails(
           'traccar_alerts',
           'Traccar Alerts',
           channelDescription: 'Critical alerts from Traccar devices',
           importance: Importance.high,
           priority: Priority.high,
           color: Color(0xFFFF383C), // Red
-          enableVibration: true,
           enableLights: true,
-          playSound: true,
           icon: '@mipmap/ic_launcher',
           largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
         );
       case 'warning':
-        return AndroidNotificationDetails(
+        return const AndroidNotificationDetails(
           'traccar_alerts',
           'Traccar Alerts',
           channelDescription: 'Critical alerts from Traccar devices',
-          importance: Importance.defaultImportance,
-          priority: Priority.defaultPriority,
           color: Color(0xFFFFBD28), // Orange
-          enableVibration: true,
-          playSound: true,
           icon: '@mipmap/ic_launcher',
         );
       case 'info':
       default:
-        return AndroidNotificationDetails(
+        return const AndroidNotificationDetails(
           'traccar_alerts',
           'Traccar Alerts',
           channelDescription: 'Critical alerts from Traccar devices',
@@ -348,40 +337,28 @@ class LocalNotificationService {
     switch (event.type.toLowerCase()) {
       case 'ignitionon':
         baseTitle = '🔑 Ignition On';
-        break;
       case 'ignitionoff':
         baseTitle = '🔑 Ignition Off';
-        break;
       case 'deviceonline':
         baseTitle = '✅ Device Online';
-        break;
       case 'deviceoffline':
         baseTitle = '⚠️ Device Offline';
-        break;
       case 'geofenceenter':
         baseTitle = '📍 Geofence Entered';
-        break;
       case 'geofenceexit':
         baseTitle = '📍 Geofence Exited';
-        break;
       case 'alarm':
         baseTitle = '🚨 Alarm';
-        break;
       case 'overspeed':
         baseTitle = '⚠️ Overspeed';
-        break;
       case 'maintenance':
         baseTitle = '🔧 Maintenance Due';
-        break;
       case 'devicemoving':
         baseTitle = '🚗 Device Moving';
-        break;
       case 'devicestopped':
         baseTitle = '🛑 Device Stopped';
-        break;
       default:
         baseTitle = '📢 ${_formatEventType(event.type)}';
-        break;
     }
 
   // Prefer Event.deviceName but also accept attributes['deviceName'] as fallback
@@ -399,7 +376,7 @@ class LocalNotificationService {
   String _formatEventType(String type) {
     // Convert camelCase to Title Case
     final words = type.replaceAllMapped(
-      RegExp(r'([A-Z])'),
+      RegExp('([A-Z])'),
       (match) => ' ${match.group(1)}',
     ).trim();
     

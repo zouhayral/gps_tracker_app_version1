@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
+import 'package:my_app_gps/core/utils/banner_prefs.dart' show BannerPrefs;
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/repositories/notifications_repository.dart';
 import 'package:my_app_gps/services/event_service.dart';
@@ -76,22 +77,29 @@ class NotificationFilter {
     if (date != null) {
       final targetDate = DateTime(date!.year, date!.month, date!.day);
       filtered = filtered.where((event) {
-        final eventDate = DateTime(
-          event.timestamp.year,
-          event.timestamp.month,
-          event.timestamp.day,
-        );
-        return eventDate == targetDate;
+        final t = event.timestamp.toLocal();
+        final eventDate = DateTime(t.year, t.month, t.day);
+        return eventDate.isAtSameMomentAs(targetDate);
       }).toList();
     }
 
     // Filter by date range
     if (dateRange != null) {
+      // Normalize to local midnights and make the range inclusive
+      final start = DateTime(
+        dateRange!.start.year,
+        dateRange!.start.month,
+        dateRange!.start.day,
+      );
+      final endInclusive = DateTime(
+        dateRange!.end.year,
+        dateRange!.end.month,
+        dateRange!.end.day,
+      ).add(const Duration(days: 1));
+
       filtered = filtered.where((event) {
-        return event.timestamp.isAfter(dateRange!.start) &&
-            event.timestamp.isBefore(
-              dateRange!.end.add(const Duration(days: 1)),
-            );
+        final ts = event.timestamp.toLocal();
+        return !ts.isBefore(start) && ts.isBefore(endInclusive);
       }).toList();
     }
 
@@ -137,9 +145,7 @@ final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) 
   );
 
   // Dispose when provider is no longer needed
-  ref.onDispose(() {
-    repository.dispose();
-  });
+  ref.onDispose(repository.dispose);
 
   return repository;
 });
@@ -192,8 +198,17 @@ final unreadCountProvider = Provider.autoDispose<int>((ref) {
 /// ```
 final refreshNotificationsProvider =
     FutureProvider.autoDispose<void>((ref) async {
-  final repository = ref.watch(notificationsRepositoryProvider);
-  await repository.refreshEvents();
+  // Temporarily disable API refresh to test cached events display
+  // final repository = ref.watch(notificationsRepositoryProvider);
+  // final now = DateTime.now();
+  // final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+  // await repository.refreshEvents(
+  //   from: thirtyDaysAgo,
+  //   to: now,
+  // );
+  
+  // Just return immediately - let cached events show
+  return;
 });
 
 /// Provider for filtered notifications (unread only)
@@ -363,13 +378,36 @@ final filteredNotificationsProvider =
     data: (events) {
       // Apply filter if active
       if (filter.isActive) {
+        // Purely local filter
         return Stream.value(filter.apply(events));
       }
       return Stream.value(events);
     },
     loading: () => Stream.value([]),
-    error: (error, stack) => Stream.error(error, stack),
+    error: Stream.error,
   );
+});
+
+/// Synchronous value provider for filtered notifications
+///
+/// This wraps the base notifications stream and exposes the latest value
+/// synchronously as a plain Provider<List<Event>>. While the underlying
+/// stream is loading, this returns an empty list instead of staying in a
+/// loading state, so the UI never gets stuck on a spinner.
+final filteredNotificationsValueProvider = Provider.autoDispose<List<Event>>((ref) {
+  final notificationsAsync = ref.watch(notificationsStreamProvider);
+  final filter = ref.watch(notificationFilterProvider);
+
+  final base = notificationsAsync.maybeWhen(
+    data: (events) => events,
+    orElse: () => const <Event>[],
+  );
+
+  // Apply filters synchronously
+  if (filter.isActive) {
+    return filter.apply(base);
+  }
+  return base;
 });
 
 /// Visibility state for the bottom notification banner.

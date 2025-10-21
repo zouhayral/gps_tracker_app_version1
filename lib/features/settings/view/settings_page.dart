@@ -1,17 +1,16 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:my_app_gps/app/app_router.dart';
+import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
+import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/services/traccar_connection_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' show StateProvider;
-import 'package:my_app_gps/data/models/event.dart';
-import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// Persistent notification toggle provider (default ON)
 final notificationEnabledProvider = StateProvider<bool>((ref) {

@@ -126,6 +126,7 @@ class NotificationFilterBar extends ConsumerWidget {
             severity: () => null,
           );
         }
+        // No provider invalidation or refresh here: filtering is local.
       },
       selectedColor: color,
       backgroundColor: Colors.white,
@@ -150,7 +151,6 @@ class NotificationFilterBar extends ConsumerWidget {
           color: Colors.white,
           border: Border.all(
             color: Colors.grey.shade400,
-            width: 1,
           ),
           borderRadius: BorderRadius.circular(20),
         ),
@@ -210,6 +210,7 @@ class NotificationFilterBar extends ConsumerWidget {
             date: () => null,
           );
         }
+        // Purely local filter update; do not trigger background fetch.
       },
       selectedColor: theme.colorScheme.primary,
       backgroundColor: Colors.white,
@@ -281,6 +282,7 @@ class NotificationFilterBar extends ConsumerWidget {
       onPressed: () {
         ref.read(notificationFilterProvider.notifier).state =
             const NotificationFilter();
+        // Local clear only; no network/stream invalidation needed.
       },
       backgroundColor: Colors.white,
     );

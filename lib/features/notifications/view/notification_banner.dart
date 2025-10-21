@@ -1,13 +1,13 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/data/models/event.dart';
-import 'package:my_app_gps/repositories/notifications_repository.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
+import 'package:my_app_gps/repositories/notifications_repository.dart';
 
 /// Bottom, swipe-to-dismiss banner that appears when a new notification event arrives.
 ///
@@ -27,7 +27,7 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
 	bool _showBanner = false;
 	Event? _event;
 	Offset _slideOffset = const Offset(0, 0.2);
-	double _opacity = 0.0;
+	double _opacity = 0;
 	StreamSubscription<Event>? _sub;
 		bool _exiting = false;
 
@@ -39,9 +39,7 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
 				if (!mounted) return;
 				// Attach once to the stream
 								final repo = ref.read<NotificationsRepository>(notificationsRepositoryProvider);
-								_sub = repo.watchNewEvents().listen((Event e) {
-									_handleEvent(e);
-								});
+								_sub = repo.watchNewEvents().listen(_handleEvent);
 			});
 	}
 
@@ -102,7 +100,6 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
 						opacity: _opacity,
 						child: Dismissible(
 							key: const ValueKey('notification-banner'),
-							direction: DismissDirection.horizontal,
 									onDismissed: (_) {
 										setState(() {
 											_exiting = true;
@@ -133,7 +130,6 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
 												],
 								),
 								child: Row(
-									crossAxisAlignment: CrossAxisAlignment.center,
 									children: [
 										Icon(icon, color: e.color),
 										const SizedBox(width: 8),
