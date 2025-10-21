@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/utils/banner_prefs.dart' show BannerPrefs;
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/repositories/notifications_repository.dart';
 import 'package:my_app_gps/services/event_service.dart';
@@ -52,6 +55,153 @@ final notificationsStreamProvider =
   final repository = ref.watch(notificationsRepositoryProvider);
   return repository.watchEvents();
 });
+
+/// Search query for notifications screen (raw, immediate input)
+final searchQueryProvider = StateProvider.autoDispose<String>((_) => '');
+
+/// Debounced stream of the search query to prevent over-triggering filters while typing.
+final debouncedQueryProvider = StreamProvider.autoDispose<String>((ref) async* {
+  final controller = StreamController<String>();
+  Timer? t;
+
+  // Seed with current value after debounce to keep behaviour consistent
+  void emitDebounced(String value) {
+    t?.cancel();
+    t = Timer(const Duration(milliseconds: 250), () {
+      // Reset to first page on new debounced query
+      ref.read(notificationsPageProvider.notifier).state = 1;
+      if (!controller.isClosed) controller.add(value);
+    });
+  }
+
+  emitDebounced(ref.read(searchQueryProvider));
+
+  ref.listen<String>(searchQueryProvider, (prev, next) {
+    emitDebounced(next);
+  });
+
+  ref.onDispose(() {
+    t?.cancel();
+    controller.close();
+  });
+
+  yield* controller.stream;
+});
+
+/// Filtered notifications provider with optional heavy filtering offloaded to an isolate.
+/// Uses a best-effort approach: returns cached events immediately when underlying streams
+/// are still loading to avoid blocking the UI.
+final filteredNotificationsProvider =
+    FutureProvider.autoDispose<List<Event>>((ref) async {
+  // Base events stream (may be loading); fall back to current cache if needed
+  final repo = ref.watch(notificationsRepositoryProvider);
+  final baseAsync = ref.watch(notificationsStreamProvider);
+  final baseEvents = baseAsync.maybeWhen(
+    data: (events) => events,
+    orElse: repo.getCurrentEvents,
+  );
+
+  // Debounced search query
+  final query = (await ref.watch(debouncedQueryProvider.future)).trim();
+  if (query.isEmpty) {
+    // Reset metric when not filtering
+    if (kDebugMode) {
+      DevDiagnostics.instance.recordFilterCompute(0);
+    }
+    return baseEvents;
+  }
+
+  // Lightweight in-thread filter for smaller lists
+  if (baseEvents.length < 1000) {
+    final q = query.toLowerCase();
+    final sw = Stopwatch()..start();
+    final out = baseEvents.where((e) {
+      final msg = (e.message ?? '').toLowerCase();
+      final dev = (e.deviceName ?? '').toLowerCase();
+      final typ = e.type.toLowerCase();
+      return msg.contains(q) || dev.contains(q) || typ.contains(q);
+    }).toList(growable: false);
+    sw.stop();
+    // Record metric
+    if (kDebugMode) {
+      DevDiagnostics.instance.recordFilterCompute(sw.elapsedMilliseconds);
+    }
+    return out;
+  }
+
+  // Offload heavy filtering to a background isolate using compute().
+  final q = query.toLowerCase();
+  final proxies = List<Map<String, Object?>>.generate(baseEvents.length, (i) {
+    final e = baseEvents[i];
+    final msg = (e.message ?? '').toLowerCase();
+    final dev = (e.deviceName ?? '').toLowerCase();
+    final typ = e.type.toLowerCase();
+    return {
+      'i': i,
+      't': '$msg\n$dev\n$typ',
+    };
+  }, growable: false);
+
+  final sw = Stopwatch()..start();
+  final indices = await compute<List<Map<String, Object?>>, List<int>>(
+    _filterIndices,
+    proxies..add({'q': q}),
+  );
+  sw.stop();
+  if (kDebugMode) {
+    DevDiagnostics.instance.recordFilterCompute(sw.elapsedMilliseconds);
+  }
+  // Map back to original events in stable order
+  return [for (final i in indices) baseEvents[i]];
+});
+
+/// Current page index for paginated notifications (1-based).
+final notificationsPageProvider = StateProvider.autoDispose<int>((_) => 1);
+
+/// Page size constant for pagination.
+const int kNotificationsPageSize = 50;
+
+/// Paged notifications based on filtered results and current page.
+final pagedNotificationsProvider =
+    Provider.autoDispose<List<Event>>((ref) {
+  final filteredAsync = ref.watch(filteredNotificationsProvider);
+  final page = ref.watch(notificationsPageProvider);
+  final effective = filteredAsync.maybeWhen(
+    data: (list) => list,
+    orElse: () => ref.watch(notificationsRepositoryProvider).getCurrentEvents(),
+  );
+  final end = (page * kNotificationsPageSize).clamp(0, effective.length);
+  return effective.sublist(0, end);
+});
+
+/// Per-notification provider by id to enable selective listening in item widgets.
+final notificationByIdProvider =
+    Provider.autoDispose.family<Event?, String>((ref, id) {
+  final repo = ref.watch(notificationsRepositoryProvider);
+  final listAsync = ref.watch(notificationsStreamProvider);
+  final list = listAsync.maybeWhen(
+    data: (v) => v,
+    orElse: repo.getCurrentEvents,
+  );
+  for (final e in list) {
+    if (e.id == id) return e;
+  }
+  return null;
+});
+
+/// Top-level function for compute() to filter indices based on a lowercased query.
+/// Expects the last element in the list to contain the query under key 'q'.
+List<int> _filterIndices(List<Map<String, Object?>> items) {
+  if (items.isEmpty) return const <int>[];
+  final q = (items.removeLast()['q'] as String?) ?? '';
+  if (q.isEmpty) return List<int>.generate(items.length, (i) => i);
+  final res = <int>[];
+  for (final m in items) {
+    final t = (m['t'] as String?) ?? '';
+    if (t.contains(q)) res.add(m['i'] as int);
+  }
+  return res;
+}
 
 /// Provider for unread notification count
 ///

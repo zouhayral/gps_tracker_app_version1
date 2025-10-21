@@ -96,6 +96,11 @@ class _DevDiagnosticsOverlayState extends State<DevDiagnosticsOverlay> {
                           valueListenable: diag.clusterComputeMs,
                           builder: (_, v, __) => Text('Cluster: ${v}ms'),
                         ),
+                        const SizedBox(width: 10),
+                        ValueListenableBuilder<int>(
+                          valueListenable: diag.filterComputeMs,
+                          builder: (_, v, __) => Text('Filter: ${v}ms'),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),

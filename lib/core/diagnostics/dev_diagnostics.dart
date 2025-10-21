@@ -30,6 +30,7 @@ class DevDiagnostics {
   final ValueNotifier<int> dedupSkipped = ValueNotifier<int>(0);
   final ValueNotifier<double> pingLatencyMs = ValueNotifier<double>(0);
   final ValueNotifier<int> clusterComputeMs = ValueNotifier<int>(0);
+  final ValueNotifier<int> filterComputeMs = ValueNotifier<int>(0);
 
   // Internals for rate computation
   Timer? _markerRateTimer;
@@ -122,5 +123,10 @@ class DevDiagnostics {
   void recordClusterCompute(int ms) {
     if (!kDebugMode) return;
     clusterComputeMs.value = ms;
+  }
+
+  void recordFilterCompute(int ms) {
+    if (!kDebugMode) return;
+    filterComputeMs.value = ms;
   }
 }

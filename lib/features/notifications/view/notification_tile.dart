@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'package:intl/intl.dart';
 
 import 'package:my_app_gps/data/models/event.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// NotificationTile displays a single event notification.
 ///
@@ -10,7 +12,7 @@ import 'package:my_app_gps/data/models/event.dart';
 /// - Highlights unread events with background color
 /// - Displays read/unread indicator
 /// - Supports tap callback for marking as read
-class NotificationTile extends StatelessWidget {
+class NotificationTile extends ConsumerWidget {
   const NotificationTile({
     required this.event,
     this.onTap,
@@ -21,9 +23,12 @@ class NotificationTile extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final isUnread = !event.isRead;
+    // Selectively listen only to isRead updates for this id
+    final isUnread = ref.watch(
+      notificationByIdProvider(event.id).select((e) => !(e?.isRead ?? event.isRead)),
+    );
     final priority = (event.attributes['priority']?.toString() ??
             event.severity?.toLowerCase() ??
             'low')

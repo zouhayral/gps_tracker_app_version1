@@ -17,19 +17,54 @@ import 'package:my_app_gps/providers/notification_providers.dart';
 /// - Pull-to-refresh via refreshNotificationsProvider
 /// - Mark as read on tap via markEventAsReadProvider
 /// - Live toast notifications via NotificationToastListener
-class NotificationsPage extends ConsumerWidget {
+class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-  // Observe base stream loading state, but never block UI on it
-  final baseAsync = ref.watch(notificationsStreamProvider);
-  final repo = ref.watch(notificationsRepositoryProvider);
-  final events = baseAsync.maybeWhen(
-    data: (events) => events,
-    orElse: repo.getCurrentEvents,
-  );
-  final isSearching = baseAsync.isLoading;
+  ConsumerState<NotificationsPage> createState() => _NotificationsPageState();
+}
+
+class _NotificationsPageState extends ConsumerState<NotificationsPage> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels > pos.maxScrollExtent - 240) {
+      // Near the end: request next page
+      final page = ref.read(notificationsPageProvider);
+      ref.read(notificationsPageProvider.notifier).state = page + 1;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Observe filtered list (best-effort) and paging
+    final filteredAsync = ref.watch(filteredNotificationsProvider);
+    final paged = ref.watch(pagedNotificationsProvider);
+    final repo = ref.watch(notificationsRepositoryProvider);
+    final base = repo.getCurrentEvents();
+
+    // If filteredAsync has data, use paged; otherwise show immediate base
+    final events = filteredAsync.maybeWhen(
+      data: (_) => paged,
+      orElse: () => base,
+    );
+    final isSearching = filteredAsync.isLoading;
 
     return Scaffold(
         appBar: AppBar(
@@ -51,6 +86,21 @@ class NotificationsPage extends ConsumerWidget {
               children: [
                 // Action bar (Mark all read only)
                 const NotificationActionBar(),
+                // Search field with debounce
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                  child: TextField(
+                    onChanged: (v) => ref
+                        .read(searchQueryProvider.notifier)
+                        .state = v,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Search notifications',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
                 // Non-blocking progress hint (thin bar) while background sync completes
                 if (isSearching)
                   const SizedBox(
@@ -58,7 +108,7 @@ class NotificationsPage extends ConsumerWidget {
                     child: LinearProgressIndicator(minHeight: 2),
                   ),
                 // Events list
-                Expanded(child: _buildEventsList(context, ref, events)),
+                Expanded(child: _buildEventsList(context, events)),
               ],
             ),
             // Notification banner: also visible on Notifications page
@@ -79,7 +129,6 @@ class NotificationsPage extends ConsumerWidget {
 
   Widget _buildEventsList(
     BuildContext context,
-    WidgetRef ref,
     List<Event> events,
   ) {
     if (events.isEmpty) {
@@ -89,9 +138,11 @@ class NotificationsPage extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async {
         // Trigger refresh from API
+        // ignore: unused_local_variable
         final _ = await ref.refresh(refreshNotificationsProvider.future);
       },
       child: ListView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         itemCount: events.length,
         itemBuilder: (context, index) {
@@ -100,7 +151,7 @@ class NotificationsPage extends ConsumerWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Dismissible(
-              key: ValueKey('event-${event.id}'),
+              key: ValueKey(event.id),
               background: _buildSwipeBackground(context, true),
               secondaryBackground: _buildSwipeBackground(context, false),
               onDismissed: (_) async {
@@ -109,6 +160,7 @@ class NotificationsPage extends ConsumerWidget {
                 // Optional: SnackBar undo could be implemented by re-inserting if needed
               },
               child: NotificationTile(
+                key: ValueKey('tile-${event.id}'),
                 event: event,
                 onTap: () async {
                   // Mark as read when tapped
