@@ -5,8 +5,8 @@ import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// NotificationActionBar provides a single "Mark all read" action.
 /// All filter controls have been removed as per the latest requirements.
-class NotificationFilterBar extends ConsumerWidget {
-  const NotificationFilterBar({super.key});
+class NotificationActionBar extends ConsumerWidget {
+  const NotificationActionBar({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

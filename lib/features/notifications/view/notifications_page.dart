@@ -49,7 +49,7 @@ class NotificationsPage extends ConsumerWidget {
             Column(
               children: [
                 // Action bar (Mark all read only)
-                const NotificationFilterBar(),
+                const NotificationActionBar(),
                 // Non-blocking progress hint (thin bar) while background sync completes
                 if (isSearching)
                   const SizedBox(
