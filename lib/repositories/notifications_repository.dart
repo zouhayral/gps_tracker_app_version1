@@ -10,6 +10,7 @@ import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
 import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Repository for managing notification events with live updates.
 ///
@@ -60,6 +61,17 @@ class NotificationsRepository {
   // Recent event IDs for deduplication (rolling window)
   final Set<String> _recentEventIds = <String>{};
   Timer? _recentIdsCleanupTimer;
+  int _newEventsSinceLastPersist = 0;
+  static const int _persistThreshold = 20; // Persist after every 20 new events
+  static const int _maxStoredIds = 1000; // Bounded dedup storage
+  static const String _prefKey = 'recent_event_ids';
+  static const String _anchorPrefKey = 'last_replay_anchor_ms';
+
+  // Replay anchor - timestamp of last successfully processed event
+  DateTime? _lastReplayAnchor;
+
+  /// Public getter for replay anchor (used by VehicleDataRepository for backfill)
+  DateTime? get lastReplayAnchor => _lastReplayAnchor;
 
   // Device name cache for fast lookups
   final Map<int, String> _deviceNameCache = {};
@@ -99,17 +111,17 @@ class NotificationsRepository {
 
     // Start async initialization without blocking constructor
     _initAsync();
-
-    // Periodically cleanup the dedup set to prevent unbounded growth
-    _recentIdsCleanupTimer?.cancel();
-    _recentIdsCleanupTimer = Timer.periodic(const Duration(minutes: 10), (_) {
-      _recentEventIds.clear();
-    });
   }
 
   /// Async initialization to properly handle await operations
   Future<void> _initAsync() async {
     try {
+      // Load persistent dedup IDs from SharedPreferences
+      await _loadRecentEventIds();
+
+      // Load replay anchor timestamp
+      await _loadReplayAnchor();
+
       // Prefetch device names for fast lookups
       await _prefetchDeviceNames();
 
@@ -118,8 +130,76 @@ class NotificationsRepository {
 
       // Listen to WebSocket for real-time events
       _listenToWebSocket();
+
+      // Periodically persist the dedup set to disk and prune old entries
+      _recentIdsCleanupTimer?.cancel();
+      _recentIdsCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+        unawaited(_persistRecentEventIds());
+      });
     } catch (e) {
       _log('❌ Failed to initialize repository: $e');
+    }
+  }
+
+  /// Load persistent dedup IDs from SharedPreferences on startup
+  Future<void> _loadRecentEventIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getStringList(_prefKey) ?? <String>[];
+      _recentEventIds.addAll(stored);
+      _log('💾 Loaded ${stored.length} dedup IDs from prefs');
+    } catch (e) {
+      _log('⚠️ Failed to load dedup IDs: $e');
+    }
+  }
+
+  /// Persist recent event IDs to SharedPreferences (bounded to max 1000 IDs)
+  Future<void> _persistRecentEventIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Keep only the most recent _maxStoredIds entries
+      final ids = _recentEventIds.take(_maxStoredIds).toList();
+      await prefs.setStringList(_prefKey, ids);
+      _newEventsSinceLastPersist = 0;
+      _log('🧹 Dedup persisted (count: ${ids.length})');
+      
+      // Prune excess IDs from in-memory set to prevent unbounded growth
+      if (_recentEventIds.length > _maxStoredIds) {
+        final excess = _recentEventIds.length - _maxStoredIds;
+        final pruned = _recentEventIds.toList().sublist(0, excess);
+        _recentEventIds.removeAll(pruned);
+        _log('🧹 Pruned $excess old dedup IDs from memory');
+      }
+    } catch (e) {
+      _log('⚠️ Failed to persist dedup IDs: $e');
+    }
+  }
+
+  /// Load replay anchor timestamp from SharedPreferences on startup
+  Future<void> _loadReplayAnchor() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ts = prefs.getInt(_anchorPrefKey);
+      if (ts != null) {
+        _lastReplayAnchor = DateTime.fromMillisecondsSinceEpoch(ts);
+        _log('⏱️ Loaded replay anchor at $_lastReplayAnchor');
+      } else {
+        _log('⏱️ No replay anchor found — cold start');
+      }
+    } catch (e) {
+      _log('⚠️ Failed to load replay anchor: $e');
+    }
+  }
+
+  /// Update replay anchor after successfully processing an event
+  Future<void> _updateReplayAnchor(DateTime timestamp) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_anchorPrefKey, timestamp.millisecondsSinceEpoch);
+      _lastReplayAnchor = timestamp;
+      _log('💾 Updated replay anchor → $timestamp');
+    } catch (e) {
+      _log('⚠️ Failed to update replay anchor: $e');
     }
   }
 
@@ -378,6 +458,11 @@ class NotificationsRepository {
           continue;
         }
         _recentEventIds.add(event.id);
+        _newEventsSinceLastPersist++;
+        // Auto-persist after threshold to keep disk state fresh
+        if (_newEventsSinceLastPersist >= _persistThreshold) {
+          unawaited(_persistRecentEventIds());
+        }
         // Check if event already exists
         final existingIndex = _cachedEvents.indexWhere((e) => e.id == event.id);
         if (existingIndex >= 0) {
@@ -462,6 +547,11 @@ class NotificationsRepository {
         return;
       }
       _recentEventIds.add(event.id);
+      _newEventsSinceLastPersist++;
+      // Auto-persist after threshold
+      if (_newEventsSinceLastPersist >= _persistThreshold) {
+        unawaited(_persistRecentEventIds());
+      }
       // Timestamps already normalized in Event.fromJson
       // Enrich with device name and priority
       final enrichedList = await _enrichEventsWithDeviceNames([event]);
@@ -469,6 +559,9 @@ class NotificationsRepository {
 
       // Persist to ObjectBox
       await _eventsDao.upsertMany([enriched.toEntity()]);
+
+      // Update replay anchor after successful persistence
+      await _updateReplayAnchor(enriched.timestamp);
 
       // Update in-memory cache (dedupe by id)
       final existingIndex = _cachedEvents.indexWhere((e) => e.id == enriched.id);
@@ -758,6 +851,9 @@ class NotificationsRepository {
 
     _log('🛑 Disposing NotificationsRepository');
 
+    // Persist dedup state before cleanup
+    unawaited(_persistRecentEventIds());
+
     // Cancel WebSocket subscriptions
     _wsSubscription?.cancel();
     _wsProviderSubscription?.close();
@@ -765,11 +861,12 @@ class NotificationsRepository {
     // Close stream controllers
     _eventsController.close();
     _newEventsController.close();
-  _recentIdsCleanupTimer?.cancel();
+    _recentIdsCleanupTimer?.cancel();
 
     // Clear caches
     _cachedEvents.clear();
     _deviceNameCache.clear();
+    _recentEventIds.clear();
 
     _log('✅ Repository disposed');
   }

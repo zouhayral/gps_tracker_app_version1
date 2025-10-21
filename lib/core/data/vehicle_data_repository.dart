@@ -562,11 +562,24 @@ class VehicleDataRepository {
 
   /// On WebSocket reconnect, fetch and replay missed events to downstream consumers
   Future<void> _onWebSocketReconnect() async {
-    final lastTs = await eventService.getLatestCachedEventTimestamp();
-    final since = lastTs ?? DateTime.now().subtract(const Duration(minutes: 30));
+    // Try to get replay anchor first (most precise)
+    final replayAnchor = await eventService.getReplayAnchor();
+    // Fallback to latest cached event timestamp
+    final cachedTs = await eventService.getLatestCachedEventTimestamp();
+    // Final fallback to 30-minute window
+    final since = replayAnchor ?? cachedTs ?? DateTime.now().subtract(const Duration(minutes: 30));
+    
     if (kDebugMode) {
       debugPrint('[VehicleRepo] 🔄 Reconnected — backfilling events since $since');
+      if (replayAnchor != null) {
+        debugPrint('[VehicleRepo] ⏱️ Using replay anchor from last processed event');
+      } else if (cachedTs != null) {
+        debugPrint('[VehicleRepo] 📦 Using latest cached event timestamp');
+      } else {
+        debugPrint('[VehicleRepo] ⏰ Using 30-minute fallback window');
+      }
     }
+    
     try {
       final missed = await eventService.fetchEvents(from: since);
       if (missed.isEmpty) {

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/entities/event_entity.dart';
@@ -418,6 +419,24 @@ class EventService {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[EventService] ⚠️ Failed to get latest cached timestamp: $e');
+      }
+      return null;
+    }
+  }
+
+  /// Get the replay anchor timestamp (last successfully processed event)
+  /// from SharedPreferences. This is used for precise backfill on reconnect.
+  Future<DateTime?> getReplayAnchor() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ts = prefs.getInt('last_replay_anchor_ms');
+      if (ts != null) {
+        return DateTime.fromMillisecondsSinceEpoch(ts);
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[EventService] ⚠️ Failed to get replay anchor: $e');
       }
       return null;
     }
