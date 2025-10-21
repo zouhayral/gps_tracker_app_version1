@@ -10,12 +10,14 @@ import 'package:my_app_gps/features/notifications/view/notifications_page.dart';
 import 'package:my_app_gps/features/settings/view/settings_page.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_page.dart';
 import 'package:my_app_gps/features/trips/view/trips_page.dart';
+import 'package:my_app_gps/features/trips/analytics/trip_analytics_page.dart';
 
 // Route names / paths constants
 class AppRoutes {
   static const login = '/login';
   static const map = '/map';
   static const trips = '/trips';
+  static const tripAnalytics = '/trip-analytics';
   static const alerts = '/alerts';
   static const settings = '/settings';
   static const telemetryHistory = '/telemetry-history';
@@ -87,6 +89,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             name: 'trips',
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: TripsPage()),
+          ),
+          GoRoute(
+            path: AppRoutes.tripAnalytics,
+            name: 'tripAnalytics',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: TripAnalyticsPage()),
           ),
           GoRoute(
             path: AppRoutes.alerts,
