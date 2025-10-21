@@ -27,7 +27,7 @@ class NotificationsPage extends ConsumerWidget {
   final repo = ref.watch(notificationsRepositoryProvider);
   final events = baseAsync.maybeWhen(
     data: (events) => events,
-    orElse: () => repo.getCurrentEvents(),
+    orElse: repo.getCurrentEvents,
   );
   final isSearching = baseAsync.isLoading;
 
@@ -101,7 +101,6 @@ class NotificationsPage extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 12),
             child: Dismissible(
               key: ValueKey('event-${event.id}'),
-              direction: DismissDirection.horizontal,
               background: _buildSwipeBackground(context, true),
               secondaryBackground: _buildSwipeBackground(context, false),
               onDismissed: (_) async {
@@ -135,9 +134,9 @@ class NotificationsPage extends ConsumerWidget {
   }
 
   Widget _buildSwipeBackground(BuildContext context, bool leftToRight) {
-    final color = Colors.redAccent;
+    const color = Colors.redAccent;
     final alignment = leftToRight ? Alignment.centerLeft : Alignment.centerRight;
-    final icon = Icons.delete_forever_rounded;
+    const icon = Icons.delete_forever_rounded;
     return Container(
       decoration: BoxDecoration(
         color: color,
@@ -151,9 +150,9 @@ class NotificationsPage extends ConsumerWidget {
         children: [
           Icon(icon, color: Colors.white, size: 28),
           const SizedBox(width: 8),
-          Text(
+          const Text(
             'Delete',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ],
       ),

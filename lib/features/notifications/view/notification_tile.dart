@@ -37,7 +37,7 @@ class NotificationTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: colors.background,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: colors.border, width: 1),
+          border: Border.all(color: colors.border),
         ),
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -70,7 +70,6 @@ class NotificationTile extends StatelessWidget {
                       const SizedBox(height: 6),
                       // Device name row with device icon and bold name
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Icon(
                             Icons.devices_other_outlined,
@@ -132,7 +131,7 @@ class NotificationTile extends StatelessWidget {
   }
 
   Widget _buildLeadingIcon(BuildContext context, bool isUnread,
-      {required Color bg, required Color fg}) {
+      {required Color bg, required Color fg,}) {
     return Container(
       width: 44,
       height: 44,
@@ -191,30 +190,30 @@ class NotificationTile extends StatelessWidget {
     // Colors inspired by the mock: high(red), medium(orange), low(purple)
     switch (priority) {
       case 'high':
-        return _PriorityPalette(
-          background: const Color(0xFFF1F8E9), // light green background like mock
-          border: const Color(0xFFE0E6D6),
-          iconBg: const Color(0xFFFFEBEE),
-          iconFg: const Color(0xFFD32F2F),
-          badgeBg: const Color(0xFFE53935),
+        return const _PriorityPalette(
+          background: Color(0xFFF1F8E9), // light green background like mock
+          border: Color(0xFFE0E6D6),
+          iconBg: Color(0xFFFFEBEE),
+          iconFg: Color(0xFFD32F2F),
+          badgeBg: Color(0xFFE53935),
           badgeFg: Colors.white,
         );
       case 'medium':
-        return _PriorityPalette(
-          background: const Color(0xFFF1F8E9),
-          border: const Color(0xFFE0E6D6),
-          iconBg: const Color(0xFFFFF3E0),
-          iconFg: const Color(0xFFEF6C00),
-          badgeBg: const Color(0xFFFF8F00),
+        return const _PriorityPalette(
+          background: Color(0xFFF1F8E9),
+          border: Color(0xFFE0E6D6),
+          iconBg: Color(0xFFFFF3E0),
+          iconFg: Color(0xFFEF6C00),
+          badgeBg: Color(0xFFFF8F00),
           badgeFg: Colors.white,
         );
       default:
-        return _PriorityPalette(
-          background: const Color(0xFFF1F8E9),
-          border: const Color(0xFFE0E6D6),
-          iconBg: const Color(0xFFEDE7F6),
-          iconFg: const Color(0xFF5E35B1),
-          badgeBg: const Color(0xFF4E3E67),
+        return const _PriorityPalette(
+          background: Color(0xFFF1F8E9),
+          border: Color(0xFFE0E6D6),
+          iconBg: Color(0xFFEDE7F6),
+          iconFg: Color(0xFF5E35B1),
+          badgeBg: Color(0xFF4E3E67),
           badgeFg: Colors.white,
         );
     }

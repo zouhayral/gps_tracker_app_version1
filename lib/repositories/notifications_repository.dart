@@ -515,7 +515,7 @@ class NotificationsRepository {
       // Update replay anchor with the latest event timestamp
       if (enrichedEvents.isNotEmpty) {
         final latestEvent = enrichedEvents.reduce((a, b) => 
-          a.timestamp.isAfter(b.timestamp) ? a : b
+          a.timestamp.isAfter(b.timestamp) ? a : b,
         );
         await _updateReplayAnchor(latestEvent.timestamp);
       }

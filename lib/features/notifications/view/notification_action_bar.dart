@@ -85,7 +85,7 @@ class NotificationActionBar extends ConsumerWidget {
             ],
           ),
         );
-        if (confirmed == true) {
+        if (confirmed ?? false) {
           await ref.read(clearAllNotificationsProvider.future);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(

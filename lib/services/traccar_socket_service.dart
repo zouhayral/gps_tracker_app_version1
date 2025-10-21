@@ -222,7 +222,7 @@ class TraccarSocketService {
     final exp = _reconnectAttempts.clamp(0, 4);
     final baseSeconds = math.min(32, 2 << exp);
     // Apply +/-25% jitter to avoid thundering herd on network recovery
-    final jitterFraction = 0.25;
+    const jitterFraction = 0.25;
     final rand = math.Random();
     final jitter = (baseSeconds * (rand.nextDouble() * 2 * jitterFraction - jitterFraction)).round();
     final delaySeconds = (baseSeconds + jitter).clamp(1, 60);

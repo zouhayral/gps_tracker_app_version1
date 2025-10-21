@@ -18,7 +18,7 @@ class RecoveredEventsBanner extends ConsumerStatefulWidget {
 class _RecoveredEventsBannerState extends ConsumerState<RecoveredEventsBanner> {
   bool _show = false;
   int _count = 0;
-  double _opacity = 0.0;
+  double _opacity = 0;
   Offset _offset = const Offset(0, 0.2);
   bool _exiting = false;
   StreamSubscription<int>? _sub;

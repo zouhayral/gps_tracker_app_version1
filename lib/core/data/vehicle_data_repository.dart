@@ -95,6 +95,8 @@ class VehicleDataRepository {
   final TraccarSocketService socketService;
   final TelemetryDaoBase telemetryDao;
   final EventService eventService;
+  // Throttle backfill to prevent duplicate runs on rapid reconnects
+  DateTime? _lastBackfillRun;
 
   // Per-device notifiers
   final Map<int, ValueNotifier<VehicleDataSnapshot?>> _notifiers = {};
@@ -568,13 +570,22 @@ class VehicleDataRepository {
 
   /// On WebSocket reconnect, fetch and replay missed events to downstream consumers
   Future<void> _onWebSocketReconnect() async {
+    // Throttle: avoid duplicate runs in quick succession
+    final now = DateTime.now();
+    if (_lastBackfillRun != null && now.difference(_lastBackfillRun!) < const Duration(seconds: 5)) {
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] ⏳ Skipping backfill (throttled)');
+      }
+      return;
+    }
+    _lastBackfillRun = now;
     // Try to get replay anchor first (most precise)
     final replayAnchor = await eventService.getReplayAnchor();
     // Fallback to latest cached event timestamp
     final cachedTs = await eventService.getLatestCachedEventTimestamp();
 
     // Establish bounded backfill window [from, to]
-    var to = DateTime.now();
+    final to = DateTime.now();
     var from = replayAnchor ?? cachedTs ?? to.subtract(const Duration(minutes: 30));
 
     // Guard against clock skew or invalid range
@@ -619,12 +630,20 @@ class VehicleDataRepository {
         return;
       }
 
-      // Add a small safety margin to the from time to avoid off-by-one gaps
-      final safeFrom = from.subtract(const Duration(minutes: 1));
+      // Add a safety margin to the from time to avoid off-by-one gaps
+      final safeFrom = from.subtract(const Duration(minutes: 5));
+
+      if (kDebugMode) {
+        debugPrint('[VehicleRepo] 📆 Backfill window (safe): $safeFrom → $to');
+        debugPrint('[VehicleRepo] 🧭 Backfilling per-device for ${deviceIds.length} device(s): $deviceIds');
+      }
 
       final allMissed = <Event>[];
       for (final id in deviceIds) {
         try {
+          if (kDebugMode) {
+            debugPrint('[VehicleRepo] 🔎 Fetching events for device $id');
+          }
           final list = await eventService.fetchEvents(
             deviceId: id,
             from: safeFrom,
