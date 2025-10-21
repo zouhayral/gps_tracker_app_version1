@@ -6,6 +6,7 @@ import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
 import 'package:my_app_gps/features/notifications/view/notification_action_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_tile.dart';
+import 'package:my_app_gps/features/notifications/view/recovered_banner.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// NotificationsPage displays a list of notification events with live updates.
@@ -64,6 +65,11 @@ class NotificationsPage extends ConsumerWidget {
             const Align(
               alignment: Alignment.bottomCenter,
               child: NotificationBanner(),
+            ),
+            // Recovered events banner: shows count after reconnect backfill
+            const Align(
+              alignment: Alignment.bottomCenter,
+              child: RecoveredEventsBanner(),
             ),
           ],
         ),

@@ -109,6 +109,9 @@ class VehicleDataRepository {
   // Event broadcast stream (raw event maps from WebSocket)
   final StreamController<Map<String, dynamic>> _eventController =
       StreamController<Map<String, dynamic>>.broadcast();
+  // Recovered (backfilled) events count stream after reconnect
+  final StreamController<int> _recoveredEventsController =
+    StreamController<int>.broadcast();
 
   // REST fallback timer
   Timer? _fallbackTimer;
@@ -238,6 +241,8 @@ class VehicleDataRepository {
   /// Expose a stream of raw event maps coming from the WebSocket 'events' payload.
   /// Consumers can transform these into domain models as needed.
   Stream<Map<String, dynamic>> get onEvent => _eventController.stream;
+  /// Expose a stream of recovered event counts emitted after reconnect backfill
+  Stream<int> get onRecoveredEvents => _recoveredEventsController.stream;
 
   /// Update offline state from connectivity provider
   void setOffline({required bool offline}) {
@@ -599,6 +604,10 @@ class VehicleDataRepository {
         if (kDebugMode) debugPrint('[VehicleRepo] ✅ No missed events');
         return;
       }
+      // Notify recovered count once per backfill
+      if (!_recoveredEventsController.isClosed) {
+        _recoveredEventsController.add(missed.length);
+      }
       for (final e in missed) {
         if (!_eventController.isClosed) {
           _eventController.add(e.toJson());
@@ -935,7 +944,8 @@ class VehicleDataRepository {
     _socketSub?.cancel();
     _fallbackTimer?.cancel();
     _cleanupTimer?.cancel();
-  _eventController.close();
+    _eventController.close();
+    _recoveredEventsController.close();
 
     for (final timer in _debounceTimers.values) {
       timer.cancel();

@@ -218,19 +218,24 @@ class TraccarSocketService {
   void _scheduleReconnect(String reason) {
     if (_manuallyClosed) return;
     _channel = null;
-    // Capped exponential backoff: 2s, 4s, 8s, 16s, 32s
+    // Capped exponential backoff with jitter: ~2s, 4s, 8s, 16s, 32s (+/-25%)
     final exp = _reconnectAttempts.clamp(0, 4);
     final baseSeconds = math.min(32, 2 << exp);
+    // Apply +/-25% jitter to avoid thundering herd on network recovery
+    final jitterFraction = 0.25;
+    final rand = math.Random();
+    final jitter = (baseSeconds * (rand.nextDouble() * 2 * jitterFraction - jitterFraction)).round();
+    final delaySeconds = (baseSeconds + jitter).clamp(1, 60);
     final nextAttempt = _reconnectAttempts + 1;
     _reconnectAttempts = nextAttempt;
     if (kDebugMode) {
       // ignore: avoid_print
       print(
-        '[SOCKET][RETRY] attempt #$nextAttempt in ${baseSeconds}s (reason=$reason)',
+        '[SOCKET][RETRY] attempt #$nextAttempt in ${delaySeconds}s (reason=$reason)',
       );
     }
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(Duration(seconds: baseSeconds), _ensureConnected);
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), _ensureConnected);
   }
 
   Future<void> close() async {

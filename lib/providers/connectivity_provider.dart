@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/controllers/connectivity_coordinator.dart';
-import 'package:my_app_gps/services/websocket_manager.dart';
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
 
 /// Riverpod provider for unified connectivity state
 ///
@@ -81,7 +81,7 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
   Future<bool> _checkBackendHealth() async {
     try {
       // First check: WebSocket connection status
-      final wsState = _ref.read(webSocketProvider);
+  final wsState = _ref.read(webSocketManagerProvider);
       if (wsState.status == WebSocketStatus.connected) {
         if (kDebugMode) {
           debugPrint('[CONNECTIVITY_PROVIDER] ✅ Backend check: WS connected');
@@ -147,7 +147,7 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
 
     // 🎯 NEW: Pause WebSocket retries when offline
     try {
-      _ref.read(webSocketProvider.notifier).pause();
+  _ref.read(webSocketManagerProvider.notifier).suspend();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[CONNECTIVITY_PROVIDER] ⚠️ Failed to pause WebSocket: $e');
@@ -169,7 +169,7 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
 
     // 🎯 NEW: Resume WebSocket when back online
     try {
-      _ref.read(webSocketProvider.notifier).resume();
+  _ref.read(webSocketManagerProvider.notifier).resume();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[CONNECTIVITY_PROVIDER] ⚠️ Failed to resume WebSocket: $e');
