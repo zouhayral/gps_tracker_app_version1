@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:my_app_gps/data/models/event.dart';
 import 'package:intl/intl.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
+import 'package:my_app_gps/data/models/event.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
 
 /// Service for managing local push notifications for Traccar events
 /// 

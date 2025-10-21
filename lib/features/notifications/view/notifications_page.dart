@@ -21,9 +21,14 @@ class NotificationsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-  // Use value provider that never stays in loading
-  final events = ref.watch(filteredNotificationsValueProvider);
-    final filter = ref.watch(notificationFilterProvider);
+  // Observe base stream loading state, but never block UI on it
+  final baseAsync = ref.watch(notificationsStreamProvider);
+  final repo = ref.watch(notificationsRepositoryProvider);
+  final events = baseAsync.maybeWhen(
+    data: (events) => events,
+    orElse: () => repo.getCurrentEvents(),
+  );
+  final isSearching = baseAsync.isLoading;
 
     return Scaffold(
         appBar: AppBar(
@@ -36,19 +41,6 @@ class NotificationsPage extends ConsumerWidget {
               },
             ),
             const SizedBox(width: 8),
-            // Clear filters button
-            if (filter.isActive)
-              IconButton(
-                icon: const Icon(Icons.filter_alt_off_outlined),
-                iconSize: 24,
-                tooltip: 'Clear Filters',
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                onPressed: () {
-                  // Clear all filters
-                  ref.read(notificationFilterProvider.notifier).state =
-                      const NotificationFilter();
-                },
-              ),
             const SizedBox(width: 8),
           ],
         ),
@@ -56,8 +48,14 @@ class NotificationsPage extends ConsumerWidget {
           children: [
             Column(
               children: [
-                // Filter bar
+                // Action bar (Mark all read only)
                 const NotificationFilterBar(),
+                // Non-blocking progress hint (thin bar) while background sync completes
+                if (isSearching)
+                  const SizedBox(
+                    height: 2,
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
                 // Events list
                 Expanded(child: _buildEventsList(context, ref, events)),
               ],

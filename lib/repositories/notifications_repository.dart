@@ -450,6 +450,14 @@ class NotificationsRepository {
       final entities = enrichedEvents.map((e) => e.toEntity()).toList();
       await _eventsDao.upsertMany(entities);
 
+      // Update replay anchor with the latest event timestamp
+      if (enrichedEvents.isNotEmpty) {
+        final latestEvent = enrichedEvents.reduce((a, b) => 
+          a.timestamp.isAfter(b.timestamp) ? a : b
+        );
+        await _updateReplayAnchor(latestEvent.timestamp);
+      }
+
       // Update in-memory cache
       for (final event in enrichedEvents) {
         // Deduplicate recently seen events by id
@@ -832,6 +840,16 @@ class NotificationsRepository {
     } else {
       _log('⚠️ Cannot emit: events controller is closed');
     }
+  }
+
+  /// Synchronous snapshot of the current in-memory cached events.
+  ///
+  /// Returns an unmodifiable list. Safe to call at any time; if the repository
+  /// hasn't loaded cached events yet, this may be an empty list. Useful for
+  /// UI providers that want to avoid transient loading states and show the
+  /// best-known data immediately while the stream initializes.
+  List<Event> getCurrentEvents() {
+    return List.unmodifiable(_cachedEvents);
   }
 
   /// Structured logging

@@ -1,15 +1,13 @@
 import 'dart:async';
 
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/entities/event_entity.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider for event service - fetches and manages Traccar events.
 final eventServiceProvider = Provider<EventService>((ref) {
