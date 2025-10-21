@@ -208,6 +208,24 @@ class NotificationsRepository {
     }
   }
 
+  /// Public helper to persist the latest event timestamp as a replay anchor.
+  /// Useful for external callers or tests that want to set the anchor explicitly.
+  Future<void> saveLatestEventTimestamp(DateTime ts) async {
+    await _updateReplayAnchor(ts);
+  }
+
+  /// Public helper to retrieve the saved replay anchor timestamp from prefs.
+  Future<DateTime?> getSavedLatestEventTimestamp() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ms = prefs.getInt(_anchorPrefKey);
+      return ms != null ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+    } catch (e) {
+      _log('⚠️ Failed to get saved replay anchor: $e');
+      return null;
+    }
+  }
+
   /// Prefetch all device names into cache for fast lookups
   Future<void> _prefetchDeviceNames() async {
     try {
