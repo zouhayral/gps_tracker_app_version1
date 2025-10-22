@@ -39,6 +39,17 @@ class Trip {
   String get formattedAvgSpeed => '${avgSpeedKph.toStringAsFixed(1)} km/h';
   String get formattedMaxSpeed => '${maxSpeedKph.toStringAsFixed(1)} km/h';
 
+  /// Start and end time strings for UI rows
+  String get formattedStartTime {
+    final df = DateFormat('MMM d, y HH:mm');
+    return df.format(startTime);
+  }
+
+  String get formattedEndTime {
+    final df = DateFormat('MMM d, y HH:mm');
+    return df.format(endTime);
+  }
+
   /// Create a Trip from Traccar reports JSON. Falls back gracefully if some
   /// fields are missing; computes a synthetic id if not present.
   factory Trip.fromJson(Map<String, dynamic> json) {
