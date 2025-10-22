@@ -41,16 +41,35 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
     _animatedMapController = AnimatedMapController(vsync: this);
   }
 
+  // Safely read current zoom; returns fallback if controller isn't attached yet
+  double _safeZoom([double fallback = 12.0]) {
+    try {
+      return _animatedMapController.mapController.camera.zoom;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   void _ensureFitBounds(List<LatLng> pts) {
     if (pts.isEmpty) return;
     if (pts.length == 1) {
-      _animatedMapController.mapController.move(pts.first, 16);
+      try {
+        _animatedMapController.mapController.move(pts.first, 16);
+      } catch (_) {
+        // Controller not attached yet; retry next frame
+        WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
+      }
       return;
     }
     final bounds = LatLngBounds.fromPoints(pts);
-    _animatedMapController.mapController.fitCamera(
-      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32), maxZoom: 16),
-    );
+    try {
+      _animatedMapController.mapController.fitCamera(
+        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32), maxZoom: 16),
+      );
+    } catch (_) {
+      // Controller not attached yet; retry next frame
+      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
+    }
   }
 
   void _moveCameraSmooth(LatLng target) {
@@ -59,12 +78,16 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
     // Debounce camera animations to avoid vibration and animation restarts
     if (now - _lastCameraMoveTs < 1200) return;
     _lastCameraMoveTs = now;
-    _animatedMapController.animateTo(
-      dest: target,
-      zoom: _animatedMapController.mapController.camera.zoom,
-      curve: Curves.easeInOut,
-      duration: const Duration(milliseconds: 1000),
-    );
+    try {
+      _animatedMapController.animateTo(
+        dest: target,
+        zoom: _safeZoom(),
+        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 1000),
+      );
+    } catch (_) {
+      // If controller not ready yet, ignore; a later frame will retry via progress updates
+    }
   }
 
   // Linear interpolation between two LatLngs
@@ -206,7 +229,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                             online: true,
                             engineOn: true,
                             moving: playback.isPlaying,
-                            zoomLevel: _animatedMapController.mapController.camera.zoom,
+                            zoomLevel: _safeZoom(),
                           ),
                         ),
                       );
@@ -386,13 +409,21 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
   void _ensureFitBounds(List<LatLng> pts) {
     if (pts.isEmpty) return;
     if (pts.length == 1) {
-      _animatedMapController.mapController.move(pts.first, 16);
+      try {
+        _animatedMapController.mapController.move(pts.first, 16);
+      } catch (_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
+      }
       return;
     }
     final bounds = LatLngBounds.fromPoints(pts);
-    _animatedMapController.mapController.fitCamera(
-      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32), maxZoom: 16),
-    );
+    try {
+      _animatedMapController.mapController.fitCamera(
+        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32), maxZoom: 16),
+      );
+    } catch (_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
+    }
   }
 
   void _moveCameraSmooth(LatLng target) {
@@ -400,12 +431,16 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastCameraMoveTs < 1200) return;
     _lastCameraMoveTs = now;
-    _animatedMapController.animateTo(
-      dest: target,
-      zoom: _animatedMapController.mapController.camera.zoom,
-      curve: Curves.easeInOut,
-      duration: const Duration(milliseconds: 1000),
-    );
+    try {
+      _animatedMapController.animateTo(
+        dest: target,
+        zoom: _animatedMapController.mapController.camera.zoom,
+        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 1000),
+      );
+    } catch (_) {
+      // ignore; will retry on next frame via progress updates
+    }
   }
 
   LatLng _lerp(LatLng a, LatLng b, double t) => LatLng(
@@ -457,6 +492,12 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
               );
             }
             if (current != null) {
+              double zoom;
+              try {
+                zoom = _animatedMapController.mapController.camera.zoom;
+              } catch (_) {
+                zoom = 12.0;
+              }
               markers.add(
                 Marker(
                   point: current,
@@ -467,7 +508,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
                     online: true,
                     engineOn: true,
                     moving: playback.isPlaying,
-                    zoomLevel: _animatedMapController.mapController.camera.zoom,
+                    zoomLevel: zoom,
                   ),
                 ),
               );
