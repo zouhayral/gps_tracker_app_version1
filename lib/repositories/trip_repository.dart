@@ -157,13 +157,31 @@ class TripRepository {
           return trips;
         }
       } catch (_) {}
-      rethrow;
+      // graceful fallback
+      return <Trip>[];
     } catch (e, st) {
       if (kDebugMode) {
         debugPrint('[TripRepository] ❌ Error: $e');
         debugPrint(st.toString());
       }
-      rethrow;
+      return <Trip>[];
+    }
+  }
+
+  /// Safe cached trips lookup from DAO; returns empty list on error.
+  Future<List<Trip>> getCachedTrips(int deviceId, DateTime from, DateTime to) async {
+    try {
+      final dao = await _ref.read(tripsDaoProvider.future);
+      final cached = await dao.getByDeviceInRange(deviceId, from, to);
+      if (cached.isEmpty) return const <Trip>[];
+      return cached
+          .map((e) => Trip.fromJson(e.toDomain()))
+          .toList(growable: false);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[TripRepository] ⚠️ Cache lookup failed: $e');
+      }
+      return const <Trip>[];
     }
   }
 

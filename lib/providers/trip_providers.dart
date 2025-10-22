@@ -20,9 +20,42 @@ class TripQuery {
 /// Family provider to fetch trips by device and date range.
 final tripsByDeviceProvider = FutureProvider.autoDispose.family<List<Trip>, TripQuery>((ref, q) async {
   final repo = ref.watch(tripRepositoryProvider);
-  // Auto-refresh behaviour can be added if desired; currently one-shot fetch.
-  final trips = await repo.fetchTrips(deviceId: q.deviceId, from: q.from, to: q.to);
-  return trips;
+
+  // 1) Load from cache immediately if available
+  final cached = await repo.getCachedTrips(q.deviceId, q.from, q.to);
+  if (cached.isNotEmpty) {
+    debugPrint('[TripProviders] 🗄️ Loaded ${cached.length} trips from cache');
+    // Kick a background refresh; when done, invalidate this provider to update UI
+    // ignore: discarded_futures
+    Future(() async {
+      try {
+        final fetched = await repo.fetchTrips(deviceId: q.deviceId, from: q.from, to: q.to);
+        if (fetched.isNotEmpty) {
+          debugPrint('[TripProviders] 🌐 Refreshed ${fetched.length} trips from network');
+          // Recompute this provider to surface fresh network data
+          ref.invalidateSelf();
+        }
+      } catch (e) {
+        debugPrint('[TripProviders] ⚠️ Network fetch failed: $e');
+      }
+    });
+    return cached;
+  }
+
+  // 2) No cache: do network fetch and return
+  try {
+    final fetched = await repo.fetchTrips(deviceId: q.deviceId, from: q.from, to: q.to);
+    if (fetched.isNotEmpty) {
+      debugPrint('[TripProviders] 🌐 Loaded ${fetched.length} trips from network');
+      return fetched;
+    }
+  } catch (e) {
+    debugPrint('[TripProviders] ⚠️ Network fetch failed: $e');
+  }
+
+  // 3) Nothing found
+  debugPrint('[TripProviders] ❌ No trips found (cache or network)');
+  return const <Trip>[];
 });
 
 /// Playback state for trip replay.
