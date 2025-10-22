@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:animated_map_controller/animated_map_controller.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -17,29 +18,52 @@ class TripDetailsPage extends ConsumerStatefulWidget {
   ConsumerState<TripDetailsPage> createState() => _TripDetailsPageState();
 }
 
-class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
-  final MapController _mapController = MapController();
+class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerProviderStateMixin {
+  late final AnimatedMapController _animatedMapController;
   static const Duration _playbackDuration = Duration(seconds: 30);
   static const Duration _tick = Duration(milliseconds: 50); // 20 fps
   Timer? _timer;
   bool _didFit = false; // ensure we fit bounds only once per load
+  bool _follow = true; // follow vehicle toggle
+  int _lastCameraMoveTs = 0; // debounce camera animations
+  List<LatLng> _route = const [];
 
   @override
   void dispose() {
     _timer?.cancel();
-    _mapController.dispose();
+    _animatedMapController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _animatedMapController = AnimatedMapController(vsync: this);
   }
 
   void _ensureFitBounds(List<LatLng> pts) {
     if (pts.isEmpty) return;
     if (pts.length == 1) {
-      _mapController.move(pts.first, 16);
+      _animatedMapController.mapController.move(pts.first, 16);
       return;
     }
     final bounds = LatLngBounds.fromPoints(pts);
-    _mapController.fitCamera(
+    _animatedMapController.mapController.fitCamera(
       CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32), maxZoom: 16),
+    );
+  }
+
+  void _moveCameraSmooth(LatLng target) {
+    if (!_follow) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // Debounce camera animations to avoid vibration and animation restarts
+    if (now - _lastCameraMoveTs < 1200) return;
+    _lastCameraMoveTs = now;
+    _animatedMapController.animateTo(
+      dest: target,
+      zoom: _animatedMapController.mapController.camera.zoom,
+      curve: Curves.easeInOut,
+      duration: const Duration(milliseconds: 1000),
     );
   }
 
@@ -111,6 +135,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
                 child: positionsAsync.when(
                   data: (positions) {
                     final pts = positions.map((e) => e.toLatLng).toList(growable: false);
+                    _route = pts; // cache route for timer-driven follow
                     // Ensure camera fits to route once when data arrives
                     if (!_didFit) {
                       WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
@@ -148,9 +173,9 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
                           child: const Icon(Icons.location_history, color: Colors.orange, size: 26),
                         ),
                       );
-                      // Keep camera gently following current marker when playing
+                      // Keep camera gently following current marker when playing using animated controller
                       if (playback.isPlaying) {
-                        _mapController.move(current, _mapController.camera.zoom);
+                        WidgetsBinding.instance.addPostFrameCallback((_) => _moveCameraSmooth(current));
                       }
                     }
 
@@ -158,23 +183,27 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
                     final sep = tileSource.urlTemplate.contains('?') ? '&' : '?';
                     final url = '${tileSource.urlTemplate}${sep}_v=$ts';
 
-                    return FlutterMap(
-                      mapController: _mapController,
-                      options: const MapOptions(
-                        initialCenter: LatLng(0, 0),
-                        initialZoom: 2,
-                        maxZoom: 18,
-                      ),
+                    return Stack(
                       children: [
-                        TileLayer(
-                          key: ValueKey('trip_tiles_${tileSource.id}_${url.hashCode}_$ts'),
-                          urlTemplate: url,
-                          userAgentPackageName: TileNetworkClient.userAgent,
-                          maxZoom: tileSource.maxZoom.toDouble(),
-                          minZoom: tileSource.minZoom.toDouble(),
+                        FlutterMap(
+                          mapController: _animatedMapController.mapController,
+                          options: const MapOptions(
+                            initialCenter: LatLng(0, 0),
+                            initialZoom: 2,
+                            maxZoom: 18,
+                          ),
+                          children: [
+                            TileLayer(
+                              key: ValueKey('trip_tiles_${tileSource.id}_${url.hashCode}_$ts'),
+                              urlTemplate: url,
+                              userAgentPackageName: TileNetworkClient.userAgent,
+                              maxZoom: tileSource.maxZoom.toDouble(),
+                              minZoom: tileSource.minZoom.toDouble(),
+                            ),
+                            PolylineLayer(polylines: [polyline]),
+                            if (markers.isNotEmpty) MarkerLayer(markers: markers),
+                          ],
                         ),
-                        PolylineLayer(polylines: [polyline]),
-                        if (markers.isNotEmpty) MarkerLayer(markers: markers),
                         Positioned(
                           right: 8,
                           bottom: 8,
@@ -190,11 +219,40 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
                             ),
                           ),
                         ),
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Material(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            clipBehavior: Clip.antiAlias,
+                            borderRadius: BorderRadius.circular(8),
+                            child: InkWell(
+                              onTap: () => setState(() => _follow = !_follow),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _follow ? Icons.my_location : Icons.location_disabled,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _follow ? 'Following' : 'Free',
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     );
                   },
                   loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (e, st) => Padding(
+                  error: (Object e, StackTrace st) => Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text('Failed to load trip positions: $e'),
                   ),
