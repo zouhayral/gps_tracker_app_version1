@@ -6,8 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/data/models/event.dart';
-import 'package:my_app_gps/features/debug/dev_diagnostics_controller.dart';
-import 'package:my_app_gps/features/debug/dev_diagnostics_overlay.dart';
+// Debug HUD disabled globally; overlay imports removed
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/theme/app_theme.dart';
@@ -98,39 +97,18 @@ class _AppRootState extends ConsumerState<AppRoot> {
       'Directionality missing: AppRoot must be under a MaterialApp/Directionality',
     );
     final router = ref.watch(goRouterProvider);
-    final showOverlay = ref.watch(showDiagnosticsProvider);
     final app = MaterialApp.router(
         title: 'GPS Tracker',
         debugShowCheckedModeBanner: false,
+        showPerformanceOverlay: false,
         theme: buildAppTheme(),
         routerConfig: router,
         // No global NotificationToastListener here; pages can add locally
         builder: (context, child) => child ?? const SizedBox.shrink(),
       );
 
-    final withOverlay = kDebugMode && showOverlay
-        ? DevDiagnosticsOverlay(child: app)
-        : app;
-
-    return Stack(
-      children: [
-        withOverlay,
-        if (kDebugMode)
-          Positioned(
-            top: 0,
-            right: 0,
-            width: 60,
-            height: 60,
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onLongPress: () {
-                final notifier = ref.read(showDiagnosticsProvider.notifier);
-                notifier.state = !notifier.state;
-              },
-            ),
-          ),
-      ],
-    );
+    // Return app directly; debug performance HUD removed globally
+    return app;
   }
 
   @override
