@@ -43,11 +43,11 @@ class Trip {
   /// fields are missing; computes a synthetic id if not present.
   factory Trip.fromJson(Map<String, dynamic> json) {
     // Prefer explicit id when provided; otherwise generate a stable synthetic id
-    final deviceId = _asInt(json['deviceId']) ?? 0;
-    final startIso = (json['startTime'] as String?) ?? json['start'] as String?;
-    final endIso = (json['endTime'] as String?) ?? json['end'] as String?;
-    final start = _parseTime(startIso) ?? DateTime.now().toLocal();
-    final end = _parseTime(endIso) ?? start.add(const Duration(minutes: 1));
+  final deviceId = _asInt(json['deviceId']) ?? 0;
+  final startRaw = json.containsKey('startTime') ? json['startTime'] : json['start'];
+  final endRaw = json.containsKey('endTime') ? json['endTime'] : json['end'];
+  final start = _parseAnyDate(startRaw) ?? DateTime.now().toLocal();
+  final end = _parseAnyDate(endRaw) ?? start.add(const Duration(minutes: 1));
     final syntheticId = '${deviceId}_${start.millisecondsSinceEpoch}';
 
     // Distance from meters to km if provided in meters; accept km directly when given
@@ -105,5 +105,23 @@ DateTime? _parseTime(String? s) {
   } catch (_) {
     return null;
   }
+}
+
+DateTime? _parseAnyDate(dynamic v) {
+  if (v == null) return null;
+  if (v is DateTime) return v.toLocal();
+  if (v is int) {
+    try {
+      // Assume milliseconds since epoch
+      return DateTime.fromMillisecondsSinceEpoch(v, isUtc: true).toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
+  if (v is String) {
+    return _parseTime(v);
+  }
+  // Unknown type
+  return null;
 }
 
