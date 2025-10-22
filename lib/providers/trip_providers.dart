@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
@@ -75,7 +76,7 @@ class TripPlaybackState {
 class TripPlaybackNotifier extends StateNotifier<TripPlaybackState> {
   TripPlaybackNotifier() : super(const TripPlaybackState());
 
-  void selectTrip(String id) => state = state.copyWith(tripId: id, progress: 0.0);
+  void selectTrip(String id) => state = state.copyWith(tripId: id, progress: 0);
   void play() => state = state.copyWith(isPlaying: true);
   void pause() => state = state.copyWith(isPlaying: false);
   void seek(double p) => state = state.copyWith(progress: p.clamp(0.0, 1.0));
@@ -120,7 +121,7 @@ final tripSnapshotsProvider = FutureProvider<List<TripSnapshot>>((ref) async {
 final tripTrendsProvider = Provider<List<TripSnapshot>>((ref) {
   final sw = Stopwatch()..start();
   final snapshots = ref.watch(tripSnapshotsProvider).maybeWhen(
-        data: (list) => List<TripSnapshot>.from(list),
+        data: List<TripSnapshot>.from,
         orElse: () => <TripSnapshot>[],
       );
   snapshots.sort((a, b) => a.monthKey.compareTo(b.monthKey));
@@ -131,3 +132,61 @@ final tripTrendsProvider = Provider<List<TripSnapshot>>((ref) {
 
 /// UI state: selected metric for trends chart
 final tripTrendsMetricProvider = StateProvider<MetricType>((_) => MetricType.distance);
+
+/// Debounced, cache-first trips list for the last 24h per device.
+final tripListProvider =
+    AutoDisposeAsyncNotifierProviderFamily<TripListNotifier, List<Trip>, int>(
+        TripListNotifier.new);
+
+class TripListNotifier extends AutoDisposeFamilyAsyncNotifier<List<Trip>, int> {
+  Timer? _debounce;
+
+  @override
+  Future<List<Trip>> build(int deviceId) async {
+    ref.onDispose(() => _debounce?.cancel());
+    return _load(deviceId);
+  }
+
+  Future<List<Trip>> _load(int deviceId) async {
+    final repo = ref.watch(tripRepositoryProvider);
+    final now = DateTime.now();
+    final from = now.subtract(const Duration(days: 1));
+    final to = now;
+
+    // 1) cached instantly
+    final cached = await repo.getCachedTrips(deviceId, from, to);
+    if (cached.isNotEmpty) {
+      debugPrint('[TripProviders] 🗄️ Loaded ${cached.length} trips from cache');
+      state = AsyncData(cached);
+    }
+
+    // 2) debounced network refresh
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 3), () async {
+      try {
+        final fetched = await repo.fetchTrips(deviceId: deviceId, from: from, to: to);
+        if (fetched.isNotEmpty) {
+          debugPrint('[TripProviders] 🌐 Refreshed ${fetched.length} trips from network');
+          state = AsyncData(_mergeTrips(cached, fetched));
+        }
+      } catch (e) {
+        debugPrint('[TripProviders] ⚠️ Network refresh failed: $e');
+      }
+    });
+
+    return cached;
+  }
+
+  List<Trip> _mergeTrips(List<Trip> cached, List<Trip> fetched) {
+    final byId = <String, Trip>{};
+    for (final t in cached) {
+      byId[t.id] = t;
+    }
+    for (final t in fetched) {
+      byId[t.id] = t;
+    }
+    final all = byId.values.toList(growable: false);
+    all.sort((a, b) => b.startTime.compareTo(a.startTime));
+    return all;
+  }
+}

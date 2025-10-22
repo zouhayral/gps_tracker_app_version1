@@ -1,6 +1,7 @@
 /// Centralized performance thresholds for regression checks.
 /// Adjust these as the app evolves; tests should import from here.
 /// These constants are used by performance tests and optionally by runtime diagnostics UI.
+library;
 
 // Target average frames per second. In CI/unit-test environments where
 // frame timings are not available, FPS checks may be skipped.

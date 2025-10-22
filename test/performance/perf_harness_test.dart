@@ -28,7 +28,7 @@ void main() {
       // Access the ValueListenable directly; in tests we add a listener and remove it.
       void listener() {
         final v = DevDiagnostics.instance.fps.value;
-        samples.add(v.toDouble());
+        samples.add(v);
       }
 
   DevDiagnostics.instance.fps.addListener(listener);
@@ -44,7 +44,7 @@ void main() {
 
       final avgFps = samples.reduce((a, b) => a + b) / samples.length;
       expect(avgFps, greaterThanOrEqualTo(kTargetFps.toDouble()),
-          reason: 'Average FPS dropped below $kTargetFps');
+          reason: 'Average FPS dropped below $kTargetFps',);
     });
 
     test('Backfill performance within target window', () async {
@@ -57,26 +57,26 @@ void main() {
 
       final latencyMs = sw.elapsedMilliseconds;
       expect(latencyMs, lessThanOrEqualTo(kMaxBackfillMs),
-          reason: 'Backfill latency exceeded ${kMaxBackfillMs}ms');
+          reason: 'Backfill latency exceeded ${kMaxBackfillMs}ms',);
     });
 
     test('Cluster compute time acceptable', () async {
       DevDiagnostics.instance.recordClusterCompute(80);
       expect(DevDiagnostics.instance.clusterComputeMs.value, lessThan(kMaxClusterMs),
-          reason: 'Cluster compute took too long (> ${kMaxClusterMs}ms)');
+          reason: 'Cluster compute took too long (> ${kMaxClusterMs}ms)',);
     });
 
     test('No excessive dedup skips', () async {
       // Reset to a known test value (idempotent for tests).
       DevDiagnostics.instance.dedupSkipped.value = 2;
       expect(DevDiagnostics.instance.dedupSkipped.value, lessThan(kMaxDedupSkip),
-          reason: 'Too many duplicate events filtered');
+          reason: 'Too many duplicate events filtered',);
     });
 
     test('Ping latency acceptable', () async {
       DevDiagnostics.instance.recordPingLatency(120);
       expect(DevDiagnostics.instance.pingLatencyMs.value, lessThanOrEqualTo(kMaxPingMs),
-          reason: 'Ping latency exceeded ${kMaxPingMs}ms');
+          reason: 'Ping latency exceeded ${kMaxPingMs}ms',);
     });
   });
 }

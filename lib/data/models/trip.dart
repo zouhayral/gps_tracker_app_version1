@@ -55,14 +55,14 @@ class Trip {
     final kilometers = meters > 0 ? (meters / 1000.0) : (_asDouble(json['distanceKm']) ?? 0.0);
 
     // Speeds: support km/h directly; if provided in m/s convert to km/h
-    double _speedToKph(dynamic v) {
+    double speedToKph(dynamic v) {
       final s = _asDouble(v) ?? 0.0;
       // Heuristic: if value looks like m/s (usually < 50), convert to km/h
       return s <= 60 ? s * 3.6 : s;
     }
 
-    final avgKph = _speedToKph(json['averageSpeed'] ?? json['avgSpeed'] ?? json['avgSpeedKph']);
-    final maxKph = _speedToKph(json['maxSpeed'] ?? json['maxSpeedKph']);
+    final avgKph = speedToKph(json['averageSpeed'] ?? json['avgSpeed'] ?? json['avgSpeedKph']);
+    final maxKph = speedToKph(json['maxSpeed'] ?? json['maxSpeedKph']);
 
     // Coordinates may be provided as startLat/startLon and endLat/endLon
     final startLat = _asDouble(json['startLat']) ?? _asDouble(json['startLatitude']) ?? 0.0;
@@ -71,7 +71,7 @@ class Trip {
     final endLon = _asDouble(json['endLon']) ?? _asDouble(json['endLongitude']) ?? 0.0;
 
     return Trip(
-      id: (json['id']?.toString() ?? syntheticId),
+      id: json['id']?.toString() ?? syntheticId,
       deviceId: deviceId,
       startTime: start,
       endTime: end,

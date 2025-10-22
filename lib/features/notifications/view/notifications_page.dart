@@ -199,10 +199,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       child: Row(
         mainAxisAlignment:
             leftToRight ? MainAxisAlignment.start : MainAxisAlignment.end,
-        children: [
+        children: const [
           Icon(icon, color: Colors.white, size: 28),
-          const SizedBox(width: 8),
-          const Text(
+          SizedBox(width: 8),
+          Text(
             'Delete',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),

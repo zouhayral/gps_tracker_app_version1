@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/widgets.dart';
 import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 
 /// Lightweight runtime diagnostics for debug builds.

@@ -139,8 +139,6 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
                       markers.add(
                         Marker(
                           point: current,
-                          width: 30,
-                          height: 30,
                           child: const Icon(Icons.location_history, color: Colors.orange, size: 26),
                         ),
                       );

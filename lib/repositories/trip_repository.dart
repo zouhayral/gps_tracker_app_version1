@@ -41,10 +41,64 @@ class TripRepository {
 
     try {
       final sw = Stopwatch()..start();
-      // Try official POST body first (deviceId as single), then fallbacks
-      List<dynamic> raw;
-      try {
-        final r = await _doTripsPost(
+      // Try official POST body first (deviceId as single), then fallbacks using status codes
+      List<dynamic> raw = const <dynamic>[];
+      Response<List<dynamic>> r;
+
+      r = await _doTripsPost(
+        deviceId: deviceId,
+        from: from,
+        to: to,
+        useListBody: false,
+        trailingSlash: false,
+      );
+      if (r.statusCode == 200) {
+        raw = r.data ?? const <dynamic>[];
+      } else if (r.statusCode == 405) {
+        // deviceIds array
+        r = await _doTripsPost(
+          deviceId: deviceId,
+          from: from,
+          to: to,
+          useListBody: true,
+          trailingSlash: false,
+        );
+        if (r.statusCode == 200) {
+          raw = r.data ?? const <dynamic>[];
+        } else if (r.statusCode == 405) {
+          // trailing slash single
+          r = await _doTripsPost(
+            deviceId: deviceId,
+            from: from,
+            to: to,
+            useListBody: false,
+            trailingSlash: true,
+          );
+          if (r.statusCode == 200) {
+            raw = r.data ?? const <dynamic>[];
+          } else if (r.statusCode == 405) {
+            // trailing slash array
+            r = await _doTripsPost(
+              deviceId: deviceId,
+              from: from,
+              to: to,
+              useListBody: true,
+              trailingSlash: true,
+            );
+            if (r.statusCode == 200) {
+              raw = r.data ?? const <dynamic>[];
+            } else if (r.statusCode == 405) {
+              if (kDebugMode) {
+                debugPrint('[TripRepository] ⚠️ POST not supported; retrying with GET query');
+              }
+              raw = await _doTripsGet(deviceId: deviceId, from: from, to: to);
+            }
+          }
+        }
+      } else if (_isTransient(r.statusCode)) {
+        // Retry once after a short backoff
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        r = await _doTripsPost(
           deviceId: deviceId,
           from: from,
           to: to,
@@ -52,75 +106,6 @@ class TripRepository {
           trailingSlash: false,
         );
         raw = r.data ?? const <dynamic>[];
-      } on DioException catch (e) {
-        if (e.response?.statusCode == 405) {
-          // Try deviceIds array body
-          try {
-            final r = await _doTripsPost(
-              deviceId: deviceId,
-              from: from,
-              to: to,
-              useListBody: true,
-              trailingSlash: false,
-            );
-            raw = r.data ?? const <dynamic>[];
-          } on DioException catch (e2) {
-            if (e2.response?.statusCode == 405) {
-              // Try trailing-slash variants (some servers route only with /)
-              try {
-                final r = await _doTripsPost(
-                  deviceId: deviceId,
-                  from: from,
-                  to: to,
-                  useListBody: false,
-                  trailingSlash: true,
-                );
-                raw = r.data ?? const <dynamic>[];
-              } on DioException catch (e3) {
-                if (e3.response?.statusCode == 405) {
-                  try {
-                    if (kDebugMode) {
-                      debugPrint('[TripRepository] ⚠️ POST not supported; retrying with GET query');
-                    }
-                    final r = await _doTripsPost(
-                      deviceId: deviceId,
-                      from: from,
-                      to: to,
-                      useListBody: true,
-                      trailingSlash: true,
-                    );
-                    raw = r.data ?? const <dynamic>[];
-                  } on DioException catch (e4) {
-                    if (e4.response?.statusCode == 405) {
-                      // Final fallback: attempt GET (some non-standard configs)
-                      final r = await _doTripsGet(deviceId: deviceId, from: from, to: to);
-                      raw = r;
-                    } else {
-                      rethrow;
-                    }
-                  }
-                } else {
-                  rethrow;
-                }
-              }
-            } else {
-              rethrow;
-            }
-          }
-        } else if (_isTransient(e.response?.statusCode)) {
-          // Retry once after a short backoff
-          await Future<void>.delayed(const Duration(milliseconds: 300));
-          final r = await _doTripsPost(
-            deviceId: deviceId,
-            from: from,
-            to: to,
-            useListBody: false,
-            trailingSlash: false,
-          );
-          raw = r.data ?? const <dynamic>[];
-        } else {
-          rethrow;
-        }
       }
 
       final trips = raw
@@ -199,7 +184,7 @@ class TripRepository {
       // Proceed with deletion
       final old = await tripsDao.getOlderThan(cutoff);
       if (old.isNotEmpty && kDebugMode) {
-        final totalKm = old.fold<double>(0.0, (s, t) => s + t.distanceKm);
+        final totalKm = old.fold<double>(0, (s, t) => s + t.distanceKm);
         debugPrint('[TripRepository] 🧹 Retention: deleting ${old.length} trips (< ${cutoff.toIso8601String()}) totaling ${totalKm.toStringAsFixed(1)} km');
       }
       await tripsDao.deleteOlderThan(cutoff);
@@ -282,6 +267,10 @@ class TripRepository {
         responseType: ResponseType.json,
         headers: const {'Accept': 'application/json'},
         contentType: 'application/json',
+        validateStatus: (code) => code != null && code < 500,
+        sendTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 10),
+        // connectTimeout is taken from BaseOptions; keep default or override if needed
       ),
     );
   }
@@ -307,6 +296,9 @@ class TripRepository {
       options: Options(
         responseType: ResponseType.json,
         headers: const {'Accept': 'application/json'},
+        validateStatus: (code) => code != null && code < 500,
+        sendTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 10),
       ),
     );
     return r.data ?? const <dynamic>[];
@@ -385,11 +377,11 @@ class TripRepository {
     required TripSnapshotsDaoBase snapshotsDao,
   }) async {
     // Compute the month range for the cutoff's month: [first day 00:00, last day 23:59:59]
-    final monthStart = DateTime(cutoff.year, cutoff.month, 1).toUtc();
+    final monthStart = DateTime(cutoff.year, cutoff.month).toUtc();
     // To get month end, advance to next month and subtract 1 day
     final nextMonth = (cutoff.month == 12)
-        ? DateTime(cutoff.year + 1, 1, 1).toUtc()
-        : DateTime(cutoff.year, cutoff.month + 1, 1).toUtc();
+        ? DateTime(cutoff.year + 1, 1).toUtc()
+        : DateTime(cutoff.year, cutoff.month + 1).toUtc();
     final monthEnd = nextMonth.subtract(const Duration(seconds: 1));
 
     final monthKey = _fmtYearMonth(cutoff);
@@ -399,16 +391,16 @@ class TripRepository {
       final daily = await tripsDao.getAggregatesByDay(monthStart, monthEnd);
       if (daily.isEmpty) return;
       final totals = TripAggregate(
-        totalDistanceKm: daily.values.fold(0.0, (a, b) => a + b.totalDistanceKm),
-        totalDurationHrs: daily.values.fold(0.0, (a, b) => a + b.totalDurationHrs),
-        avgSpeedKph: daily.values.isEmpty
-            ? 0.0
-            : daily.values.fold(0.0, (a, b) => a + b.avgSpeedKph) / daily.length,
+        totalDistanceKm: daily.values.fold(0, (a, b) => a + b.totalDistanceKm),
+        totalDurationHrs: daily.values.fold(0, (a, b) => a + b.totalDurationHrs),
+    avgSpeedKph: daily.values.isEmpty
+      ? 0.0
+      : daily.values.fold(0.0, (a, b) => a + b.avgSpeedKph) / daily.length,
         tripCount: daily.values.fold(0, (a, b) => a + b.tripCount),
       );
       await snapshotsDao.putSnapshot(TripSnapshot.fromAggregate(monthKey, totals));
       // Optionally prune very old snapshots (keep last 24 months)
-      final keepBackMonths = 24;
+      const keepBackMonths = 24;
       final olderCutoff = _fmtYearMonth(DateTime.now().toUtc().subtract(Duration(days: keepBackMonths * 30)));
       await snapshotsDao.deleteOlderThan(olderCutoff);
       if (kDebugMode) {

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/features/trips/trip_details_page.dart';
 import 'package:my_app_gps/providers/trip_providers.dart';
-import 'package:my_app_gps/app/app_router.dart';
 
 class TripsPage extends ConsumerStatefulWidget {
   const TripsPage({this.deviceId = 1, super.key});
@@ -29,8 +29,8 @@ class _TripsPageState extends ConsumerState<TripsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final query = TripQuery(deviceId: widget.deviceId, from: _from, to: _to);
-    final tripsAsync = ref.watch(tripsByDeviceProvider(query));
+    // Use debounced, cache-first provider for last 24h
+    final tripsAsync = ref.watch(tripListProvider(widget.deviceId));
 
     return Scaffold(
       appBar: AppBar(

@@ -5,7 +5,7 @@ import 'package:my_app_gps/data/models/trip_snapshot.dart';
 enum MetricType { distance, duration, trips, speed }
 
 class TripTrendsChart extends StatelessWidget {
-  const TripTrendsChart({super.key, required this.snapshots, required this.metric});
+  const TripTrendsChart({required this.snapshots, required this.metric, super.key});
 
   final List<TripSnapshot> snapshots;
   final MetricType metric;
@@ -61,11 +61,11 @@ class TripTrendsChart extends StatelessWidget {
                 ),
               ),
             ),
-            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 35)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 35)),
+            rightTitles: const AxisTitles(),
+            topTitles: const AxisTitles(),
           ),
-          gridData: FlGridData(show: true),
+          gridData: const FlGridData(),
           borderData: FlBorderData(show: false),
         ),
         swapAnimationDuration: const Duration(milliseconds: 500),

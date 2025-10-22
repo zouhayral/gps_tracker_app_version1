@@ -6,16 +6,16 @@ import 'package:my_app_gps/core/data/vehicle_data_cache.dart';
 import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
-import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/data/models/event.dart';
+import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/providers/connectivity_provider.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
-import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider for cache (requires SharedPreferences) - PUBLIC for override in main

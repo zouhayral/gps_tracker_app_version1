@@ -185,7 +185,7 @@ class TripsDaoObjectBox implements TripsDaoBase {
 
   @override
   Future<Map<String, TripAggregate>> getAggregatesByDay(
-      DateTime from, DateTime to) async {
+      DateTime from, DateTime to,) async {
     final fromMs = from.toUtc().millisecondsSinceEpoch;
     final toMs = to.toUtc().millisecondsSinceEpoch;
     final query = _box
@@ -196,14 +196,14 @@ class TripsDaoObjectBox implements TripsDaoBase {
         .build();
     try {
       final rows = query.find();
-      final Map<String, _AggAcc> acc = {};
+      final acc = <String, _AggAcc>{};
       for (final t in rows) {
         final startLocal = DateTime.fromMillisecondsSinceEpoch(
                 t.startTimeMs,
-                isUtc: true)
+                isUtc: true,)
             .toLocal();
         final key = _fmtYmd(startLocal);
-        final entry = acc.putIfAbsent(key, () => _AggAcc());
+        final entry = acc.putIfAbsent(key, _AggAcc.new);
         final durHrs = (t.endTimeMs - t.startTimeMs) / 1000.0 / 3600.0;
         entry.totalDistanceKm += t.distanceKm;
         entry.totalDurationHrs += durHrs;
@@ -218,7 +218,7 @@ class TripsDaoObjectBox implements TripsDaoBase {
               avgSpeedKph: v.tripCount == 0 ? 0 : v.sumAvgSpeedKph / v.tripCount,
               tripCount: v.tripCount,
             ),
-          ));
+          ),);
     } finally {
       query.close();
     }

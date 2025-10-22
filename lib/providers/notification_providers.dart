@@ -140,7 +140,7 @@ final filteredNotificationsProvider =
       'i': i,
       't': '$msg\n$dev\n$typ',
     };
-  }, growable: false);
+  }, growable: false,);
 
   final sw = Stopwatch()..start();
   final indices = await compute<List<Map<String, Object?>>, List<int>>(
@@ -198,7 +198,7 @@ List<int> _filterIndices(List<Map<String, Object?>> items) {
   final res = <int>[];
   for (final m in items) {
     final t = (m['t'] as String?) ?? '';
-    if (t.contains(q)) res.add(m['i'] as int);
+    if (t.contains(q)) res.add(m['i']! as int);
   }
   return res;
 }
