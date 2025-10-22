@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/data/models/trip_aggregate.dart';
 import 'package:my_app_gps/providers/trip_providers.dart';
+import 'package:my_app_gps/data/models/trip_snapshot.dart';
+import 'package:my_app_gps/features/trips/analytics/widgets/trip_trends_chart.dart';
 
 class TripAnalyticsPage extends ConsumerWidget {
   const TripAnalyticsPage({super.key});
@@ -115,6 +117,14 @@ class _AnalyticsView extends StatelessWidget {
               ),
             ),
           ),
+        const SizedBox(height: 16),
+        const Divider(),
+        const SizedBox(height: 8),
+        _MonthlySnapshotsSection(),
+        const SizedBox(height: 16),
+        const Divider(),
+        const SizedBox(height: 8),
+        const _MonthlyTrendsSection(),
       ],
     );
   }
@@ -142,6 +152,67 @@ class _StatTile extends StatelessWidget {
           Text(value, style: Theme.of(context).textTheme.titleMedium),
         ],
       ),
+    );
+  }
+}
+
+class _MonthlyTrendsSection extends ConsumerWidget {
+  const _MonthlyTrendsSection();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final trendSnapshots = ref.watch(tripTrendsProvider);
+    final metric = ref.watch(tripTrendsMetricProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Monthly Trends', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        SegmentedButton<MetricType>(
+          segments: const [
+            ButtonSegment(value: MetricType.distance, label: Text('Distance')),
+            ButtonSegment(value: MetricType.duration, label: Text('Duration')),
+            ButtonSegment(value: MetricType.trips, label: Text('Trips')),
+            ButtonSegment(value: MetricType.speed, label: Text('Speed')),
+          ],
+          selected: {metric},
+          onSelectionChanged: (v) {
+            if (v.isNotEmpty) ref.read(tripTrendsMetricProvider.notifier).state = v.first;
+          },
+        ),
+        const SizedBox(height: 12),
+        TripTrendsChart(snapshots: trendSnapshots, metric: metric),
+      ],
+    );
+  }
+}
+
+class _MonthlySnapshotsSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final snapshotsAsync = ref.watch(tripSnapshotsProvider);
+    final theme = Theme.of(context);
+    return snapshotsAsync.when(
+      data: (List<TripSnapshot> snapshots) {
+        if (snapshots.isEmpty) {
+          return Text('Monthly Snapshots', style: theme.textTheme.titleMedium);
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Monthly Snapshots', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            for (final s in snapshots)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.monthKey),
+                subtitle: Text('${s.tripCount} trips • ${s.totalDistanceKm.toStringAsFixed(1)} km • ${s.avgSpeedKph.toStringAsFixed(1)} km/h'),
+              ),
+          ],
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (e, _) => Text('Error loading snapshots: $e'),
     );
   }
 }

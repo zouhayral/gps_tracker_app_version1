@@ -20,6 +20,7 @@ import 'core/database/entities/geofence_entity.dart';
 import 'core/database/entities/position_entity.dart';
 import 'core/database/entities/telemetry_record.dart';
 import 'core/database/entities/trip_entity.dart';
+import 'data/models/trip_snapshot.dart';
 
 export 'package:objectbox/objectbox.dart'; // so that callers only have to import this file
 
@@ -507,6 +508,59 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(7, 3941204868590047628),
+    name: 'TripSnapshot',
+    lastPropertyId: const obx_int.IdUid(7, 9004363000642401183),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 1829170185030557693),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 6951295689129631092),
+        name: 'monthKey',
+        type: 9,
+        flags: 2080,
+        indexId: const obx_int.IdUid(22, 1600730073326815966),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 1218855408975824276),
+        name: 'tripCount',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 7943486417956296819),
+        name: 'totalDistanceKm',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 6189554645443565491),
+        name: 'totalDurationHrs',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 303542046918328434),
+        name: 'avgSpeedKph',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 9004363000642401183),
+        name: 'createdAt',
+        type: 10,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -547,8 +601,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(6, 4884911390848185971),
-    lastIndexId: const obx_int.IdUid(21, 3816651612327145533),
+    lastEntityId: const obx_int.IdUid(7, 3941204868590047628),
+    lastIndexId: const obx_int.IdUid(22, 1600730073326815966),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -1193,6 +1247,79 @@ obx_int.ModelDefinition getObjectBoxModel() {
         return object;
       },
     ),
+    TripSnapshot: obx_int.EntityDefinition<TripSnapshot>(
+      model: _entities[6],
+      toOneRelations: (TripSnapshot object) => [],
+      toManyRelations: (TripSnapshot object) => {},
+      getId: (TripSnapshot object) => object.id,
+      setId: (TripSnapshot object, int id) {
+        object.id = id;
+      },
+      objectToFB: (TripSnapshot object, fb.Builder fbb) {
+        final monthKeyOffset = fbb.writeString(object.monthKey);
+        fbb.startTable(8);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, monthKeyOffset);
+        fbb.addInt64(2, object.tripCount);
+        fbb.addFloat64(3, object.totalDistanceKm);
+        fbb.addFloat64(4, object.totalDurationHrs);
+        fbb.addFloat64(5, object.avgSpeedKph);
+        fbb.addInt64(6, object.createdAt.millisecondsSinceEpoch);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final monthKeyParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final tripCountParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          8,
+          0,
+        );
+        final totalDistanceKmParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          10,
+          0,
+        );
+        final totalDurationHrsParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          12,
+          0,
+        );
+        final avgSpeedKphParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          14,
+          0,
+        );
+        final createdAtParam = DateTime.fromMillisecondsSinceEpoch(
+          const fb.Int64Reader().vTableGet(buffer, rootOffset, 16, 0),
+        );
+        final object = TripSnapshot(
+          id: idParam,
+          monthKey: monthKeyParam,
+          tripCount: tripCountParam,
+          totalDistanceKm: totalDistanceKmParam,
+          totalDurationHrs: totalDurationHrsParam,
+          avgSpeedKph: avgSpeedKphParam,
+          createdAt: createdAtParam,
+        );
+
+        return object;
+      },
+    ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -1548,5 +1675,43 @@ class TelemetryRecord_ {
   /// See [TelemetryRecord.motion].
   static final motion = obx.QueryBooleanProperty<TelemetryRecord>(
     _entities[5].properties[8],
+  );
+}
+
+/// [TripSnapshot] entity fields to define ObjectBox queries.
+class TripSnapshot_ {
+  /// See [TripSnapshot.id].
+  static final id = obx.QueryIntegerProperty<TripSnapshot>(
+    _entities[6].properties[0],
+  );
+
+  /// See [TripSnapshot.monthKey].
+  static final monthKey = obx.QueryStringProperty<TripSnapshot>(
+    _entities[6].properties[1],
+  );
+
+  /// See [TripSnapshot.tripCount].
+  static final tripCount = obx.QueryIntegerProperty<TripSnapshot>(
+    _entities[6].properties[2],
+  );
+
+  /// See [TripSnapshot.totalDistanceKm].
+  static final totalDistanceKm = obx.QueryDoubleProperty<TripSnapshot>(
+    _entities[6].properties[3],
+  );
+
+  /// See [TripSnapshot.totalDurationHrs].
+  static final totalDurationHrs = obx.QueryDoubleProperty<TripSnapshot>(
+    _entities[6].properties[4],
+  );
+
+  /// See [TripSnapshot.avgSpeedKph].
+  static final avgSpeedKph = obx.QueryDoubleProperty<TripSnapshot>(
+    _entities[6].properties[5],
+  );
+
+  /// See [TripSnapshot.createdAt].
+  static final createdAt = obx.QueryDateProperty<TripSnapshot>(
+    _entities[6].properties[6],
   );
 }

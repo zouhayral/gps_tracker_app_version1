@@ -433,10 +433,56 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "7:3941204868590047628",
+      "lastPropertyId": "7:9004363000642401183",
+      "name": "TripSnapshot",
+      "properties": [
+        {
+          "id": "1:1829170185030557693",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:6951295689129631092",
+          "name": "monthKey",
+          "indexId": "22:1600730073326815966",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:1218855408975824276",
+          "name": "tripCount",
+          "type": 6
+        },
+        {
+          "id": "4:7943486417956296819",
+          "name": "totalDistanceKm",
+          "type": 8
+        },
+        {
+          "id": "5:6189554645443565491",
+          "name": "totalDurationHrs",
+          "type": 8
+        },
+        {
+          "id": "6:303542046918328434",
+          "name": "avgSpeedKph",
+          "type": 8
+        },
+        {
+          "id": "7:9004363000642401183",
+          "name": "createdAt",
+          "type": 10
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "6:4884911390848185971",
-  "lastIndexId": "21:3816651612327145533",
+  "lastEntityId": "7:3941204868590047628",
+  "lastIndexId": "22:1600730073326815966",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
