@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:animated_map_controller/animated_map_controller.dart';
+import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -26,7 +26,6 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
   bool _didFit = false; // ensure we fit bounds only once per load
   bool _follow = true; // follow vehicle toggle
   int _lastCameraMoveTs = 0; // debounce camera animations
-  List<LatLng> _route = const [];
 
   @override
   void dispose() {
@@ -135,7 +134,6 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                 child: positionsAsync.when(
                   data: (positions) {
                     final pts = positions.map((e) => e.toLatLng).toList(growable: false);
-                    _route = pts; // cache route for timer-driven follow
                     // Ensure camera fits to route once when data arrives
                     if (!_didFit) {
                       WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
