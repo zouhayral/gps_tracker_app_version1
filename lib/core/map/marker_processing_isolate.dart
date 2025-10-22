@@ -3,9 +3,9 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
-import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 
 /// Background isolate for heavy marker processing operations
 /// Moves position filtering and marker creation off the main thread

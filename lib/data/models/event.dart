@@ -24,7 +24,9 @@ class Event {
   const Event({
     required this.id,
     required this.deviceId,
-    required this.type, required this.timestamp, this.deviceName,
+    required this.type,
+    required this.timestamp,
+    this.deviceName,
     this.message,
     this.severity,
     this.positionId,
@@ -82,7 +84,7 @@ class Event {
         deviceId: deviceId,
         deviceName: deviceName,
         eventType: type,
-    eventTimeMs: timestamp.toLocal().millisecondsSinceEpoch,
+        eventTimeMs: timestamp.toLocal().millisecondsSinceEpoch,
         positionId: positionId,
         geofenceId: geofenceId,
         // Persist both severity and priority correctly
@@ -216,5 +218,3 @@ String _priorityForSeverity(String? severity) {
       return 'low';
   }
 }
-
-

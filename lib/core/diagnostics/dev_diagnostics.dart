@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/widgets.dart';
 import 'package:my_app_gps/core/diagnostics/rebuild_tracker.dart';
 
 /// Lightweight runtime diagnostics for debug builds.
@@ -20,6 +21,27 @@ class DevDiagnostics {
   }
 
   static final DevDiagnostics instance = DevDiagnostics._internal();
+
+  /// Central toggle: diagnostics are only enabled in debug mode
+  static bool get isEnabled => kDebugMode;
+
+  /// Lightweight unified log method (no-op in release)
+  static void log(String message) {
+    if (kDebugMode) debugPrint('[DevDiagnostics] $message');
+  }
+
+  /// Optional overlay hook (kept as a no-op by default)
+  static void attachOverlay(BuildContext context) {
+    if (!kDebugMode) return;
+    // Overlay is provided via DevDiagnosticsOverlay widget in debug builds.
+  }
+
+  /// Generic duration recorder for ad-hoc timings (no-op in release)
+  static void record(String name, Duration duration) {
+    if (kDebugMode) {
+      debugPrint('[DevDiagnostics] $name took ${duration.inMilliseconds}ms');
+    }
+  }
 
   // Public notifiers consumed by overlay
   final ValueNotifier<int> wsReconnects = ValueNotifier<int>(0);

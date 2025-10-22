@@ -12,7 +12,8 @@ class RecoveredEventsBanner extends ConsumerStatefulWidget {
   const RecoveredEventsBanner({super.key});
 
   @override
-  ConsumerState<RecoveredEventsBanner> createState() => _RecoveredEventsBannerState();
+  ConsumerState<RecoveredEventsBanner> createState() =>
+      _RecoveredEventsBannerState();
 }
 
 class _RecoveredEventsBannerState extends ConsumerState<RecoveredEventsBanner> {
@@ -47,7 +48,7 @@ class _RecoveredEventsBannerState extends ConsumerState<RecoveredEventsBanner> {
       if (!mounted) return;
       setState(() {
         _opacity = 1.0;
-        _offset = const Offset(0, 0);
+        _offset = Offset.zero;
       });
     });
 

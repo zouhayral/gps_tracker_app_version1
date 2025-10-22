@@ -10,17 +10,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 
 /// Service for managing local push notifications for Traccar events
-/// 
+///
 /// Handles system-level notifications for critical events like:
 /// - overspeed
 /// - ignitionOn/Off
 /// - deviceOffline/Online
 /// - geofenceEnter/Exit
-/// 
+///
 /// Notifications appear even when app is in background or terminated.
 class LocalNotificationService {
   LocalNotificationService._();
-  
+
   static final LocalNotificationService instance = LocalNotificationService._();
 
   final FlutterLocalNotificationsPlugin _plugin =
@@ -28,14 +28,15 @@ class LocalNotificationService {
 
   /// Track recently notified event IDs to prevent duplicates
   final Set<int> _recentlyNotifiedIds = {};
-  
+
   bool _initialized = false;
 
   /// Global gate for notifications, persisted via SharedPreferences
   static Future<bool> isNotificationsEnabled() async {
     try {
       if (SharedPrefsHolder.isInitialized) {
-        return SharedPrefsHolder.instance.getBool('notifications_enabled') ?? true;
+        return SharedPrefsHolder.instance.getBool('notifications_enabled') ??
+            true;
       }
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool('notifications_enabled') ?? true;
@@ -52,7 +53,7 @@ class LocalNotificationService {
   }
 
   /// Initialize the notification service
-  /// 
+  ///
   /// Must be called during app startup, typically in main().
   /// Requests permissions and sets up notification channels.
   Future<bool> initialize() async {
@@ -66,14 +67,13 @@ class LocalNotificationService {
 
       // Initialize timezone database
       tz.initializeTimeZones();
-      
+
       // Android initialization settings
-      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-      
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+
       // iOS initialization settings
-      const iosSettings = DarwinInitializationSettings(
-        
-      );
+      const iosSettings = DarwinInitializationSettings();
 
       const initSettings = InitializationSettings(
         android: androidSettings,
@@ -98,7 +98,7 @@ class LocalNotificationService {
 
       // Request permissions
       final permissionsGranted = await _requestPermissions();
-      
+
       if (!permissionsGranted) {
         _log('⚠️ Notification permissions not fully granted');
       }
@@ -137,19 +137,17 @@ class LocalNotificationService {
   Future<bool> _requestPermissions() async {
     if (Platform.isAndroid) {
       // Android 13+ requires runtime permission
-      final androidPlugin = _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-      
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+
       final granted = await androidPlugin?.requestNotificationsPermission();
       _log('Android notification permission: ${granted ?? false}');
       return granted ?? false;
     } else if (Platform.isIOS) {
       // iOS permissions
-      final iosPlugin = _plugin
-          .resolvePlatformSpecificImplementation<
-              IOSFlutterLocalNotificationsPlugin>();
-      
+      final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+
       final granted = await iosPlugin?.requestPermissions(
         alert: true,
         badge: true,
@@ -158,12 +156,12 @@ class LocalNotificationService {
       _log('iOS notification permission: ${granted ?? false}');
       return granted ?? false;
     }
-    
+
     return true;
   }
 
   /// Show notification for a Traccar event
-  /// 
+  ///
   /// Maps event types to appropriate notification titles and messages.
   /// Only shows notification if event hasn't been notified recently.
   Future<void> showEventNotification(Event event) async {
@@ -192,10 +190,10 @@ class LocalNotificationService {
 
     try {
       final notificationData = _getNotificationData(event);
-      
-  _log('📤 Showing notification for event: ${event.type}');
-  _log('   Title: ${notificationData.title}');
-  _log('   Device: ${event.deviceName ?? 'ID ${event.deviceId}'}');
+
+      _log('📤 Showing notification for event: ${event.type}');
+      _log('   Title: ${notificationData.title}');
+      _log('   Device: ${event.deviceName ?? 'ID ${event.deviceId}'}');
 
       // Use event.id hashCode as notification ID (notifications need int ID)
       final notificationId = event.id.hashCode;
@@ -210,7 +208,7 @@ class LocalNotificationService {
 
       // Track this notification (using hashCode)
       _recentlyNotifiedIds.add(event.id.hashCode);
-      
+
       // Clean up old tracked IDs (keep last 100)
       if (_recentlyNotifiedIds.length > 100) {
         final toRemove = _recentlyNotifiedIds.take(50).toList();
@@ -227,7 +225,7 @@ class LocalNotificationService {
   }
 
   /// Show summary notification for multiple events
-  /// 
+  ///
   /// Useful when multiple events arrive simultaneously.
   Future<void> showBatchSummary(List<Event> events) async {
     if (!_initialized || events.isEmpty) return;
@@ -237,9 +235,10 @@ class LocalNotificationService {
     }
 
     try {
-      final criticalCount = events.where((e) => e.severity == 'critical').length;
+      final criticalCount =
+          events.where((e) => e.severity == 'critical').length;
       final warningCount = events.where((e) => e.severity == 'warning').length;
-      
+
       final title = '${events.length} New Alerts';
       final body = criticalCount > 0
           ? '$criticalCount critical, $warningCount warnings'
@@ -361,12 +360,14 @@ class LocalNotificationService {
         baseTitle = '📢 ${_formatEventType(event.type)}';
     }
 
-  // Prefer Event.deviceName but also accept attributes['deviceName'] as fallback
-  final enrichedName = event.deviceName ?? (event.attributes['deviceName'] as String?);
-  final effectiveDevice = (enrichedName != null && enrichedName.trim().isNotEmpty)
-    ? enrichedName
-    : device;
-  final title = '$baseTitle — $effectiveDevice';
+    // Prefer Event.deviceName but also accept attributes['deviceName'] as fallback
+    final enrichedName =
+        event.deviceName ?? (event.attributes['deviceName'] as String?);
+    final effectiveDevice =
+        (enrichedName != null && enrichedName.trim().isNotEmpty)
+            ? enrichedName
+            : device;
+    final title = '$baseTitle — $effectiveDevice';
     final body = 'At $timeText';
 
     return _NotificationData(title: title, body: body);
@@ -375,11 +376,13 @@ class LocalNotificationService {
   /// Format event type for display
   String _formatEventType(String type) {
     // Convert camelCase to Title Case
-    final words = type.replaceAllMapped(
-      RegExp('([A-Z])'),
-      (match) => ' ${match.group(1)}',
-    ).trim();
-    
+    final words = type
+        .replaceAllMapped(
+          RegExp('([A-Z])'),
+          (match) => ' ${match.group(1)}',
+        )
+        .trim();
+
     return words[0].toUpperCase() + words.substring(1);
   }
 
@@ -392,7 +395,7 @@ class LocalNotificationService {
       final eventId = int.tryParse(payload.substring(6));
       if (eventId != null) {
         _log('   Opening event: $eventId');
-        // TODO: Navigate to notifications page
+        // TODO(app-team): Navigate to notifications page
         // This will be handled by the router when integrated
       }
     }
@@ -406,7 +409,8 @@ class LocalNotificationService {
   }
 
   /// Format time like HH:mm in local time
-  String _formatShortTime(DateTime dt) => DateFormat('HH:mm').format(dt.toLocal());
+  String _formatShortTime(DateTime dt) =>
+      DateFormat('HH:mm').format(dt.toLocal());
 
   /// Log message with prefix
   void _log(String message) {

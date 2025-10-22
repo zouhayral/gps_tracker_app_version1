@@ -170,8 +170,7 @@ class _MapPageState extends ConsumerState<MapPage>
   late final MarkerMotionController _motionController;
 
   // PERF PHASE 2: Marker update debouncing (collapses rapid bursts into single rebuild)
-  Timer? _markerUpdateDebounce;
-  static const _kMarkerUpdateDelay = Duration(milliseconds: 120);
+  // Unified: rely on ThrottledValueNotifier for marker update throttling
 
   // PERF PHASE 2: Map repaint throttling (caps re-paints to ~6 fps during heavy bursts)
   DateTime? _lastRepaint;
@@ -219,8 +218,8 @@ class _MapPageState extends ConsumerState<MapPage>
     // Raised throttle to 80ms to reduce UI thread load
     _markersNotifier = ThrottledValueNotifier<List<MapMarkerData>>(
       const [],
-      // Slow down marker list updates to reduce UI churn
-      throttleDuration: const Duration(milliseconds: 300),
+      // Increase throttle to reduce micro-flicker on rapid WS bursts
+      throttleDuration: const Duration(seconds: 1),
     );
 
     _focusNode.addListener(() => setState(() {}));
@@ -482,16 +481,11 @@ class _MapPageState extends ConsumerState<MapPage>
   /// PERF PHASE 2: Schedule a debounced marker update
   /// Collapses multiple rapid updates into a single rebuild frame
   void _scheduleMarkerUpdate(List<Map<String, dynamic>> devices) {
-    // Cancel any pending update
-    _markerUpdateDebounce?.cancel();
-    
-    // Schedule new update after delay
-    _markerUpdateDebounce = Timer(_kMarkerUpdateDelay, () {
-      if (kDebugMode) {
-        debugPrint('[PERF] Executing debounced marker update for ${devices.length} devices');
-      }
-      _triggerMarkerUpdate(devices);
-    });
+    // Delegate rate limiting to the throttled notifier used by FlutterMapAdapter.
+    if (kDebugMode) {
+      debugPrint('[PERF] Scheduling marker update for ${devices.length} devices (throttle handled by notifier)');
+    }
+    _triggerMarkerUpdate(devices);
   }
 
   /// Trigger marker update with current state
@@ -772,8 +766,7 @@ class _MapPageState extends ConsumerState<MapPage>
 
     // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
-    _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
-    _markerUpdateDebounce?.cancel(); // PERF PHASE 2: Cancel marker update debounce timer
+  _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
     _searchDebouncer.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();

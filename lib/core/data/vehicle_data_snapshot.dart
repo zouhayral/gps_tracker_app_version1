@@ -4,6 +4,7 @@ import 'package:my_app_gps/features/map/data/position_model.dart';
 /// Complete snapshot of a vehicle's dynamic state at a point in time.
 /// Used for caching and reducing redundant API calls.
 /// All telemetry fields propagate reactively through the snapshot system.
+@immutable
 class VehicleDataSnapshot {
   const VehicleDataSnapshot({
     required this.deviceId,
@@ -128,17 +129,23 @@ class VehicleDataSnapshot {
     // Debug log for attribute extraction
     if (kDebugMode) {
       debugPrint(
-          '[VehicleSnapshot] Creating snapshot for device ${position.deviceId}:',);
+        '[VehicleSnapshot] Creating snapshot for device ${position.deviceId}:',
+      );
       debugPrint(
-          '[VehicleSnapshot]   ignition: $ignition → engineState: $engineState',);
+        '[VehicleSnapshot]   ignition: $ignition → engineState: $engineState',
+      );
       debugPrint(
-          '[VehicleSnapshot]   speed: ${position.speed} km/h, motion: $motion',);
+        '[VehicleSnapshot]   speed: ${position.speed} km/h, motion: $motion',
+      );
       debugPrint(
-          '[VehicleSnapshot]   battery: $batteryLevel%, power: $power V',);
+        '[VehicleSnapshot]   battery: $batteryLevel%, power: $power V',
+      );
       debugPrint(
-          '[VehicleSnapshot]   signal: $signal, rssi: $rssi dBm, sat: $sat, hdop: $hdop',);
+        '[VehicleSnapshot]   signal: $signal, rssi: $rssi dBm, sat: $sat, hdop: $hdop',
+      );
       debugPrint(
-          '[VehicleSnapshot]   all attributes: ${attrs.keys.join(', ')}',);
+        '[VehicleSnapshot]   all attributes: ${attrs.keys.join(', ')}',
+      );
     }
 
     return VehicleDataSnapshot(
@@ -188,7 +195,8 @@ class VehicleDataSnapshot {
         final lastBattery = _lastBatteryByDevice[deviceId];
         if (lastBattery != newBattery) {
           debugPrint(
-              '[VehicleSnapshot] 🔋 Battery change for device $deviceId: ${lastBattery ?? batteryLevel}% → $newBattery%',);
+            '[VehicleSnapshot] 🔋 Battery change for device $deviceId: ${lastBattery ?? batteryLevel}% → $newBattery%',
+          );
           _lastBatteryByDevice[deviceId] = newBattery;
         }
       }
@@ -203,7 +211,8 @@ class VehicleDataSnapshot {
       if (lastSmall == null || !mapEquals(lastSmall, currentSmall)) {
         _lastSmallTelemetryByDevice[deviceId] = currentSmall;
         debugPrint(
-            '[VehicleSnapshot] � Telemetry updated d=$deviceId power=${currentSmall['power']}, sat=${currentSmall['sat']}, rssi=${currentSmall['rssi']}',);
+          '[VehicleSnapshot] � Telemetry updated d=$deviceId power=${currentSmall['power']}, sat=${currentSmall['sat']}, rssi=${currentSmall['rssi']}',
+        );
       }
     }
 

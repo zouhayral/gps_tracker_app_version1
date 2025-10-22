@@ -6,9 +6,9 @@ import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/entities/event_entity.dart';
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
-import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,7 +55,8 @@ class NotificationsRepository {
   // Vehicle repo backfill subscription (raw event maps rebroadcast on reconnect)
   StreamSubscription<Map<String, dynamic>>? _vehicleEventSubscription;
   // Provider subscription to customerWebSocketProvider to avoid dispose race
-  ProviderSubscription<AsyncValue<CustomerWebSocketMessage>>? _wsProviderSubscription;
+  ProviderSubscription<AsyncValue<CustomerWebSocketMessage>>?
+      _wsProviderSubscription;
 
   // Cached events list (in-memory)
   List<Event> _cachedEvents = [];
@@ -102,6 +103,7 @@ class NotificationsRepository {
     // Then forward any subsequent updates from the broadcast controller
     yield* _eventsController.stream;
   }
+
   /// Stream of enriched events as they are added (for banner/toast usage)
   Stream<Event> watchNewEvents() => _newEventsController.stream;
 
@@ -134,8 +136,8 @@ class NotificationsRepository {
       // Listen to WebSocket for real-time events
       _listenToWebSocket();
 
-  // Also listen to VehicleDataRepository.onEvent to capture backfilled events
-  _listenToVehicleRepoEvents();
+      // Also listen to VehicleDataRepository.onEvent to capture backfilled events
+      _listenToVehicleRepoEvents();
 
       // Periodically persist the dedup set to disk and prune old entries
       _recentIdsCleanupTimer?.cancel();
@@ -168,7 +170,7 @@ class NotificationsRepository {
       await prefs.setStringList(_prefKey, ids);
       _newEventsSinceLastPersist = 0;
       _log('🧹 Dedup persisted (count: ${ids.length})');
-      
+
       // Prune excess IDs from in-memory set to prevent unbounded growth
       if (_recentEventIds.length > _maxStoredIds) {
         final excess = _recentEventIds.length - _maxStoredIds;
@@ -297,9 +299,10 @@ class NotificationsRepository {
       }
 
       // Determine severity based on type if missing
-      final resolvedSeverity = (event.severity != null && event.severity!.trim().isNotEmpty)
-          ? event.severity!.toLowerCase()
-          : _severityForEventType(event.type);
+      final resolvedSeverity =
+          (event.severity != null && event.severity!.trim().isNotEmpty)
+              ? event.severity!.toLowerCase()
+              : _severityForEventType(event.type);
 
       // Attach to attributes as well for downstream consumers
       final attrs = Map<String, dynamic>.from(event.attributes);
@@ -333,7 +336,10 @@ class NotificationsRepository {
     final t = type.trim().toLowerCase();
 
     // High priority (critical): moving/stopped, overspeed, alarms
-    if (t == 'devicemoving' || t == 'devicestopped' || t == 'moving' || t == 'stopped') {
+    if (t == 'devicemoving' ||
+        t == 'devicestopped' ||
+        t == 'moving' ||
+        t == 'stopped') {
       return 'critical';
     }
     switch (t) {
@@ -407,9 +413,11 @@ class NotificationsRepository {
       _wsProviderSubscription?.close();
       _wsSubscription?.cancel();
 
-      _wsProviderSubscription = _ref.listen<AsyncValue<CustomerWebSocketMessage>>(
+      _wsProviderSubscription =
+          _ref.listen<AsyncValue<CustomerWebSocketMessage>>(
         customerWebSocketProvider,
-        (AsyncValue<CustomerWebSocketMessage>? prev, AsyncValue<CustomerWebSocketMessage> next) {
+        (AsyncValue<CustomerWebSocketMessage>? prev,
+            AsyncValue<CustomerWebSocketMessage> next) {
           if (_disposed) return;
 
           next.when(
@@ -422,7 +430,8 @@ class NotificationsRepository {
             error: (Object err, StackTrace st) {
               _log('❌ WebSocket provider error: $err');
               if (kDebugMode) {
-                debugPrint('[NotificationsRepository] WebSocket error stack: $st');
+                debugPrint(
+                    '[NotificationsRepository] WebSocket error stack: $st');
               }
             },
             loading: () {
@@ -506,8 +515,8 @@ class NotificationsRepository {
 
       _log('📨 Parsed ${newEvents.length} events from WebSocket');
 
-    // Enrich events with device names (timestamps already local in Event.fromJson)
-    final enrichedEvents = await _enrichEventsWithDeviceNames(newEvents);
+      // Enrich events with device names (timestamps already local in Event.fromJson)
+      final enrichedEvents = await _enrichEventsWithDeviceNames(newEvents);
 
       // Persist to ObjectBox via EventService
       final entities = enrichedEvents.map((e) => e.toEntity()).toList();
@@ -515,8 +524,8 @@ class NotificationsRepository {
 
       // Update replay anchor with the latest event timestamp
       if (enrichedEvents.isNotEmpty) {
-        final latestEvent = enrichedEvents.reduce((a, b) => 
-          a.timestamp.isAfter(b.timestamp) ? a : b,
+        final latestEvent = enrichedEvents.reduce(
+          (a, b) => a.timestamp.isAfter(b.timestamp) ? a : b,
         );
         await _updateReplayAnchor(latestEvent.timestamp);
       }
@@ -552,10 +561,10 @@ class NotificationsRepository {
       _cachedEvents.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       _log('✅ Persisted ${enrichedEvents.length} WebSocket events');
-      
+
       // Show local push notifications for critical events
       await _showNotificationsForEvents(enrichedEvents);
-      
+
       _emitEvents();
     } catch (e, stackTrace) {
       _log('❌ Error handling WebSocket events: $e');
@@ -566,7 +575,7 @@ class NotificationsRepository {
   }
 
   /// Show local push notifications for critical events
-  /// 
+  ///
   /// Only shows notifications for unread events with critical severity.
   /// Supports: overspeed, ignition on/off, device offline/online, geofence enter/exit
   Future<void> _showNotificationsForEvents(List<Event> events) async {
@@ -584,8 +593,8 @@ class NotificationsRepository {
 
       // Filter events that should trigger notifications
       final notifiableEvents = events.where((event) {
-        return !event.isRead && 
-               criticalTypes.contains(event.type.toLowerCase());
+        return !event.isRead &&
+            criticalTypes.contains(event.type.toLowerCase());
       }).toList();
 
       if (notifiableEvents.isEmpty) {
@@ -602,7 +611,8 @@ class NotificationsRepository {
 
       // Show batch summary if multiple events
       if (notifiableEvents.length > 3) {
-        await LocalNotificationService.instance.showBatchSummary(notifiableEvents);
+        await LocalNotificationService.instance
+            .showBatchSummary(notifiableEvents);
       }
     } catch (e) {
       _log('⚠️ Failed to show notifications: $e');
@@ -641,7 +651,8 @@ class NotificationsRepository {
       await _updateReplayAnchor(enriched.timestamp);
 
       // Update in-memory cache (dedupe by id)
-      final existingIndex = _cachedEvents.indexWhere((e) => e.id == enriched.id);
+      final existingIndex =
+          _cachedEvents.indexWhere((e) => e.id == enriched.id);
       if (existingIndex >= 0) {
         _cachedEvents[existingIndex] = enriched;
       } else {
@@ -658,11 +669,11 @@ class NotificationsRepository {
       if (!_newEventsController.isClosed) {
         _log('🔁 Emitting event to banner stream');
         // Ensure delivery occurs on the next microtask to avoid race conditions
-        Future.microtask(() {
+        unawaited(Future.microtask(() {
           if (!_newEventsController.isClosed) {
             _newEventsController.add(enriched);
           }
-        });
+        }));
       }
 
       // Emit updated list
@@ -687,7 +698,8 @@ class NotificationsRepository {
     String? type,
   }) async {
     try {
-      _log('🔍 Getting all events (unreadOnly: $unreadOnly, deviceId: $deviceId, type: $type)');
+      _log(
+          '🔍 Getting all events (unreadOnly: $unreadOnly, deviceId: $deviceId, type: $type)');
 
       List<Event> events;
 
@@ -706,10 +718,7 @@ class NotificationsRepository {
           entities = await _eventsDao.getAll();
         }
 
-        events = entities
-            .cast<EventEntity>()
-            .map(Event.fromEntity)
-            .toList();
+        events = entities.cast<EventEntity>().map(Event.fromEntity).toList();
       } else {
         // Use cached events when available; if empty (for example very early
         // during app startup before _loadCachedEvents() finishes), fall back to
@@ -720,10 +729,7 @@ class NotificationsRepository {
         } else {
           _log('📦 In-memory cache empty → falling back to DAO.getAll()');
           final entities = await _eventsDao.getAll();
-          events = entities
-              .cast<EventEntity>()
-              .map(Event.fromEntity)
-              .toList();
+          events = entities.cast<EventEntity>().map(Event.fromEntity).toList();
           // Note: We intentionally skip enrichment here for speed since most
           // callers (e.g., unread counts) don't require deviceName/priority.
           // Full enrichment is performed by _loadCachedEvents() and for
@@ -922,7 +928,7 @@ class NotificationsRepository {
       _log('⏭️ Skipping emit: repository disposed');
       return;
     }
-    
+
     if (!_eventsController.isClosed) {
       _log('📤 Emitting ${_cachedEvents.length} events to stream');
       _eventsController.add(List.unmodifiable(_cachedEvents));
@@ -964,7 +970,7 @@ class NotificationsRepository {
     // Cancel WebSocket subscriptions
     _wsSubscription?.cancel();
     _wsProviderSubscription?.close();
-  _vehicleEventSubscription?.cancel();
+    _vehicleEventSubscription?.cancel();
 
     // Close stream controllers
     _eventsController.close();

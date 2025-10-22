@@ -47,6 +47,9 @@ class FlutterMapAdapter extends ConsumerStatefulWidget implements MapAdapter {
 class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     with TickerProviderStateMixin {
   late final mapController = MapController();
+  // Stability: cache built FlutterMap and reuse unless provider actually changes
+  String? _currentProviderId;
+  Widget? _cachedMap;
   final _moveThrottler = Throttler(const Duration(milliseconds: 300));
   Timer? _overlayTimer; // auto-hide green online banner (for overlay)
   bool _isOffline = false;
@@ -431,10 +434,9 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
     if (kDebugMode) {
       debugPrint('[FMTC] Cache mode: ${isOffline ? 'hit-only (cacheOnly)' : 'online-first'}');
     }
-    // Force a map rebuild to apply the change immediately
-    if (mounted) {
-      ref.read(mapRebuildProvider.notifier).trigger();
-    }
+    // Do not force a map rebuild here; rebuilds are triggered selectively
+    // when transitioning back online to refresh tiles. Avoiding unnecessary
+    // epoch increments prevents flicker and keeps camera state stable.
   }
 
   // Queue actions until FlutterMap is ready, then run them in order
@@ -556,6 +558,15 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
           debugPrint('[MAP_REBUILD] 🧭 Epoch: $rebuildEpoch, Source: ${provider.id}, Timestamp: $lastSwitchTs');
         }
 
+        // Rebuild guard: if provider id has not changed and we have a cached map,
+        // return it to prevent unnecessary FlutterMap reconstruction (prevents blink)
+        if (_cachedMap != null && _currentProviderId == provider.id) {
+          if (kDebugMode) {
+            debugPrint('[MAP] Marker update skipped (same provider) → using cached FlutterMap');
+          }
+          return _cachedMap!;
+        }
+
         // If provider id changed, clear cached tile providers to force fresh instances
   if (_lastProviderId != provider.id) {
           if (kDebugMode) {
@@ -571,15 +582,10 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
         
         // OPTIMIZATION: Wrap FlutterMap in RepaintBoundary to isolate render pipeline
         // This prevents map tiles from repainting when markers update
-        return RepaintBoundary(
+        final builtMap = RepaintBoundary(
           child: FlutterMap(
-            // REBUILD-AWARE KEY: Combines source ID, timestamp, and rebuild epoch
-            // This ensures map rebuilds ONLY when:
-            // 1. Tile source changes (provider.id)
-            // 2. Explicit rebuild triggered (rebuildEpoch)
-            // 3. Timestamp-based cache bust (lastSwitchTs)
-            // Marker updates and camera moves do NOT trigger rebuilds
-            key: ValueKey('map_${provider.id}_${lastSwitchTs}_$rebuildEpoch'),
+            // Stability key: depend only on provider id to avoid unnecessary remounts
+            key: ValueKey('map_${provider.id}'),
             mapController: mapController,
             options: _mapOptions, // OPTIMIZATION: Reuse cached MapOptions
             children: [
@@ -758,6 +764,14 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
         ],
       ),
     );
+
+        // Cache the built map for reuse until provider changes
+        _currentProviderId = provider.id;
+        _cachedMap = builtMap;
+        if (kDebugMode) {
+          debugPrint('[MAP] ⚙️ Building new FlutterMap for provider=${provider.id}');
+        }
+        return builtMap;
       }, // End of outer Consumer builder
     ); // End of outer Consumer
   }

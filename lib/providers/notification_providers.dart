@@ -1,11 +1,12 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
-import 'package:my_app_gps/core/utils/banner_prefs.dart' show BannerPrefs;
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
+import 'package:my_app_gps/core/utils/banner_prefs.dart' show BannerPrefs;
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/repositories/notifications_repository.dart';
 import 'package:my_app_gps/services/event_service.dart';
@@ -15,7 +16,8 @@ import 'package:my_app_gps/services/event_service.dart';
 /// This is a singleton provider that manages the notification state
 /// across the entire app. It's not autoDispose to maintain the
 /// WebSocket connection and cache.
-final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) {
+final notificationsRepositoryProvider =
+    Provider<NotificationsRepository>((ref) {
   final eventService = ref.watch(eventServiceProvider);
   final eventsDao = ref.watch(eventsDaoProvider).valueOrNull;
   final devicesDao = ref.watch(devicesDaoProvider).valueOrNull;
@@ -50,8 +52,7 @@ final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) 
 /// - New events arrive via WebSocket
 ///
 /// Use this for UI widgets that need to reactively display notifications.
-final notificationsStreamProvider =
-    StreamProvider<List<Event>>((ref) {
+final notificationsStreamProvider = StreamProvider<List<Event>>((ref) {
   final repository = ref.watch(notificationsRepositoryProvider);
   return repository.watchEvents();
 });
@@ -131,16 +132,20 @@ final filteredNotificationsProvider =
 
   // Offload heavy filtering to a background isolate using compute().
   final q = query.toLowerCase();
-  final proxies = List<Map<String, Object?>>.generate(baseEvents.length, (i) {
-    final e = baseEvents[i];
-    final msg = (e.message ?? '').toLowerCase();
-    final dev = (e.deviceName ?? '').toLowerCase();
-    final typ = e.type.toLowerCase();
-    return {
-      'i': i,
-      't': '$msg\n$dev\n$typ',
-    };
-  }, growable: false);
+  final proxies = List<Map<String, Object?>>.generate(
+    baseEvents.length,
+    (i) {
+      final e = baseEvents[i];
+      final msg = (e.message ?? '').toLowerCase();
+      final dev = (e.deviceName ?? '').toLowerCase();
+      final typ = e.type.toLowerCase();
+      return {
+        'i': i,
+        't': '$msg\n$dev\n$typ',
+      };
+    },
+    growable: false,
+  );
 
   final sw = Stopwatch()..start();
   final indices = await compute<List<Map<String, Object?>>, List<int>>(
@@ -162,8 +167,7 @@ final notificationsPageProvider = StateProvider.autoDispose<int>((_) => 1);
 const int kNotificationsPageSize = 50;
 
 /// Paged notifications based on filtered results and current page.
-final pagedNotificationsProvider =
-    Provider.autoDispose<List<Event>>((ref) {
+final pagedNotificationsProvider = Provider.autoDispose<List<Event>>((ref) {
   final filteredAsync = ref.watch(filteredNotificationsProvider);
   final page = ref.watch(notificationsPageProvider);
   final effective = filteredAsync.maybeWhen(
@@ -198,7 +202,7 @@ List<int> _filterIndices(List<Map<String, Object?>> items) {
   final res = <int>[];
   for (final m in items) {
     final t = (m['t'] as String?) ?? '';
-    if (t.contains(q)) res.add(m['i'] as int);
+    if (t.contains(q)) res.add(m['i']! as int);
   }
   return res;
 }
@@ -244,7 +248,7 @@ final refreshNotificationsProvider =
   //   from: thirtyDaysAgo,
   //   to: now,
   // );
-  
+
   // Just return immediately - let cached events show
   return;
 });
@@ -282,8 +286,8 @@ final deviceNotificationsProvider =
 /// ```dart
 /// final alarmEvents = ref.watch(typeNotificationsProvider('alarm'));
 /// ```
-final typeNotificationsProvider = FutureProvider.autoDispose
-    .family<List<Event>, String>((ref, type) async {
+final typeNotificationsProvider =
+    FutureProvider.autoDispose.family<List<Event>, String>((ref, type) async {
   final repository = ref.watch(notificationsRepositoryProvider);
   return repository.getAllEvents(type: type);
 });
@@ -305,7 +309,8 @@ final markEventAsReadProvider =
 
 /// Notifier for marking events as read
 class MarkEventAsReadNotifier extends StateNotifier<AsyncValue<void>> {
-  MarkEventAsReadNotifier(this._repository) : super(const AsyncValue.data(null));
+  MarkEventAsReadNotifier(this._repository)
+      : super(const AsyncValue.data(null));
 
   final NotificationsRepository _repository;
 
@@ -418,6 +423,3 @@ final notificationsBootInitializer = FutureProvider<void>((ref) async {
   // ignore: unused_result
   ref.read(notificationsRepositoryProvider);
 });
-
-
-
