@@ -38,7 +38,7 @@ class EventService {
 
   final Dio _dio;
   final Ref _ref;
-  
+
   // Lazy-initialized DAO
   EventsDaoBase? _dao;
   bool _daoInitialized = false;
@@ -79,24 +79,24 @@ class EventService {
   }) async {
     // Build query parameters dynamically (outside try so it's available in fallback)
     final queryParams = <String, dynamic>{};
-    
+
     if (deviceId != null) {
       queryParams['deviceId'] = deviceId;
     }
-    
+
     if (from != null) {
       queryParams['from'] = from.toUtc().toIso8601String();
     }
-    
+
     // If caller provided from but not to, default to now to satisfy APIs that require a bounded window
     if (to == null && from != null) {
       to = DateTime.now();
     }
-    
+
     if (to != null) {
       queryParams['to'] = to.toUtc().toIso8601String();
     }
-    
+
     if (type != null && type.isNotEmpty) {
       queryParams['type'] = type;
     }
@@ -104,9 +104,8 @@ class EventService {
     if (kDebugMode) {
       debugPrint('[EventService] 🔍 Fetching events: $queryParams');
     }
-    
-    try {
 
+    try {
       // Make API request (primary endpoint)
       final response = await _dio.get<List<dynamic>>(
         '/api/events',
@@ -119,7 +118,8 @@ class EventService {
       final data = response.data;
       if (data is! List) {
         if (kDebugMode) {
-          debugPrint('[EventService] ⚠️ Unexpected response type: ${data.runtimeType}');
+          debugPrint(
+              '[EventService] ⚠️ Unexpected response type: ${data.runtimeType}');
         }
         return [];
       }
@@ -157,8 +157,8 @@ class EventService {
         debugPrint('[EventService] Response: ${e.response?.data}');
       }
       // Fallback: Some backends expose events under /api/reports/events and require a bounded window
-  final code = e.response?.statusCode;
-  final canFallback = code == 404 || code == 405;
+      final code = e.response?.statusCode;
+      final canFallback = code == 404 || code == 405;
       if (canFallback) {
         try {
           if (kDebugMode) {
@@ -195,7 +195,7 @@ class EventService {
           }
         }
       }
-      
+
       // Rethrow with more context
       throw Exception('Failed to fetch events: ${e.message}');
     } catch (e, stackTrace) {
@@ -212,11 +212,12 @@ class EventService {
     try {
       final dao = await _getDao();
       final entities = events.map((e) => e.toEntity()).toList();
-      
+
       await dao.upsertMany(entities);
-      
+
       if (kDebugMode) {
-        debugPrint('[EventService] 💾 Persisted ${entities.length} events to ObjectBox');
+        debugPrint(
+            '[EventService] 💾 Persisted ${entities.length} events to ObjectBox');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -261,7 +262,8 @@ class EventService {
           .toList();
 
       if (kDebugMode) {
-        debugPrint('[EventService] 📦 Retrieved ${events.length} cached events from ObjectBox');
+        debugPrint(
+            '[EventService] 📦 Retrieved ${events.length} cached events from ObjectBox');
       }
 
       return events;
@@ -286,10 +288,10 @@ class EventService {
   Future<bool> markAsRead(String eventId) async {
     try {
       final dao = await _getDao();
-      
+
       // Get the event entity from ObjectBox
       final entity = await dao.getById(eventId);
-      
+
       if (entity == null) {
         if (kDebugMode) {
           debugPrint('[EventService] ⚠️ Event not found: $eventId');
@@ -299,15 +301,15 @@ class EventService {
 
       // Update isRead flag
       entity.isRead = true;
-      
+
       // Persist the update
       await dao.upsert(entity);
-      
+
       if (kDebugMode) {
         debugPrint('[EventService] ✅ Marked event $eventId as read');
       }
 
-      // TODO: Update server-side if Traccar supports event read status
+      // TODO(app-team): Update server-side if Traccar supports event read status
       // This would require a PUT/PATCH to /api/events/{id}
       // For now, we only update locally
 
@@ -325,16 +327,17 @@ class EventService {
   /// More efficient than calling [markAsRead] multiple times.
   Future<int> markMultipleAsRead(List<String> eventIds) async {
     var successCount = 0;
-    
+
     for (final eventId in eventIds) {
       final success = await markAsRead(eventId);
       if (success) successCount++;
     }
-    
+
     if (kDebugMode) {
-      debugPrint('[EventService] ✅ Marked $successCount/${eventIds.length} events as read');
+      debugPrint(
+          '[EventService] ✅ Marked $successCount/${eventIds.length} events as read');
     }
-    
+
     return successCount;
   }
 
@@ -377,7 +380,7 @@ class EventService {
     try {
       final dao = await _getDao();
       await dao.deleteAll();
-      
+
       if (kDebugMode) {
         debugPrint('[EventService] 🗑️ Cleared all cached events');
       }
@@ -409,7 +412,8 @@ class EventService {
       }
 
       if (kDebugMode) {
-        debugPrint('[EventService] 📊 Event stats for device $deviceId: $stats');
+        debugPrint(
+            '[EventService] 📊 Event stats for device $deviceId: $stats');
       }
 
       return stats;
@@ -461,7 +465,8 @@ class EventService {
       return DateTime.fromMillisecondsSinceEpoch(latestMs).toLocal();
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[EventService] ⚠️ Failed to get latest cached timestamp: $e');
+        debugPrint(
+            '[EventService] ⚠️ Failed to get latest cached timestamp: $e');
       }
       return null;
     }

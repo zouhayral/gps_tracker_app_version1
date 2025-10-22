@@ -43,16 +43,19 @@ class Trip {
   /// fields are missing; computes a synthetic id if not present.
   factory Trip.fromJson(Map<String, dynamic> json) {
     // Prefer explicit id when provided; otherwise generate a stable synthetic id
-  final deviceId = _asInt(json['deviceId']) ?? 0;
-  final startRaw = json.containsKey('startTime') ? json['startTime'] : json['start'];
-  final endRaw = json.containsKey('endTime') ? json['endTime'] : json['end'];
-  final start = _parseAnyDate(startRaw) ?? DateTime.now().toLocal();
-  final end = _parseAnyDate(endRaw) ?? start.add(const Duration(minutes: 1));
+    final deviceId = _asInt(json['deviceId']) ?? 0;
+    final startRaw =
+        json.containsKey('startTime') ? json['startTime'] : json['start'];
+    final endRaw = json.containsKey('endTime') ? json['endTime'] : json['end'];
+    final start = _parseAnyDate(startRaw) ?? DateTime.now().toLocal();
+    final end = _parseAnyDate(endRaw) ?? start.add(const Duration(minutes: 1));
     final syntheticId = '${deviceId}_${start.millisecondsSinceEpoch}';
 
     // Distance from meters to km if provided in meters; accept km directly when given
-    final meters = _asDouble(json['distance']) ?? (_asDouble(json['distanceMeters']) ?? 0.0);
-    final kilometers = meters > 0 ? (meters / 1000.0) : (_asDouble(json['distanceKm']) ?? 0.0);
+    final meters = _asDouble(json['distance']) ??
+        (_asDouble(json['distanceMeters']) ?? 0.0);
+    final kilometers =
+        meters > 0 ? (meters / 1000.0) : (_asDouble(json['distanceKm']) ?? 0.0);
 
     // Speeds: support km/h directly; if provided in m/s convert to km/h
     double speedToKph(dynamic v) {
@@ -61,14 +64,19 @@ class Trip {
       return s <= 60 ? s * 3.6 : s;
     }
 
-    final avgKph = speedToKph(json['averageSpeed'] ?? json['avgSpeed'] ?? json['avgSpeedKph']);
+    final avgKph = speedToKph(
+        json['averageSpeed'] ?? json['avgSpeed'] ?? json['avgSpeedKph']);
     final maxKph = speedToKph(json['maxSpeed'] ?? json['maxSpeedKph']);
 
     // Coordinates may be provided as startLat/startLon and endLat/endLon
-    final startLat = _asDouble(json['startLat']) ?? _asDouble(json['startLatitude']) ?? 0.0;
-    final startLon = _asDouble(json['startLon']) ?? _asDouble(json['startLongitude']) ?? 0.0;
-    final endLat = _asDouble(json['endLat']) ?? _asDouble(json['endLatitude']) ?? 0.0;
-    final endLon = _asDouble(json['endLon']) ?? _asDouble(json['endLongitude']) ?? 0.0;
+    final startLat =
+        _asDouble(json['startLat']) ?? _asDouble(json['startLatitude']) ?? 0.0;
+    final startLon =
+        _asDouble(json['startLon']) ?? _asDouble(json['startLongitude']) ?? 0.0;
+    final endLat =
+        _asDouble(json['endLat']) ?? _asDouble(json['endLatitude']) ?? 0.0;
+    final endLon =
+        _asDouble(json['endLon']) ?? _asDouble(json['endLongitude']) ?? 0.0;
 
     return Trip(
       id: json['id']?.toString() ?? syntheticId,
@@ -124,4 +132,3 @@ DateTime? _parseAnyDate(dynamic v) {
   // Unknown type
   return null;
 }
-

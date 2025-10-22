@@ -13,8 +13,8 @@ class Position {
     final lat = (json['latitude'] ?? json['lat']) as num? ?? 0;
     final lon = (json['longitude'] ?? json['lon']) as num? ?? 0;
     final t = (json['fixTime'] ?? json['time'])?.toString();
-    final time = t != null ? DateTime.parse(t).toLocal() : DateTime.now().toLocal();
+    final time =
+        t != null ? DateTime.parse(t).toLocal() : DateTime.now().toLocal();
     return Position(lat: lat.toDouble(), lon: lon.toDouble(), time: time);
   }
 }
-

@@ -3,18 +3,12 @@
 /// This file exports all Riverpod providers needed for multi-customer support.
 /// Import this file to access all customer-related functionality.
 ///
-/// Architecture:
-/// ```
-/// CustomerCredentials (StateProvider)
-///       ↓
-/// CustomerSession (FutureProvider)
-///       ↓
-/// CustomerWebSocket (StreamProvider)
-///       ↓
-/// CustomerDevicePositions (StreamProvider)
-///       ↓
-/// CustomerManager (Provider)
-/// ```
+/// Architecture flow:
+/// - CustomerCredentials (StateProvider)
+/// - CustomerSession (FutureProvider)
+/// - CustomerWebSocket (StreamProvider)
+/// - CustomerDevicePositions (StreamProvider)
+/// - CustomerManager (Provider)
 ///
 /// When credentials change → entire cascade rebuilds automatically
 library;
@@ -42,8 +36,8 @@ export 'package:my_app_gps/services/customer/customer_service.dart';
 /// ```dart
 /// final tripsAsync = ref.watch(tripsProvider((deviceId: 123, from: date1, to: date2)));
 /// ```
-final tripsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, ({int deviceId, DateTime from, DateTime to})>(
+final tripsProvider = FutureProvider.autoDispose.family<
+    List<Map<String, dynamic>>, ({int deviceId, DateTime from, DateTime to})>(
   (ref, params) async {
     // Wait for customer to be logged in
     final session = await ref.watch(customerSessionProvider.future);
@@ -56,14 +50,15 @@ final tripsProvider = FutureProvider.autoDispose
       // Use the session's HTTP client to make the request
       final fromStr = params.from.toUtc().toIso8601String();
       final toStr = params.to.toUtc().toIso8601String();
-      
+
       // Note: Implement this method in your AuthService or use direct HTTP call
       // For now, return empty list as placeholder
       if (kDebugMode) {
-        print('[TripsProvider] Fetching trips for device ${params.deviceId} from $fromStr to $toStr');
+        print(
+            '[TripsProvider] Fetching trips for device ${params.deviceId} from $fromStr to $toStr');
       }
-      
-      // TODO: Implement actual API call
+
+      // TODO(app-team): Implement actual API call
       // final response = await http.get('/api/reports/trips?deviceId=${params.deviceId}&from=$fromStr&to=$toStr');
       return [];
     } catch (e) {
@@ -97,10 +92,11 @@ final allTripsProvider = FutureProvider.autoDispose
       }
 
       if (kDebugMode) {
-        print('[AllTripsProvider] Fetching trips for ${deviceIds.length} devices');
+        print(
+            '[AllTripsProvider] Fetching trips for ${deviceIds.length} devices');
       }
 
-      // TODO: Implement actual API call
+      // TODO(app-team): Implement actual API call
       // final response = await http.get('/api/reports/trips?deviceId=$deviceIdsParam&from=$fromStr&to=$toStr');
       return [];
     } catch (e) {
@@ -134,8 +130,8 @@ final notificationsProvider =
     if (kDebugMode) {
       print('[NotificationsProvider] Fetching notifications');
     }
-    
-    // TODO: Implement actual API call
+
+    // TODO(app-team): Implement actual API call
     // final response = await http.get('/api/notifications');
     controller.add([]);
   } catch (e) {
@@ -229,7 +225,8 @@ final liveNotificationEventsProvider =
 ///
 /// Provides the current logged-in customer's user data.
 /// Returns null if not logged in.
-final currentCustomerProvider = Provider.autoDispose<Map<String, dynamic>?>((ref) {
+final currentCustomerProvider =
+    Provider.autoDispose<Map<String, dynamic>?>((ref) {
   final session = ref.watch(customerSessionProvider).value;
   return session?.userData;
 });

@@ -69,14 +69,15 @@ class SettingsPage extends ConsumerWidget {
                       ? SharedPrefsHolder.instance
                       : await SharedPreferences.getInstance();
                   await prefs.setBool('notifications_enabled', value);
-                  debugPrint('[Settings] Notifications ${value ? 'enabled' : 'disabled'}');
+                  debugPrint(
+                      '[Settings] Notifications ${value ? 'enabled' : 'disabled'}');
                 },
                 title: const Text('Notifications'),
                 subtitle: const Text(
                   'Turn off to stop receiving live alerts. You can still view them in the Alerts tab.',
                 ),
                 secondary: const Icon(Icons.notifications),
-                activeColor: Colors.lightGreen,
+                activeTrackColor: Colors.lightGreen,
               );
             },
           ),

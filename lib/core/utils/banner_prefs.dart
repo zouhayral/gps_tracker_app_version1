@@ -15,9 +15,9 @@ class BannerPrefs {
   }
 
   /// Mark the banner as dismissed for the current session.
-  static Future<void> setDismissed(bool value) async {
+  static Future<void> setDismissed({required bool dismissed}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_dismissedKey, value);
+    await prefs.setBool(_dismissedKey, dismissed);
   }
 
   /// Clears the dismissed flag. Call once on app startup to make the banner

@@ -22,6 +22,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
   static const Duration _playbackDuration = Duration(seconds: 30);
   static const Duration _tick = Duration(milliseconds: 50); // 20 fps
   Timer? _timer;
+  bool _didFit = false; // ensure we fit bounds only once per load
 
   @override
   void dispose() {
@@ -62,9 +63,9 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
     return _lerp(pts[i], pts[i2], t);
   }
 
-  void _onTogglePlay(bool play) {
+  void _onTogglePlay({required bool isPlaying}) {
     _timer?.cancel();
-    if (!play) return;
+    if (!isPlaying) return;
     final notifier = ref.read(tripPlaybackProvider.notifier);
     _timer = Timer.periodic(_tick, (_) {
       final st = ref.read(tripPlaybackProvider);
@@ -111,7 +112,10 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
                   data: (positions) {
                     final pts = positions.map((e) => e.toLatLng).toList(growable: false);
                     // Ensure camera fits to route once when data arrives
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
+                    if (!_didFit) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
+                      _didFit = true;
+                    }
 
                     final current = _positionAtProgress(pts, playback.progress);
                     // Visible layers
@@ -139,6 +143,8 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
                       markers.add(
                         Marker(
                           point: current,
+                          width: 28,
+                          height: 28,
                           child: const Icon(Icons.location_history, color: Colors.orange, size: 26),
                         ),
                       );
@@ -154,7 +160,11 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> {
 
                     return FlutterMap(
                       mapController: _mapController,
-                      options: const MapOptions(maxZoom: 18),
+                      options: const MapOptions(
+                        initialCenter: LatLng(0, 0),
+                        initialZoom: 2,
+                        maxZoom: 18,
+                      ),
                       children: [
                         TileLayer(
                           key: ValueKey('trip_tiles_${tileSource.id}_${url.hashCode}_$ts'),

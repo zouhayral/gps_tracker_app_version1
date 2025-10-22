@@ -115,7 +115,7 @@ class VehicleDataRepository {
       StreamController<Map<String, dynamic>>.broadcast();
   // Recovered (backfilled) events count stream after reconnect
   final StreamController<int> _recoveredEventsController =
-    StreamController<int>.broadcast();
+      StreamController<int>.broadcast();
 
   // REST fallback timer
   Timer? _fallbackTimer;
@@ -198,7 +198,7 @@ class VehicleDataRepository {
     final spd = p.speed.toStringAsFixed(1);
     final ts = p.deviceTime.toUtc().millisecondsSinceEpoch;
     return 'd:${p.deviceId}|t:$ts|lat:$lat|lon:$lon|s:$spd';
-    }
+  }
 
   // Compute a stable hash for device JSON payloads
   String _hashDevicePayload(Map<String, dynamic> m) {
@@ -237,7 +237,8 @@ class VehicleDataRepository {
       _startCleanupTimer();
 
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] Initialized with deferred WebSocket connection');
+        debugPrint(
+            '[VehicleRepo] Initialized with deferred WebSocket connection');
       }
     });
   }
@@ -245,6 +246,7 @@ class VehicleDataRepository {
   /// Expose a stream of raw event maps coming from the WebSocket 'events' payload.
   /// Consumers can transform these into domain models as needed.
   Stream<Map<String, dynamic>> get onEvent => _eventController.stream;
+
   /// Expose a stream of recovered event counts emitted after reconnect backfill
   Stream<int> get onRecoveredEvents => _recoveredEventsController.stream;
 
@@ -270,7 +272,8 @@ class VehicleDataRepository {
       final cutoff = DateTime.now().toUtc().subtract(const Duration(days: 30));
       await telemetryDao.deleteOlderThan(cutoff);
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] Telemetry retention applied. Cutoff: $cutoff');
+        debugPrint(
+            '[VehicleRepo] Telemetry retention applied. Cutoff: $cutoff');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -343,7 +346,8 @@ class VehicleDataRepository {
         _notifiers[deviceId] = ValueNotifier<VehicleDataSnapshot?>(snapshot);
       }
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] ✅ Pre-warmed cache with ${allCached.length} devices');
+        debugPrint(
+            '[VehicleRepo] ✅ Pre-warmed cache with ${allCached.length} devices');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -356,7 +360,8 @@ class VehicleDataRepository {
   Future<void> _handleSocketMessage(TraccarSocketMessage msg) async {
     if (_isDisposed) {
       if (kDebugMode) {
-        debugPrint('[CONCURRENCY] 🧩 Socket message dropped: repository disposed');
+        debugPrint(
+            '[CONCURRENCY] 🧩 Socket message dropped: repository disposed');
       }
       return;
     }
@@ -396,13 +401,15 @@ class VehicleDataRepository {
             if (!_eventController.isClosed) {
               _eventController.add(e);
               if (kDebugMode) {
-                debugPrint('[VehicleRepo] Broadcasting event ${e['type'] ?? ''}');
+                debugPrint(
+                    '[VehicleRepo] Broadcasting event ${e['type'] ?? ''}');
               }
             }
             final posId = e['positionId'] as int?;
             final deviceId = e['deviceId'] as int?;
             if (kDebugMode) {
-              debugPrint('[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId');
+              debugPrint(
+                  '[VehicleRepo][WS] event for deviceId=$deviceId posId=$posId');
             }
             // If event contains a positionId, fetch that position (likely contains attributes)
             if (posId != null) {
@@ -410,13 +417,15 @@ class VehicleDataRepository {
                 final p = await positionsService.latestByPositionId(posId);
                 if (p != null) {
                   if (kDebugMode) {
-                    debugPrint('[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}');
+                    debugPrint(
+                        '[VehicleRepo][WS] fetched Position for posId=$posId -> device=${p.deviceId}');
                   }
                   _handlePositionUpdates([p]);
                 }
               } catch (e) {
                 if (kDebugMode) {
-                  debugPrint('[VehicleRepo] Failed to fetch position for positionId=$posId: $e');
+                  debugPrint(
+                      '[VehicleRepo] Failed to fetch position for positionId=$posId: $e');
                 }
               }
             }
@@ -433,10 +442,14 @@ class VehicleDataRepository {
                   engineState = EngineState.on;
                 }
                 if (engineState != null) {
-                  final rawTime = (e['eventTime'] ?? e['serverTime'] ?? e['deviceTime']) as String?;
+                  final rawTime = (e['eventTime'] ??
+                      e['serverTime'] ??
+                      e['deviceTime']) as String?;
                   DateTime ts;
                   try {
-                    ts = rawTime != null ? DateTime.parse(rawTime).toUtc() : DateTime.now().toUtc();
+                    ts = rawTime != null
+                        ? DateTime.parse(rawTime).toUtc()
+                        : DateTime.now().toUtc();
                   } catch (_) {
                     ts = DateTime.now().toUtc();
                   }
@@ -449,7 +462,8 @@ class VehicleDataRepository {
                     lastUpdate: ts,
                   );
                   if (kDebugMode) {
-                    debugPrint('[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts');
+                    debugPrint(
+                        '[VehicleRepo][WS] applying event-based engine update for device=$deviceId -> $engineState at $ts');
                   }
                   _updateDeviceSnapshot(partial);
                 }
@@ -459,7 +473,8 @@ class VehicleDataRepository {
               if (posId == null) {
                 _lastFetchTime.remove(deviceId);
                 if (kDebugMode) {
-                  debugPrint('[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)');
+                  debugPrint(
+                      '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (event)');
                 }
                 unawaited(_fetchDeviceData(deviceId));
               }
@@ -486,7 +501,8 @@ class VehicleDataRepository {
             final posId = d['positionId'] as int?;
             final deviceId = d['id'] as int?;
             if (kDebugMode) {
-              debugPrint('[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
+              debugPrint(
+                  '[VehicleRepo][WS] device update for deviceId=$deviceId posId=$posId');
             }
 
             // Update device name cache when present in payload
@@ -503,7 +519,8 @@ class VehicleDataRepository {
               final prev = _lastDevicePayloadHash[deviceId];
               if (prev != null && prev == hash) {
                 if (kDebugMode) {
-                  debugPrint('[WS] 🔁 Duplicate skipped for deviceId=$deviceId');
+                  debugPrint(
+                      '[WS] 🔁 Duplicate skipped for deviceId=$deviceId');
                 }
                 continue; // Skip processing identical payload
               }
@@ -514,13 +531,15 @@ class VehicleDataRepository {
                 final p = await positionsService.latestByPositionId(posId);
                 if (p != null) {
                   if (kDebugMode) {
-                    debugPrint('[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}');
+                    debugPrint(
+                        '[VehicleRepo][WS] fetched Position for device posId=$posId -> device=${p.deviceId}');
                   }
                   _handlePositionUpdates([p]);
                 }
               } catch (e) {
                 if (kDebugMode) {
-                  debugPrint('[VehicleRepo] Failed to fetch position for device update posId=$posId: $e');
+                  debugPrint(
+                      '[VehicleRepo] Failed to fetch position for device update posId=$posId: $e');
                 }
               }
             }
@@ -537,7 +556,9 @@ class VehicleDataRepository {
                   engineState = EngineState.on;
                 }
                 if (engineState != null) {
-                  final ts = DateTime.now().toUtc().add(const Duration(milliseconds: 1));
+                  final ts = DateTime.now()
+                      .toUtc()
+                      .add(const Duration(milliseconds: 1));
                   final partial = VehicleDataSnapshot(
                     deviceId: deviceId,
                     timestamp: ts,
@@ -545,7 +566,8 @@ class VehicleDataRepository {
                     lastUpdate: ts,
                   );
                   if (kDebugMode) {
-                    debugPrint('[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts');
+                    debugPrint(
+                        '[VehicleRepo][WS] applying device-based engine update for device=$deviceId -> $engineState at $ts');
                   }
                   _updateDeviceSnapshot(partial);
                 }
@@ -554,7 +576,8 @@ class VehicleDataRepository {
               // Refresh device data if no positionId to keep other fields fresh
               if (posId == null) {
                 if (kDebugMode) {
-                  debugPrint('[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)');
+                  debugPrint(
+                      '[VehicleRepo][WS] refreshing device data for deviceId=$deviceId (device update)');
                 }
                 _lastFetchTime.remove(deviceId);
                 unawaited(_fetchDeviceData(deviceId));
@@ -573,7 +596,8 @@ class VehicleDataRepository {
   Future<void> _onWebSocketReconnect() async {
     // Throttle: avoid duplicate runs in quick succession
     final now = DateTime.now();
-    if (_lastBackfillRun != null && now.difference(_lastBackfillRun!) < const Duration(seconds: 5)) {
+    if (_lastBackfillRun != null &&
+        now.difference(_lastBackfillRun!) < const Duration(seconds: 5)) {
       if (kDebugMode) {
         debugPrint('[VehicleRepo] ⏳ Skipping backfill (throttled)');
       }
@@ -587,7 +611,8 @@ class VehicleDataRepository {
 
     // Establish bounded backfill window [from, to]
     final to = DateTime.now();
-    var from = replayAnchor ?? cachedTs ?? to.subtract(const Duration(minutes: 30));
+    var from =
+        replayAnchor ?? cachedTs ?? to.subtract(const Duration(minutes: 30));
 
     // Guard against clock skew or invalid range
     if (!from.isBefore(to)) {
@@ -601,9 +626,11 @@ class VehicleDataRepository {
     }
 
     if (kDebugMode) {
-      debugPrint('[VehicleRepo] 🔄 Reconnected — backfilling events from $from to $to');
+      debugPrint(
+          '[VehicleRepo] 🔄 Reconnected — backfilling events from $from to $to');
       if (replayAnchor != null) {
-        debugPrint('[VehicleRepo] ⏱️ Using replay anchor from last processed event');
+        debugPrint(
+            '[VehicleRepo] ⏱️ Using replay anchor from last processed event');
       } else if (cachedTs != null) {
         debugPrint('[VehicleRepo] 📦 Using latest cached event timestamp');
       }
@@ -619,7 +646,8 @@ class VehicleDataRepository {
           deviceIds = devices.map((d) => d['id']).whereType<int>().toList();
         } catch (e) {
           if (kDebugMode) {
-            debugPrint('[VehicleRepo] ⚠️ Failed to load devices for backfill: $e');
+            debugPrint(
+                '[VehicleRepo] ⚠️ Failed to load devices for backfill: $e');
           }
         }
       }
@@ -636,18 +664,10 @@ class VehicleDataRepository {
 
       if (kDebugMode) {
         debugPrint('[VehicleRepo] 📆 Backfill window (safe): $safeFrom → $to');
-        debugPrint('[VehicleRepo] 🧭 Backfilling per-device for ${deviceIds.length} device(s): $deviceIds');
+        debugPrint(
+            '[VehicleRepo] 🧭 Backfilling per-device for ${deviceIds.length} device(s): $deviceIds');
       }
 
-      // Diagnostics: mark a backfill request
-      assert(() {
-        try {
-          // Import inline to avoid release overhead
-          // ignore: unused_result
-          () => true; // placeholder to keep assert body valid
-        } catch (_) {}
-        return true;
-      }());
       // Mark a backfill request in diagnostics (counting once per reconnect)
       if (kDebugMode) {
         DevDiagnostics.instance.onBackfillRequested(deviceIds.length);
@@ -666,7 +686,8 @@ class VehicleDataRepository {
           if (list.isNotEmpty) allMissed.addAll(list);
         } catch (e) {
           if (kDebugMode) {
-            debugPrint('[VehicleRepo] ⚠️ Backfill fetch failed for device $id: $e');
+            debugPrint(
+                '[VehicleRepo] ⚠️ Backfill fetch failed for device $id: $e');
           }
         }
       }
@@ -686,7 +707,8 @@ class VehicleDataRepository {
         }
       }
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] ✅ Replayed ${allMissed.length} missed events');
+        debugPrint(
+            '[VehicleRepo] ✅ Replayed ${allMissed.length} missed events');
       }
       // Diagnostics: applied backfilled events
       if (kDebugMode) {
@@ -714,7 +736,8 @@ class VehicleDataRepository {
         final lastId = _lastPositionId[pos.deviceId];
         if (lastId != null && lastId == currentId) {
           if (kDebugMode) {
-            debugPrint('[WS] 🔁 Duplicate positionId skipped for deviceId=${pos.deviceId} (posId=$currentId)');
+            debugPrint(
+                '[WS] 🔁 Duplicate positionId skipped for deviceId=${pos.deviceId} (posId=$currentId)');
           }
           continue; // Identical position already processed
         }
@@ -727,7 +750,8 @@ class VehicleDataRepository {
         final prev = _lastPositionHash[pos.deviceId];
         if (prev != null && prev == hash) {
           if (kDebugMode) {
-            debugPrint('[WS] 🔁 Duplicate skipped for deviceId=${pos.deviceId}');
+            debugPrint(
+                '[WS] 🔁 Duplicate skipped for deviceId=${pos.deviceId}');
           }
           continue; // Skip duplicate
         }
@@ -744,7 +768,8 @@ class VehicleDataRepository {
     }
 
     if (kDebugMode) {
-      debugPrint('[VehicleRepo] Processed ${positions.length} position updates');
+      debugPrint(
+          '[VehicleRepo] Processed ${positions.length} position updates');
     }
   }
 
@@ -752,13 +777,16 @@ class VehicleDataRepository {
   void _updateDeviceSnapshot(VehicleDataSnapshot snapshot) {
     if (kDebugMode) {
       final existing = _notifiers[snapshot.deviceId]?.value;
-      debugPrint('[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}');
+      debugPrint(
+          '[VehicleRepo] Updating snapshot for device=${snapshot.deviceId}');
       debugPrint('[VehicleRepo]   incoming: $snapshot');
       debugPrint('[VehicleRepo]   existing: $existing');
 
       // Log engine state changes explicitly
-      if (snapshot.engineState != null && snapshot.engineState != existing?.engineState) {
-        debugPrint('[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}');
+      if (snapshot.engineState != null &&
+          snapshot.engineState != existing?.engineState) {
+        debugPrint(
+            '[VehicleRepo] 🔧 ENGINE STATE CHANGE: ${existing?.engineState} → ${snapshot.engineState}');
       }
     }
 
@@ -794,15 +822,19 @@ class VehicleDataRepository {
         notifier.value = merged;
         if (kDebugMode) {
           debugPrint('[VehicleRepo]   merged: $merged');
-          debugPrint('[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
+          debugPrint(
+              '[VehicleRepo]   ✅ Notifier updated - listeners will be notified');
         }
       } else if (kDebugMode) {
-        debugPrint('[VehicleRepo]   ⏭️ No effective change, notifier not updated');
+        debugPrint(
+            '[VehicleRepo]   ⏭️ No effective change, notifier not updated');
       }
     } else {
-      _notifiers[snapshot.deviceId] = ValueNotifier<VehicleDataSnapshot?>(snapshot);
+      _notifiers[snapshot.deviceId] =
+          ValueNotifier<VehicleDataSnapshot?>(snapshot);
       if (kDebugMode) {
-        debugPrint('[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}');
+        debugPrint(
+            '[VehicleRepo]   ✅ New notifier created for device ${snapshot.deviceId}');
       }
     }
   }
@@ -829,9 +861,11 @@ class VehicleDataRepository {
     }
 
     final lastFetch = _lastFetchTime[deviceId];
-    if (lastFetch != null && DateTime.now().difference(lastFetch) < _minFetchInterval) {
+    if (lastFetch != null &&
+        DateTime.now().difference(lastFetch) < _minFetchInterval) {
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] Skipping fetch for device $deviceId (fetched recently)');
+        debugPrint(
+            '[VehicleRepo] Skipping fetch for device $deviceId (fetched recently)');
       }
       return;
     }
@@ -906,7 +940,8 @@ class VehicleDataRepository {
             fuelLevel: snapshot.fuelLevel,
           );
           if (kDebugMode) {
-            debugPrint('[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState');
+            debugPrint(
+                '[VehicleRepo] Overlayed engine from device attrs for $deviceId -> $engineState');
           }
         }
         _updateDeviceSnapshot(snapshot);
@@ -923,14 +958,16 @@ class VehicleDataRepository {
     if (deviceIds.isEmpty) return;
     if (_isOffline) {
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] Offline → skip parallel fetch for ${deviceIds.length} devices');
+        debugPrint(
+            '[VehicleRepo] Offline → skip parallel fetch for ${deviceIds.length} devices');
       }
       return; // Use cached data only
     }
 
     try {
       if (kDebugMode) {
-        debugPrint('[VehicleRepo] Fetching ${deviceIds.length} devices in parallel');
+        debugPrint(
+            '[VehicleRepo] Fetching ${deviceIds.length} devices in parallel');
       }
 
       // Fetch all devices
@@ -976,7 +1013,8 @@ class VehicleDataRepository {
     _fallbackTimer = Timer.periodic(_restFallbackInterval, (_) {
       if (_isDisposed) {
         if (kDebugMode) {
-          debugPrint('[CONCURRENCY] 🧩 Fallback tick skipped: repository disposed');
+          debugPrint(
+              '[CONCURRENCY] 🧩 Fallback tick skipped: repository disposed');
         }
         return;
       }
@@ -988,7 +1026,8 @@ class VehicleDataRepository {
       }
       if (!_isWebSocketConnected && _notifiers.isNotEmpty) {
         if (kDebugMode) {
-          debugPrint('[VehicleRepo] WebSocket disconnected, using REST fallback');
+          debugPrint(
+              '[VehicleRepo] WebSocket disconnected, using REST fallback');
         }
         final deviceIds = _notifiers.keys.toList();
         fetchMultipleDevices(deviceIds);

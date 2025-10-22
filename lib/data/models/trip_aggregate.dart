@@ -16,17 +16,17 @@ class TripAggregate {
     double? totalDurationHrs,
     double? avgSpeedKph,
     int? tripCount,
-  }) => TripAggregate(
+  }) =>
+      TripAggregate(
         totalDistanceKm: totalDistanceKm ?? this.totalDistanceKm,
         totalDurationHrs: totalDurationHrs ?? this.totalDurationHrs,
         avgSpeedKph: avgSpeedKph ?? this.avgSpeedKph,
         tripCount: tripCount ?? this.tripCount,
       );
 
-  static TripAggregate empty() => const TripAggregate(
-        totalDistanceKm: 0,
-        totalDurationHrs: 0,
-        avgSpeedKph: 0,
-        tripCount: 0,
-      );
+  const TripAggregate.empty()
+      : totalDistanceKm = 0,
+        totalDurationHrs = 0,
+        avgSpeedKph = 0,
+        tripCount = 0;
 }

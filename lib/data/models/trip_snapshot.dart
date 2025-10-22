@@ -1,10 +1,15 @@
-import 'package:objectbox/objectbox.dart';
 import 'package:my_app_gps/data/models/trip_aggregate.dart';
+import 'package:objectbox/objectbox.dart';
 
 @Entity()
 class TripSnapshot {
   TripSnapshot({
-    required this.monthKey, required this.tripCount, required this.totalDistanceKm, required this.totalDurationHrs, required this.avgSpeedKph, this.id = 0,
+    required this.monthKey,
+    required this.tripCount,
+    required this.totalDistanceKm,
+    required this.totalDurationHrs,
+    required this.avgSpeedKph,
+    this.id = 0,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 

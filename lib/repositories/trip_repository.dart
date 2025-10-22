@@ -42,7 +42,7 @@ class TripRepository {
     try {
       final sw = Stopwatch()..start();
       // Try official POST body first (deviceId as single), then fallbacks using status codes
-      List<dynamic> raw = const <dynamic>[];
+      var raw = const <dynamic>[];
       Response<List<dynamic>> r;
 
       r = await _doTripsPost(
@@ -89,7 +89,8 @@ class TripRepository {
               raw = r.data ?? const <dynamic>[];
             } else if (r.statusCode == 405) {
               if (kDebugMode) {
-                debugPrint('[TripRepository] ⚠️ POST not supported; retrying with GET query');
+                debugPrint(
+                    '[TripRepository] ⚠️ POST not supported; retrying with GET query');
               }
               raw = await _doTripsGet(deviceId: deviceId, from: from, to: to);
             }
@@ -117,7 +118,8 @@ class TripRepository {
       // Record parsing/processing time into diagnostics for visibility
       if (kDebugMode) {
         DevDiagnostics.instance.recordFilterCompute(sw.elapsedMilliseconds);
-        debugPrint('[TripRepository] ✅ Fetched ${trips.length} trips for device=$deviceId');
+        debugPrint(
+            '[TripRepository] ✅ Fetched ${trips.length} trips for device=$deviceId');
       }
 
       _cache[key] = trips;
@@ -128,7 +130,8 @@ class TripRepository {
       if (kDebugMode) {
         final code = e.response?.statusCode;
         final body = e.response?.data;
-        debugPrint('[TripRepository] ❌ DioException (trips): code=$code type=${e.type.name} err=${e.message} body=${_safeBody(body)}');
+        debugPrint(
+            '[TripRepository] ❌ DioException (trips): code=$code type=${e.type.name} err=${e.message} body=${_safeBody(body)}');
       }
       // Network failed; try local cache as a fallback
       try {
@@ -154,7 +157,8 @@ class TripRepository {
   }
 
   /// Safe cached trips lookup from DAO; returns empty list on error.
-  Future<List<Trip>> getCachedTrips(int deviceId, DateTime from, DateTime to) async {
+  Future<List<Trip>> getCachedTrips(
+      int deviceId, DateTime from, DateTime to) async {
     try {
       final dao = await _ref.read(tripsDaoProvider.future);
       final cached = await dao.getByDeviceInRange(deviceId, from, to);
@@ -179,13 +183,15 @@ class TripRepository {
       final cutoff = now.subtract(const Duration(days: 30));
 
       // Persist monthly snapshot for the month identified by cutoff
-      await _persistMonthlySnapshot(cutoff: cutoff, tripsDao: tripsDao, snapshotsDao: snapshotsDao);
+      await _persistMonthlySnapshot(
+          cutoff: cutoff, tripsDao: tripsDao, snapshotsDao: snapshotsDao);
 
       // Proceed with deletion
       final old = await tripsDao.getOlderThan(cutoff);
       if (old.isNotEmpty && kDebugMode) {
         final totalKm = old.fold<double>(0, (s, t) => s + t.distanceKm);
-        debugPrint('[TripRepository] 🧹 Retention: deleting ${old.length} trips (< ${cutoff.toIso8601String()}) totaling ${totalKm.toStringAsFixed(1)} km');
+        debugPrint(
+            '[TripRepository] 🧹 Retention: deleting ${old.length} trips (< ${cutoff.toIso8601String()}) totaling ${totalKm.toStringAsFixed(1)} km');
       }
       await tripsDao.deleteOlderThan(cutoff);
     } catch (e) {
@@ -380,7 +386,7 @@ class TripRepository {
     final monthStart = DateTime(cutoff.year, cutoff.month).toUtc();
     // To get month end, advance to next month and subtract 1 day
     final nextMonth = (cutoff.month == 12)
-        ? DateTime(cutoff.year + 1, 1).toUtc()
+        ? DateTime(cutoff.year + 1).toUtc()
         : DateTime(cutoff.year, cutoff.month + 1).toUtc();
     final monthEnd = nextMonth.subtract(const Duration(seconds: 1));
 
@@ -392,19 +398,25 @@ class TripRepository {
       if (daily.isEmpty) return;
       final totals = TripAggregate(
         totalDistanceKm: daily.values.fold(0, (a, b) => a + b.totalDistanceKm),
-        totalDurationHrs: daily.values.fold(0, (a, b) => a + b.totalDurationHrs),
-    avgSpeedKph: daily.values.isEmpty
-      ? 0.0
-      : daily.values.fold(0.0, (a, b) => a + b.avgSpeedKph) / daily.length,
+        totalDurationHrs:
+            daily.values.fold(0, (a, b) => a + b.totalDurationHrs),
+        avgSpeedKph: daily.values.isEmpty
+            ? 0.0
+            : daily.values.fold(0.0, (a, b) => a + b.avgSpeedKph) /
+                daily.length,
         tripCount: daily.values.fold(0, (a, b) => a + b.tripCount),
       );
-      await snapshotsDao.putSnapshot(TripSnapshot.fromAggregate(monthKey, totals));
+      await snapshotsDao
+          .putSnapshot(TripSnapshot.fromAggregate(monthKey, totals));
       // Optionally prune very old snapshots (keep last 24 months)
       const keepBackMonths = 24;
-      final olderCutoff = _fmtYearMonth(DateTime.now().toUtc().subtract(Duration(days: keepBackMonths * 30)));
+      final olderCutoff = _fmtYearMonth(DateTime.now()
+          .toUtc()
+          .subtract(const Duration(days: keepBackMonths * 30)));
       await snapshotsDao.deleteOlderThan(olderCutoff);
       if (kDebugMode) {
-        debugPrint('[TripSnapshots] ✅ Saved monthly snapshot for $monthKey: ${totals.tripCount} trips, ${totals.totalDistanceKm.toStringAsFixed(1)} km');
+        debugPrint(
+            '[TripSnapshots] ✅ Saved monthly snapshot for $monthKey: ${totals.tripCount} trips, ${totals.totalDistanceKm.toStringAsFixed(1)} km');
       }
     } catch (e) {
       if (kDebugMode) {

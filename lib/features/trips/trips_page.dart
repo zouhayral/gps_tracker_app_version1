@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/features/trips/trip_details_page.dart';
+import 'package:my_app_gps/providers/trip_auto_refresh_registrar.dart';
 import 'package:my_app_gps/providers/trip_providers.dart';
 
 class TripsPage extends ConsumerStatefulWidget {
@@ -29,6 +30,8 @@ class _TripsPageState extends ConsumerState<TripsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Activate WS auto-refresh listener while page is alive
+    ref.watch(tripAutoRefreshRegistrarProvider(widget.deviceId));
     // Use debounced, cache-first provider for last 24h
     final tripsAsync = ref.watch(tripListProvider(widget.deviceId));
 

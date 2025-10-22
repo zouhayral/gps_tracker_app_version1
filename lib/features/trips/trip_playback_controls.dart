@@ -6,7 +6,7 @@ import 'package:my_app_gps/providers/trip_providers.dart';
 class TripPlaybackControls extends ConsumerWidget {
   const TripPlaybackControls({super.key, this.onTogglePlay, this.onSeek});
 
-  final void Function(bool play)? onTogglePlay;
+  final void Function({required bool isPlaying})? onTogglePlay;
   final void Function(double progress)? onSeek;
 
   @override
@@ -18,23 +18,23 @@ class TripPlaybackControls extends ConsumerWidget {
       children: [
         IconButton(
           icon: Icon(state.isPlaying ? Icons.pause : Icons.play_arrow),
-            onPressed: () {
-              if (state.isPlaying) {
-                notifier.pause();
-                onTogglePlay?.call(false);
-              } else {
-                notifier.play();
-                onTogglePlay?.call(true);
-              }
-            },
+          onPressed: () {
+            if (state.isPlaying) {
+              notifier.pause();
+              onTogglePlay?.call(isPlaying: false);
+            } else {
+              notifier.play();
+              onTogglePlay?.call(isPlaying: true);
+            }
+          },
         ),
         Expanded(
           child: Slider(
             value: state.progress,
-              onChanged: (v) {
-                notifier.seek(v);
-                onSeek?.call(v);
-              },
+            onChanged: (v) {
+              notifier.seek(v);
+              onSeek?.call(v);
+            },
           ),
         ),
         Text('${(state.progress * 100).toStringAsFixed(0)}%'),

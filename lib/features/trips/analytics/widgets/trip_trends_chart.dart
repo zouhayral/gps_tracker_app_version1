@@ -5,7 +5,8 @@ import 'package:my_app_gps/data/models/trip_snapshot.dart';
 enum MetricType { distance, duration, trips, speed }
 
 class TripTrendsChart extends StatelessWidget {
-  const TripTrendsChart({required this.snapshots, required this.metric, super.key});
+  const TripTrendsChart(
+      {required this.snapshots, required this.metric, super.key});
 
   final List<TripSnapshot> snapshots;
   final MetricType metric;
@@ -16,7 +17,10 @@ class TripTrendsChart extends StatelessWidget {
       return const Center(child: Text('No monthly data available.'));
     }
 
-    final labels = snapshots.map((s) => s.monthKey.length >= 7 ? s.monthKey.substring(5) : s.monthKey).toList();
+    final labels = snapshots
+        .map((s) =>
+            s.monthKey.length >= 7 ? s.monthKey.substring(5) : s.monthKey)
+        .toList();
     final values = snapshots.map((s) {
       switch (metric) {
         case MetricType.distance:
@@ -56,19 +60,22 @@ class TripTrendsChart extends StatelessWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 getTitlesWidget: (value, _) => Text(
-                  value.toInt() >= 0 && value.toInt() < labels.length ? labels[value.toInt()] : '',
+                  value.toInt() >= 0 && value.toInt() < labels.length
+                      ? labels[value.toInt()]
+                      : '',
                   style: const TextStyle(fontSize: 10),
                 ),
               ),
             ),
-            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 35)),
+            leftTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: true, reservedSize: 35)),
             rightTitles: const AxisTitles(),
             topTitles: const AxisTitles(),
           ),
           gridData: const FlGridData(),
           borderData: FlBorderData(show: false),
         ),
-        swapAnimationDuration: const Duration(milliseconds: 500),
+        duration: const Duration(milliseconds: 500),
       ),
     );
   }

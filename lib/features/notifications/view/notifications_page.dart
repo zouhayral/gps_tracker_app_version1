@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:my_app_gps/data/models/event.dart';
+import 'package:my_app_gps/features/notifications/view/notification_action_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
-import 'package:my_app_gps/features/notifications/view/notification_action_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_tile.dart';
 import 'package:my_app_gps/features/notifications/view/recovered_banner.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
@@ -67,64 +67,62 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final isSearching = filteredAsync.isLoading;
 
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('Notifications'),
-          actions: [
-            // Unread count badge
-            NotificationBadge(
-              onTap: () {
-                // Optional: Navigate to unread-only view or mark all as read
-              },
-            ),
-            const SizedBox(width: 8),
-            const SizedBox(width: 8),
-          ],
-        ),
-        body: Stack(
-          children: [
-            Column(
-              children: [
-                // Action bar (Mark all read only)
-                const NotificationActionBar(),
-                // Search field with debounce
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-                  child: TextField(
-                    onChanged: (v) => ref
-                        .read(searchQueryProvider.notifier)
-                        .state = v,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: 'Search notifications',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
+      appBar: AppBar(
+        title: const Text('Notifications'),
+        actions: [
+          // Unread count badge
+          NotificationBadge(
+            onTap: () {
+              // Optional: Navigate to unread-only view or mark all as read
+            },
+          ),
+          const SizedBox(width: 8),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              // Action bar (Mark all read only)
+              const NotificationActionBar(),
+              // Search field with debounce
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                child: TextField(
+                  onChanged: (v) =>
+                      ref.read(searchQueryProvider.notifier).state = v,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search notifications',
+                    isDense: true,
+                    border: OutlineInputBorder(),
                   ),
                 ),
-                // Non-blocking progress hint (thin bar) while background sync completes
-                if (isSearching)
-                  const SizedBox(
-                    height: 2,
-                    child: LinearProgressIndicator(minHeight: 2),
-                  ),
-                // Events list
-                Expanded(child: _buildEventsList(context, events)),
-              ],
-            ),
-            // Notification banner: also visible on Notifications page
-            const Align(
-              alignment: Alignment.bottomCenter,
-              child: NotificationBanner(),
-            ),
-            // Recovered events banner: shows count after reconnect backfill
-            const Align(
-              alignment: Alignment.bottomCenter,
-              child: RecoveredEventsBanner(),
-            ),
-          ],
-        ),
-      );
-    
+              ),
+              // Non-blocking progress hint (thin bar) while background sync completes
+              if (isSearching)
+                const SizedBox(
+                  height: 2,
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+              // Events list
+              Expanded(child: _buildEventsList(context, events)),
+            ],
+          ),
+          // Notification banner: also visible on Notifications page
+          const Align(
+            alignment: Alignment.bottomCenter,
+            child: NotificationBanner(),
+          ),
+          // Recovered events banner: shows count after reconnect backfill
+          const Align(
+            alignment: Alignment.bottomCenter,
+            child: RecoveredEventsBanner(),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildEventsList(
@@ -171,11 +169,15 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                   }
 
                   // Close any open bottom overlays/toasts before showing details
-                  if (context.mounted) {
-                    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
-                    await Future<void>.delayed(const Duration(milliseconds: 150));
-                    _showEventDetails(context, event);
+                  if (!context.mounted) {
+                    return;
                   }
+                  ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+                  await Future<void>.delayed(const Duration(milliseconds: 150));
+                  if (!context.mounted) {
+                    return;
+                  }
+                  _showEventDetails(context, event);
                 },
               ),
             ),
@@ -187,7 +189,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   Widget _buildSwipeBackground(BuildContext context, bool leftToRight) {
     const color = Colors.redAccent;
-    final alignment = leftToRight ? Alignment.centerLeft : Alignment.centerRight;
+    final alignment =
+        leftToRight ? Alignment.centerLeft : Alignment.centerRight;
     const icon = Icons.delete_forever_rounded;
     return Container(
       decoration: BoxDecoration(
