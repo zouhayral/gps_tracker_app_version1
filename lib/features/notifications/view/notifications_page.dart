@@ -53,18 +53,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Observe filtered list (best-effort) and paging
-    final filteredAsync = ref.watch(filteredNotificationsProvider);
-    final paged = ref.watch(pagedNotificationsProvider);
-    final repo = ref.watch(notificationsRepositoryProvider);
-    final base = repo.getCurrentEvents();
-
-    // If filteredAsync has data, use paged; otherwise show immediate base
-    final events = filteredAsync.maybeWhen(
-      data: (_) => paged,
-      orElse: () => base,
-    );
-    final isSearching = filteredAsync.isLoading;
+    // Show paged notifications list without search/filter bar
+    final events = ref.watch(pagedNotificationsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -86,26 +76,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             children: [
               // Action bar (Mark all read only)
               const NotificationActionBar(),
-              // Search field with debounce
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-                child: TextField(
-                  onChanged: (v) =>
-                      ref.read(searchQueryProvider.notifier).state = v,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search notifications',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              // Non-blocking progress hint (thin bar) while background sync completes
-              if (isSearching)
-                const SizedBox(
-                  height: 2,
-                  child: LinearProgressIndicator(minHeight: 2),
-                ),
               // Events list
               Expanded(child: _buildEventsList(context, events)),
             ],
