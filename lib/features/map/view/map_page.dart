@@ -149,6 +149,13 @@ class _MapPageState extends ConsumerState<MapPage>
   FleetMapPrefetchManager? _prefetchManager;
   bool _isShowingSnapshot = false;
   MapSnapshot? _cachedSnapshot;
+  
+  // OPTIMIZATION: Marker cache statistics
+  int _cacheHits = 0;
+  int _cacheMisses = 0;
+  double get _cacheHitRate => _cacheHits + _cacheMisses == 0 
+      ? 0.0 
+      : _cacheHits / (_cacheHits + _cacheMisses);
   // Avoid re-registering position listeners every build which can cause churn
   final Set<int> _positionListenerIds = <int>{};
   // MIGRATION NOTE: Removed _debouncedPositions - repository provides debouncing
@@ -478,21 +485,47 @@ class _MapPageState extends ConsumerState<MapPage>
     });
   }
 
+  // OPTIMIZATION: Marker update throttling timer
+  Timer? _markerUpdateDebouncer;
+  List<Map<String, dynamic>>? _pendingDevices;
+  
   /// PERF PHASE 2: Schedule a debounced marker update
-  /// Collapses multiple rapid updates into a single rebuild frame
+  /// Collapses multiple rapid updates into a single rebuild frame (300-500ms window)
   void _scheduleMarkerUpdate(List<Map<String, dynamic>> devices) {
-    // Delegate rate limiting to the throttled notifier used by FlutterMapAdapter.
     if (kDebugMode) {
-      debugPrint('[PERF] Scheduling marker update for ${devices.length} devices (throttle handled by notifier)');
+      debugPrint('[PERF] Scheduling marker update for ${devices.length} devices (300ms debounce)');
     }
-    _triggerMarkerUpdate(devices);
+    
+    // Store pending devices for batching
+    _pendingDevices = devices;
+    
+    // Cancel existing timer and create new one
+    _markerUpdateDebouncer?.cancel();
+    _markerUpdateDebouncer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) {
+        debugPrint('[MAP][PERF] Marker update cancelled (widget disposed)');
+        return;
+      }
+      
+      final devicesToProcess = _pendingDevices;
+      if (devicesToProcess != null) {
+        _triggerMarkerUpdate(devicesToProcess);
+      }
+      _pendingDevices = null;
+    });
   }
 
   /// Trigger marker update with current state
-  /// Called by listeners when data changes
+  /// Called by debounced timer when data changes
   void _triggerMarkerUpdate(List<Map<String, dynamic>> devices) {
     if (kDebugMode) {
       debugPrint('[MAP] _triggerMarkerUpdate called for ${devices.length} devices');
+    }
+    
+    // Safety check: prevent update after disposal
+    if (!mounted) {
+      debugPrint('[MAP][PERF] ⏸️ Marker update skipped (widget disposed)');
+      return;
     }
     
     // Use last-known positions captured by listeners to avoid timing gaps
@@ -764,6 +797,11 @@ class _MapPageState extends ConsumerState<MapPage>
     _motionController.globalTick.removeListener(_onMotionTick);
     _motionController.dispose();
 
+    // OPTIMIZATION: Cancel marker update debouncer to prevent updates after disposal
+    _markerUpdateDebouncer?.cancel();
+    _markerUpdateDebouncer = null;
+    _pendingDevices = null;
+    
     // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
   _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
@@ -1038,6 +1076,10 @@ class _MapPageState extends ConsumerState<MapPage>
         removed: diffResult.removed,
         processingTime: stopwatch.elapsed,
       );
+      
+      // Update cache statistics
+      _cacheMisses += diffResult.created + diffResult.modified;
+      _cacheHits += diffResult.reused;
 
       // Update notifier. For the first non-empty render, bypass throttle to ensure
       // immediate visibility of markers.
@@ -1046,9 +1088,15 @@ class _MapPageState extends ConsumerState<MapPage>
       diffResult.modified > 0 ||
       _markersNotifier.value.length != diffResult.markers.length) {
         if (kDebugMode) {
+          final hitRate = _cacheHitRate * 100;
           debugPrint('[MapPage] 📊 $diffResult');
           debugPrint(
             '[MapPage] ⚡ Processing: ${stopwatch.elapsedMilliseconds}ms',
+          );
+          debugPrint(
+            '[MAP][PERF] Marker rebuild took ${stopwatch.elapsedMilliseconds}ms '
+            '(reuse rate: ${diffResult.efficiency * 100}%, '
+            'total cache hit rate: ${hitRate.toStringAsFixed(1)}%)',
           );
         }
         final isFirstNonEmpty = _markersNotifier.value.isEmpty &&
