@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/dao/trip_snapshots_dao.dart';
 import 'package:my_app_gps/core/database/dao/trips_dao.dart';
-import 'package:my_app_gps/core/database/entities/trip_entity.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/data/models/position.dart' as model;
 import 'package:my_app_gps/data/models/trip.dart';
@@ -26,147 +25,52 @@ class TripRepository {
   // Keeping Ref for DAO and future integrations (e.g., device lookups, prefs)
   final Ref _ref;
 
-  // Simple in-memory cache keyed by device+range to avoid repeat parsing in-session
-  final Map<String, List<Trip>> _cache = <String, List<Trip>>{};
+  // Note: In-memory cache removed from active code path for simpler, safer networking.
 
   Future<List<Trip>> fetchTrips({
     required int deviceId,
     required DateTime from,
     required DateTime to,
   }) async {
-    // Ensure session cookie is present (silent restore) and emit debug context
-    try {
-      await _ref.read(authServiceProvider).rehydrateSessionCookie();
-    } catch (_) {}
+    final params = {
+      'deviceId': deviceId,
+      'from': _toUtcIso(from),
+      'to': _toUtcIso(to),
+    };
 
-    if (kDebugMode) {
-      String _iso(DateTime d) => d.toUtc().toIso8601String();
-      debugPrint('[TripRepository] 🔍 fetchTrips deviceId=$deviceId from=${_iso(from)} to=${_iso(to)}');
-      debugPrint('[TripRepository] 🌐 BaseURL=${_dio.options.baseUrl}');
-      debugPrint('[TripRepository] ↩️  Default headers=${_dio.options.headers}');
-    }
-    final key = _cacheKey(deviceId, from, to);
-    if (_cache.containsKey(key)) {
-      return _cache[key]!;
-    }
+    debugPrint('[TripRepository] 🔍 fetchTrips deviceId=$deviceId from=${params['from']} to=${params['to']}');
+    debugPrint('[TripRepository] 🌐 BaseURL=${_dio.options.baseUrl}');
+    debugPrint('[TripRepository] ↩️  Headers=${_dio.options.headers}');
 
     try {
-      final sw = Stopwatch()..start();
-      // Try official POST body first (deviceId as single), then fallbacks using status codes
-      var raw = const <dynamic>[];
-      Response<List<dynamic>> r;
+      final res = await _dio.post<dynamic>('/api/reports/trips', data: params);
+      debugPrint('[TripRepository] ⇢ Status=${res.statusCode} Type=${res.data.runtimeType}');
 
-      r = await _doTripsPost(
-        deviceId: deviceId,
-        from: from,
-        to: to,
-        useListBody: false,
-        trailingSlash: false,
-      );
-      if (r.statusCode == 200) {
-        raw = r.data ?? const <dynamic>[];
-      } else if (r.statusCode == 405) {
-        // deviceIds array
-        r = await _doTripsPost(
-          deviceId: deviceId,
-          from: from,
-          to: to,
-          useListBody: true,
-          trailingSlash: false,
-        );
-        if (r.statusCode == 200) {
-          raw = r.data ?? const <dynamic>[];
-        } else if (r.statusCode == 405) {
-          // trailing slash single
-          r = await _doTripsPost(
-            deviceId: deviceId,
-            from: from,
-            to: to,
-            useListBody: false,
-            trailingSlash: true,
-          );
-          if (r.statusCode == 200) {
-            raw = r.data ?? const <dynamic>[];
-          } else if (r.statusCode == 405) {
-            // trailing slash array
-            r = await _doTripsPost(
-              deviceId: deviceId,
-              from: from,
-              to: to,
-              useListBody: true,
-              trailingSlash: true,
-            );
-            if (r.statusCode == 200) {
-              raw = r.data ?? const <dynamic>[];
-            } else if (r.statusCode == 405) {
-              if (kDebugMode) {
-                debugPrint(
-                    '[TripRepository] ⚠️ POST not supported; retrying with GET query',);
-              }
-              raw = await _doTripsGet(deviceId: deviceId, from: from, to: to);
-            }
-          }
-        }
-      } else if (_isTransient(r.statusCode)) {
-        // Retry once after a short backoff
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-        r = await _doTripsPost(
-          deviceId: deviceId,
-          from: from,
-          to: to,
-          useListBody: false,
-          trailingSlash: false,
-        );
-        raw = r.data ?? const <dynamic>[];
+      // Defensive check for non-200
+      if (res.statusCode != 200) {
+        debugPrint('[TripRepository] ⚠️ Non-200: ${res.statusCode}, body=${res.data}');
+        return <Trip>[];
       }
 
-      final trips = raw
+      // Ensure we got JSON List
+      if (res.data is! List) {
+        debugPrint('[TripRepository] ⚠️ Unexpected data type: ${res.data.runtimeType}, content=${res.data}');
+        return <Trip>[];
+      }
+
+      final trips = (res.data as List)
           .whereType<Map<String, dynamic>>()
-          .map(Trip.fromJson)
+          .map((e) => Trip.fromJson(e))
           .toList(growable: false);
-      sw.stop();
 
-      // Record parsing/processing time into diagnostics for visibility
-      if (kDebugMode) {
-        DevDiagnostics.instance.recordFilterCompute(sw.elapsedMilliseconds);
-        debugPrint(
-            '[TripRepository] ✅ Fetched ${trips.length} trips for device=$deviceId',);
-      }
-
-      _cache[key] = trips;
-      // Persist to ObjectBox for offline/retention support (best-effort)
-      unawaited(_persistTripsAndCleanup(trips));
+      debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
       return trips;
     } on DioException catch (e) {
-      if (kDebugMode) {
-        final code = e.response?.statusCode;
-        final body = e.response?.data;
-        final underlying = e.error?.toString();
-        debugPrint('[TripRepository] ❌ DioException (trips): code=$code type=${e.type.name} err=${e.message}');
-        debugPrint('[TripRepository] ❌ Body: ${_safeBody(body)}');
-        if (underlying != null) {
-          debugPrint('[TripRepository] ❌ Underlying: $underlying');
-        }
-      }
-      // Network failed; try local cache as a fallback
-      try {
-        final dao = await _ref.read(tripsDaoProvider.future);
-        final cached = await dao.getByDeviceInRange(deviceId, from, to);
-        if (cached.isNotEmpty) {
-          final trips = cached
-              .map((e) => Trip.fromJson(e.toDomain()))
-              .toList(growable: false);
-          _cache[key] = trips;
-          return trips;
-        }
-      } catch (_) {}
-      // graceful fallback
+      debugPrint('[TripRepository] ❌ DioException (trips): ${e.type}, ${e.message}');
+      debugPrint('[TripRepository] ❌ Body: ${e.response?.data}');
       return <Trip>[];
     } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('[TripRepository] ❌ Error: $e');
-        debugPrint(st.toString());
-      }
+      debugPrint('[TripRepository] 💥 Fatal error: $e\n$st');
       return <Trip>[];
     }
   }
@@ -217,123 +121,17 @@ class TripRepository {
     }
   }
 
-  Future<void> _persistTripsAndCleanup(List<Trip> trips) async {
-    try {
-      final dao = await _ref.read(tripsDaoProvider.future);
-      if (trips.isNotEmpty) {
-        final entities = trips
-            .map(
-              (t) => TripEntity.fromDomain(
-                tripId: t.id,
-                deviceId: t.deviceId,
-                startTime: t.startTime,
-                endTime: t.endTime,
-                distanceKm: t.distanceKm,
-                averageSpeed: t.avgSpeedKph,
-                maxSpeed: t.maxSpeedKph,
-                attributes: {
-                  'startLat': t.start.latitude,
-                  'startLon': t.start.longitude,
-                  'endLat': t.end.latitude,
-                  'endLon': t.end.longitude,
-                },
-              ),
-            )
-            .toList(growable: false);
-        await dao.upsertMany(entities);
-      }
-      await cleanupOldTrips();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[TripRepository] ⚠️ persist/cleanup error: $e');
-      }
-    }
-  }
+  // Removed persistTripsAndCleanup to simplify network path.
 
-  String _safeBody(dynamic body) {
-    try {
-      if (body == null) return 'null';
-      final s = body.toString();
-      // Truncate to avoid noisy logs
-      return s.length > 300 ? '${s.substring(0, 300)}…' : s;
-    } catch (_) {
-      return '<unprintable>';
-    }
-  }
+  String _toUtcIso(DateTime d) => d.toUtc().toIso8601String();
 
-  // Helper to execute the POST request with alternate body shapes
-  Future<Response<List<dynamic>>> _doTripsPost({
-    required int deviceId,
-    required DateTime from,
-    required DateTime to,
-    required bool useListBody,
-    required bool trailingSlash,
-  }) async {
-    final body = useListBody
-        ? {
-            'deviceIds': [deviceId],
-            'from': from.toUtc().toIso8601String(),
-            'to': to.toUtc().toIso8601String(),
-          }
-        : {
-            'deviceId': deviceId,
-            'from': from.toUtc().toIso8601String(),
-            'to': to.toUtc().toIso8601String(),
-          };
-    final path = trailingSlash ? '/api/reports/trips/' : '/api/reports/trips';
-    if (kDebugMode) {
-      debugPrint('[TripRepository] ⇢ POST $path body=$body');
-    }
-    return _dio.post<List<dynamic>>(
-      path,
-      data: body,
-      options: Options(
-        responseType: ResponseType.json,
-        headers: const {'Accept': 'application/json'},
-        contentType: 'application/json',
-        validateStatus: (code) => code != null && code < 500,
-        sendTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 10),
-        // connectTimeout is taken from BaseOptions; keep default or override if needed
-      ),
-    );
-  }
+  // Removed POST/GET fallback helpers; server should return JSON list for POST.
 
-  // Retry wrapper (explicit helper, referenced in docs/spec)
-  bool _isTransient(int? code) {
-    return code == 500 || code == 502 || code == 503 || code == 504;
-  }
+  // Removed transient retry helper; simplified flow.
 
-  // Non-standard GET fallback (best-effort)
-  Future<List<dynamic>> _doTripsGet({
-    required int deviceId,
-    required DateTime from,
-    required DateTime to,
-  }) async {
-    final qp = {
-      'deviceId': deviceId,
-      'from': from.toUtc().toIso8601String(),
-      'to': to.toUtc().toIso8601String(),
-    };
-    if (kDebugMode) {
-      debugPrint('[TripRepository] ⇢ GET /api/reports/trips query=$qp');
-    }
-    final r = await _dio.get<List<dynamic>>(
-      '/api/reports/trips',
-      queryParameters: qp,
-      options: Options(
-        responseType: ResponseType.json,
-        headers: const {'Accept': 'application/json'},
-        validateStatus: (code) => code != null && code < 500,
-        sendTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 10),
-      ),
-    );
-    return r.data ?? const <dynamic>[];
-  }
+  // Removed GET fallback; diagnostic logs will catch unexpected responses.
 
-  String _cacheKey(int deviceId, DateTime from, DateTime to) =>
-      '$deviceId:${from.toUtc().millisecondsSinceEpoch}-${to.toUtc().millisecondsSinceEpoch}';
+  // Cache key helper removed with cache usage.
 
   /// Fetch raw positions for a given device and time range.
   Future<List<model.Position>> fetchTripPositions({
