@@ -76,7 +76,7 @@ class Trip {
     }
 
     final avgKph = speedToKph(
-        json['averageSpeed'] ?? json['avgSpeed'] ?? json['avgSpeedKph']);
+        json['averageSpeed'] ?? json['avgSpeed'] ?? json['avgSpeedKph'],);
     final maxKph = speedToKph(json['maxSpeed'] ?? json['maxSpeedKph']);
 
     // Coordinates may be provided as startLat/startLon and endLat/endLon

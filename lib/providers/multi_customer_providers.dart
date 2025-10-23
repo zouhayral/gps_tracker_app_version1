@@ -55,7 +55,7 @@ final tripsProvider = FutureProvider.autoDispose.family<
       // For now, return empty list as placeholder
       if (kDebugMode) {
         print(
-            '[TripsProvider] Fetching trips for device ${params.deviceId} from $fromStr to $toStr');
+            '[TripsProvider] Fetching trips for device ${params.deviceId} from $fromStr to $toStr',);
       }
 
       // TODO(app-team): Implement actual API call
@@ -93,7 +93,7 @@ final allTripsProvider = FutureProvider.autoDispose
 
       if (kDebugMode) {
         print(
-            '[AllTripsProvider] Fetching trips for ${deviceIds.length} devices');
+            '[AllTripsProvider] Fetching trips for ${deviceIds.length} devices',);
       }
 
       // TODO(app-team): Implement actual API call

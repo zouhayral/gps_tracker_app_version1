@@ -417,7 +417,7 @@ class NotificationsRepository {
           _ref.listen<AsyncValue<CustomerWebSocketMessage>>(
         customerWebSocketProvider,
         (AsyncValue<CustomerWebSocketMessage>? prev,
-            AsyncValue<CustomerWebSocketMessage> next) {
+            AsyncValue<CustomerWebSocketMessage> next,) {
           if (_disposed) return;
 
           next.when(
@@ -431,7 +431,7 @@ class NotificationsRepository {
               _log('❌ WebSocket provider error: $err');
               if (kDebugMode) {
                 debugPrint(
-                    '[NotificationsRepository] WebSocket error stack: $st');
+                    '[NotificationsRepository] WebSocket error stack: $st',);
               }
             },
             loading: () {
@@ -673,7 +673,7 @@ class NotificationsRepository {
           if (!_newEventsController.isClosed) {
             _newEventsController.add(enriched);
           }
-        }));
+        }),);
       }
 
       // Emit updated list
@@ -699,7 +699,7 @@ class NotificationsRepository {
   }) async {
     try {
       _log(
-          '🔍 Getting all events (unreadOnly: $unreadOnly, deviceId: $deviceId, type: $type)');
+          '🔍 Getting all events (unreadOnly: $unreadOnly, deviceId: $deviceId, type: $type)',);
 
       List<Event> events;
 

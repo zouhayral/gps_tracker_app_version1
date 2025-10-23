@@ -119,7 +119,7 @@ class EventService {
       if (data is! List) {
         if (kDebugMode) {
           debugPrint(
-              '[EventService] ⚠️ Unexpected response type: ${data.runtimeType}');
+              '[EventService] ⚠️ Unexpected response type: ${data.runtimeType}',);
         }
         return [];
       }
@@ -217,7 +217,7 @@ class EventService {
 
       if (kDebugMode) {
         debugPrint(
-            '[EventService] 💾 Persisted ${entities.length} events to ObjectBox');
+            '[EventService] 💾 Persisted ${entities.length} events to ObjectBox',);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -263,7 +263,7 @@ class EventService {
 
       if (kDebugMode) {
         debugPrint(
-            '[EventService] 📦 Retrieved ${events.length} cached events from ObjectBox');
+            '[EventService] 📦 Retrieved ${events.length} cached events from ObjectBox',);
       }
 
       return events;
@@ -335,7 +335,7 @@ class EventService {
 
     if (kDebugMode) {
       debugPrint(
-          '[EventService] ✅ Marked $successCount/${eventIds.length} events as read');
+          '[EventService] ✅ Marked $successCount/${eventIds.length} events as read',);
     }
 
     return successCount;
@@ -413,7 +413,7 @@ class EventService {
 
       if (kDebugMode) {
         debugPrint(
-            '[EventService] 📊 Event stats for device $deviceId: $stats');
+            '[EventService] 📊 Event stats for device $deviceId: $stats',);
       }
 
       return stats;
@@ -466,7 +466,7 @@ class EventService {
     } catch (e) {
       if (kDebugMode) {
         debugPrint(
-            '[EventService] ⚠️ Failed to get latest cached timestamp: $e');
+            '[EventService] ⚠️ Failed to get latest cached timestamp: $e',);
       }
       return null;
     }

@@ -70,7 +70,7 @@ class SettingsPage extends ConsumerWidget {
                       : await SharedPreferences.getInstance();
                   await prefs.setBool('notifications_enabled', value);
                   debugPrint(
-                      '[Settings] Notifications ${value ? 'enabled' : 'disabled'}');
+                      '[Settings] Notifications ${value ? 'enabled' : 'disabled'}',);
                 },
                 title: const Text('Notifications'),
                 subtitle: const Text(

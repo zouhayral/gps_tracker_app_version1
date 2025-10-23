@@ -15,7 +15,7 @@ import 'package:my_app_gps/repositories/trip_repository.dart';
 /// Simple query struct for requesting trips for a device and date range.
 class TripQuery {
   const TripQuery(
-      {required this.deviceId, required this.from, required this.to});
+      {required this.deviceId, required this.from, required this.to,});
   final int deviceId;
   final DateTime from;
   final DateTime to;
@@ -37,14 +37,14 @@ final tripsByDeviceProvider =
             await repo.fetchTrips(deviceId: q.deviceId, from: q.from, to: q.to);
         if (fetched.isNotEmpty) {
           debugPrint(
-              '[TripProviders] 🌐 Refreshed ${fetched.length} trips from network');
+              '[TripProviders] 🌐 Refreshed ${fetched.length} trips from network',);
           // Recompute this provider to surface fresh network data
           ref.invalidateSelf();
         }
       } catch (e) {
         debugPrint('[TripProviders] ⚠️ Network fetch failed: $e');
       }
-    }));
+    }),);
     return cached;
   }
 
@@ -54,7 +54,7 @@ final tripsByDeviceProvider =
         await repo.fetchTrips(deviceId: q.deviceId, from: q.from, to: q.to);
     if (fetched.isNotEmpty) {
       debugPrint(
-          '[TripProviders] 🌐 Loaded ${fetched.length} trips from network');
+          '[TripProviders] 🌐 Loaded ${fetched.length} trips from network',);
       return fetched;
     }
   } catch (e) {
@@ -69,13 +69,13 @@ final tripsByDeviceProvider =
 /// Playback state for trip replay.
 class TripPlaybackState {
   const TripPlaybackState(
-      {this.tripId, this.isPlaying = false, this.progress = 0.0});
+      {this.tripId, this.isPlaying = false, this.progress = 0.0,});
   final String? tripId;
   final bool isPlaying;
   final double progress; // 0.0 - 1.0 timeline position
 
   TripPlaybackState copyWith(
-          {String? tripId, bool? isPlaying, double? progress}) =>
+          {String? tripId, bool? isPlaying, double? progress,}) =>
       TripPlaybackState(
         tripId: tripId ?? this.tripId,
         isPlaying: isPlaying ?? this.isPlaying,
@@ -104,7 +104,7 @@ final tripPositionsProvider =
   final repo = ref.watch(tripRepositoryProvider);
   final sw = Stopwatch()..start();
   final positions = await repo.fetchTripPositions(
-      deviceId: trip.deviceId, from: trip.startTime, to: trip.endTime);
+      deviceId: trip.deviceId, from: trip.startTime, to: trip.endTime,);
   sw.stop();
   // Record fetch+parse time to diagnostics for visibility
   DevDiagnostics.instance.recordClusterCompute(sw.elapsedMilliseconds);
@@ -173,7 +173,7 @@ class TripListNotifier extends AutoDisposeFamilyAsyncNotifier<List<Trip>, int> {
     final cached = await repo.getCachedTrips(deviceId, from, to);
     if (cached.isNotEmpty) {
       debugPrint(
-          '[TripProviders] 🗄️ Loaded ${cached.length} trips from cache');
+          '[TripProviders] 🗄️ Loaded ${cached.length} trips from cache',);
       state = AsyncData(_sortedUnique(cached));
     }
 
@@ -214,7 +214,7 @@ class TripListNotifier extends AutoDisposeFamilyAsyncNotifier<List<Trip>, int> {
       final fetched =
           await repo.fetchTrips(deviceId: _deviceId, from: from, to: to);
       debugPrint(
-          '[TripProviders] 🌐 Refreshed ${fetched.length} trips from network');
+          '[TripProviders] 🌐 Refreshed ${fetched.length} trips from network',);
       final merged = _mergeById(previous, fetched);
       state = AsyncData(_sortedUnique(merged));
     } catch (e, st) {

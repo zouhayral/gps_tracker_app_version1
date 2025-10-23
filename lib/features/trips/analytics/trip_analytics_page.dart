@@ -2,9 +2,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/data/models/trip_aggregate.dart';
-import 'package:my_app_gps/providers/trip_providers.dart';
 import 'package:my_app_gps/data/models/trip_snapshot.dart';
 import 'package:my_app_gps/features/trips/analytics/widgets/trip_trends_chart.dart';
+import 'package:my_app_gps/providers/trip_providers.dart';
 
 class TripAnalyticsPage extends ConsumerWidget {
   const TripAnalyticsPage({super.key});

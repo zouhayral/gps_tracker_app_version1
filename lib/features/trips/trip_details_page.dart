@@ -1,15 +1,16 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:my_app_gps/core/map/modern_marker_flutter_map.dart';
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/features/trips/trip_playback_controls.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/map/tile_network_client.dart';
 import 'package:my_app_gps/providers/trip_providers.dart';
-import 'package:my_app_gps/core/map/modern_marker_flutter_map.dart';
 
 class TripDetailsPage extends ConsumerStatefulWidget {
   const TripDetailsPage({required this.trip, super.key});
@@ -137,8 +138,8 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
     final ts = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
 
     // Brand colors
-    const Color accent = Color(0xFF5C6B2F); // olive
-    const Color bg = Color(0xFFF6F6E6); // light beige
+    const accent = Color(0xFF5C6B2F); // olive
+    const bg = Color(0xFFF6F6E6); // light beige
 
     // No fullscreen overlay variable; we'll navigate to a separate page for fullscreen view
 
@@ -197,7 +198,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
 
                     final current = _positionAtProgress(pts, playback.progress);
                     // Visible layers
-                    const Color routeYellow = Color(0xFFFFC107); // bright yellow for visibility
+                    const routeYellow = Color(0xFFFFC107); // bright yellow for visibility
                     final polyline = Polyline(points: pts, strokeWidth: 5, color: routeYellow);
                     final markers = <Marker>[];
                     if (pts.isNotEmpty) {
@@ -281,7 +282,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                                 );
                               },
                               child: const Padding(
-                                padding: EdgeInsets.all(8.0),
+                                padding: EdgeInsets.all(8),
                                 child: Icon(Icons.fullscreen, color: Colors.black87),
                               ),
                             ),
@@ -381,7 +382,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
 }
 
 class TripMapFullscreenPage extends ConsumerStatefulWidget {
-  const TripMapFullscreenPage({super.key, required this.trip});
+  const TripMapFullscreenPage({required this.trip, super.key});
   final Trip trip;
 
   @override
@@ -466,7 +467,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
     final positionsAsync = ref.watch(tripPositionsProvider(widget.trip));
     final tileSource = ref.watch(mapTileSourceProvider);
     final ts = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
-    const Color accent = Color(0xFF5C6B2F);
+    const accent = Color(0xFF5C6B2F);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -480,7 +481,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
             }
             final current = _positionAtProgress(pts, playback.progress);
 
-            const Color routeYellow = Color(0xFFFFC107);
+            const routeYellow = Color(0xFFFFC107);
             final polyline = Polyline(points: pts, strokeWidth: 5, color: routeYellow);
             final markers = <Marker>[];
             if (pts.isNotEmpty) {
@@ -548,7 +549,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
                       customBorder: const CircleBorder(),
                       onTap: () => Navigator.of(context).pop(),
                       child: const Padding(
-                        padding: EdgeInsets.all(10.0),
+                        padding: EdgeInsets.all(10),
                         child: Icon(Icons.fullscreen_exit, color: Colors.black87),
                       ),
                     ),
@@ -606,7 +607,7 @@ class _TripStatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color accent = Color(0xFF5C6B2F);
+    const accent = Color(0xFF5C6B2F);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(

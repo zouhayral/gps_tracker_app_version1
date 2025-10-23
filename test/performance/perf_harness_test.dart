@@ -1,10 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 // Adjust these imports to match actual package structure.
 import 'package:my_app_gps/core/diagnostics/perf_thresholds.dart';
-import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/main.dart' as app;
 
 void main() {

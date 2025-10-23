@@ -146,12 +146,12 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
+                                    fontWeight: FontWeight.bold,),
                               ),
                             ),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                  horizontal: 8, vertical: 4,),
                               decoration: BoxDecoration(
                                 color: chipColor.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(999),
@@ -161,7 +161,7 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
                                 style: TextStyle(
                                     color: chipColor,
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w600),
+                                    fontWeight: FontWeight.w600,),
                               ),
                             ),
                           ],
@@ -173,7 +173,7 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                               color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.8)),
+                                  .withValues(alpha: 0.8),),
                         ),
                       ],
                     ),

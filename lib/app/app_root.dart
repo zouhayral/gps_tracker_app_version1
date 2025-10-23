@@ -100,7 +100,6 @@ class _AppRootState extends ConsumerState<AppRoot> {
     final app = MaterialApp.router(
         title: 'GPS Tracker',
         debugShowCheckedModeBanner: false,
-        showPerformanceOverlay: false,
         theme: buildAppTheme(),
         routerConfig: router,
         // No global NotificationToastListener here; pages can add locally

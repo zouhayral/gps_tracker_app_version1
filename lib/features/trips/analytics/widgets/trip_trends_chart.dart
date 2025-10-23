@@ -6,7 +6,7 @@ enum MetricType { distance, duration, trips, speed }
 
 class TripTrendsChart extends StatelessWidget {
   const TripTrendsChart(
-      {required this.snapshots, required this.metric, super.key});
+      {required this.snapshots, required this.metric, super.key,});
 
   final List<TripSnapshot> snapshots;
   final MetricType metric;
@@ -19,7 +19,7 @@ class TripTrendsChart extends StatelessWidget {
 
     final labels = snapshots
         .map((s) =>
-            s.monthKey.length >= 7 ? s.monthKey.substring(5) : s.monthKey)
+            s.monthKey.length >= 7 ? s.monthKey.substring(5) : s.monthKey,)
         .toList();
     final values = snapshots.map((s) {
       switch (metric) {
@@ -68,7 +68,7 @@ class TripTrendsChart extends StatelessWidget {
               ),
             ),
             leftTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: true, reservedSize: 35)),
+                sideTitles: SideTitles(showTitles: true, reservedSize: 35),),
             rightTitles: const AxisTitles(),
             topTitles: const AxisTitles(),
           ),
