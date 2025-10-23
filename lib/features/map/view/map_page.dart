@@ -201,6 +201,19 @@ class _MapPageState extends ConsumerState<MapPage>
 
   // MIGRATION NOTE: Removed _posSub - VehicleDataRepository manages subscriptions
 
+  // LIFECYCLE: App lifecycle state tracking
+  bool _isPaused = false;
+
+  // REBUILD CONTROL: Camera position tracking with threshold-based rebuilds
+  final ValueNotifier<LatLng?> _cameraCenterNotifier = ValueNotifier<LatLng?>(null);
+  static const _kCameraMovementThreshold = 0.001; // ~111 meters at equator
+  
+  // PERFORMANCE: Rebuild tracking
+  int _rebuildCount = 0;
+  int _skippedRebuildCount = 0;
+  final Stopwatch _rebuildStopwatch = Stopwatch();
+  DateTime? _lastRebuildTime;
+
   @override
   void initState() {
     super.initState();
@@ -786,6 +799,83 @@ class _MapPageState extends ConsumerState<MapPage>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] App state changed: $state');
+    }
+
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        _onAppPaused();
+      case AppLifecycleState.resumed:
+        _onAppResumed();
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        // No action needed
+        break;
+    }
+  }
+
+  /// LIFECYCLE: Handle app pause/inactive state
+  /// - Pause live updates and cancel marker debouncer timers
+  /// - Stop map animation controllers
+  void _onAppPaused() {
+    if (_isPaused) return;
+    _isPaused = true;
+
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] Pausing: canceling timers');
+    }
+
+    // Cancel marker update debouncer
+    _markerUpdateDebouncer?.cancel();
+    _pendingDevices = null;
+
+    // Cancel camera fit debouncer
+    _debouncedCameraFit?.cancel();
+
+    // Cancel sheet animation debouncer
+    _sheetDebounce?.cancel();
+    
+    // Note: MarkerMotionController continues running (internal timer-based)
+    // This is acceptable as it's lightweight and prevents jarring when resuming
+    
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] ⏸️ Paused (debounce timers canceled)');
+    }
+  }
+
+  /// LIFECYCLE: Handle app resume state
+  /// - Resume live WebSocket position updates
+  /// - Refresh stale data via repository
+  void _onAppResumed() {
+    if (!_isPaused) return;
+    _isPaused = false;
+
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] Resuming: restarting live updates');
+    }
+
+    // Trigger fresh marker update with current data
+    final devicesAsync = ref.read(devicesNotifierProvider);
+    final devices = devicesAsync.asData?.value ?? [];
+    if (devices.isNotEmpty) {
+      _scheduleMarkerUpdate(devices);
+    }
+
+    // Request repository refresh for fresh data
+    final repo = ref.read(vehicleDataRepositoryProvider);
+    repo.refreshAll();
+
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] ▶️ Resumed (marker updates scheduled, data refresh requested)');
+    }
+  }
+
+  @override
   void dispose() {
     // Clean up manual listeners first
     for (final subscription in _listenerCleanups) {
@@ -802,6 +892,9 @@ class _MapPageState extends ConsumerState<MapPage>
     _markerUpdateDebouncer = null;
     _pendingDevices = null;
     
+    // LIFECYCLE: Cleanup camera center notifier
+    _cameraCenterNotifier.dispose();
+    
     // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
   _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
@@ -811,6 +904,18 @@ class _MapPageState extends ConsumerState<MapPage>
   // No sheet controller to dispose for InstantInfoSheet
     _markersNotifier
         .dispose(); // OPTIMIZATION: Clean up throttled marker notifier
+    
+    // PERFORMANCE: Print final rebuild statistics
+    if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+      final totalRebuilds = _rebuildCount + _skippedRebuildCount;
+      final skipRate = totalRebuilds > 0 
+          ? (_skippedRebuildCount / totalRebuilds * 100).toStringAsFixed(1)
+          : '0.0';
+      debugPrint(
+        '[MAP][PERF] Final stats: $_rebuildCount rebuilds, '
+        '$_skippedRebuildCount skipped ($skipRate% skip rate)',
+      );
+    }
 
     // OPTIMIZATION: Cleanup prefetch manager
     if (MapDebugFlags.enablePrefetch) {
@@ -1367,15 +1472,118 @@ class _MapPageState extends ConsumerState<MapPage>
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
+  /// REBUILD CONTROL: Determine if map rebuild should proceed
+  /// 
+  /// Only rebuilds when:
+  /// - Camera center moved beyond threshold (> 50m or 0.001° lat/lon)
+  /// - Device selection changed
+  /// - Search query changed
+  /// - Refresh is in progress
+  /// - App lifecycle resumed
+  /// 
+  /// Returns true to proceed with rebuild, false to skip
+  bool _shouldTriggerRebuild(BuildContext context, WidgetRef ref) {
+    // Always rebuild if paused (lifecycle resume triggers rebuild)
+    if (_isPaused) {
+      if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+        debugPrint('[MAP][PERF] Rebuild triggered (app lifecycle resumed)');
+      }
+      return true;
+    }
+    
+    // Always rebuild if refreshing
+    if (_isRefreshing) {
+      if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+        debugPrint('[MAP][PERF] Rebuild triggered (manual refresh)');
+      }
+      return true;
+    }
+    
+    // Check if camera moved significantly
+    final mapState = _mapKey.currentState;
+    if (mapState != null) {
+      final currentCenter = mapState.mapController.camera.center;
+      final previousCenter = _cameraCenterNotifier.value;
+      
+      if (previousCenter != null) {
+        final latDiff = (currentCenter.latitude - previousCenter.latitude).abs();
+        final lonDiff = (currentCenter.longitude - previousCenter.longitude).abs();
+        
+        if (latDiff > _kCameraMovementThreshold || lonDiff > _kCameraMovementThreshold) {
+          _cameraCenterNotifier.value = currentCenter;
+          if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+            final distanceMeters = ((latDiff + lonDiff) * 111000).toStringAsFixed(0);
+            debugPrint(
+              '[MAP][PERF] Rebuild triggered (camera moved ~${distanceMeters}m)',
+            );
+          }
+          return true;
+        }
+      } else {
+        // First time - record position
+        _cameraCenterNotifier.value = currentCenter;
+        return true;
+      }
+    }
+    
+    // If we get here, no significant changes detected
+    return false;
+  }
+
   // 7F: Build device overlay info card
   // ---------- Build ----------
   @override
   Widget build(BuildContext context) {
+    // PERFORMANCE: Track rebuild timing
+    _rebuildStopwatch.reset();
+    _rebuildStopwatch.start();
+    final now = DateTime.now();
+    
     // CRITICAL FIX: Setup position update listeners in build method
     // ref.listen() must be called in build method, not in initState
     _setupPositionListenersInBuild();
     
+    // REBUILD CONTROL: Check if rebuild is necessary based on data changes
+    final shouldRebuild = _shouldTriggerRebuild(context, ref);
+    
+    if (!shouldRebuild) {
+      _skippedRebuildCount++;
+      _rebuildStopwatch.stop();
+      
+      if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+        final timeSinceLastRebuild = _lastRebuildTime != null
+            ? now.difference(_lastRebuildTime!).inMilliseconds
+            : 0;
+        debugPrint(
+          '[MAP][PERF] Skipped rebuild (no data change, '
+          '${timeSinceLastRebuild}ms since last rebuild)',
+        );
+      }
+      
+      // Return previous content without rebuilding
+      return _buildMapContent();
+    }
+    
+    // Proceeding with rebuild
+    _rebuildCount++;
+    _lastRebuildTime = now;
+    
     var content = _buildMapContent();
+    
+    _rebuildStopwatch.stop();
+    
+    // Log rebuild performance
+    if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+      final duration = _rebuildStopwatch.elapsedMilliseconds;
+      final totalRebuilds = _rebuildCount + _skippedRebuildCount;
+      final skipRate = totalRebuilds > 0 
+          ? (_skippedRebuildCount / totalRebuilds * 100).toStringAsFixed(1)
+          : '0.0';
+      debugPrint(
+        '[MAP][PERF] Map rebuild triggered (reason: data change) '
+        'took ${duration}ms (rebuild #$_rebuildCount, skip rate: $skipRate%)',
+      );
+    }
 
     // Add performance profiling overlay (disabled by default)
     if (MapDebugFlags.showRebuildOverlay) {
