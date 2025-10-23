@@ -15,6 +15,22 @@ import 'package:my_app_gps/data/models/trip_aggregate.dart';
 import 'package:my_app_gps/data/models/trip_snapshot.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 
+/// Top-level function for isolate-based trip parsing
+/// This function must be top-level (not a method) to work with compute()
+List<Trip> _parseTripsIsolate(List<dynamic> jsonList) {
+  final trips = <Trip>[];
+  for (final item in jsonList) {
+    if (item is Map<String, dynamic>) {
+      try {
+        trips.add(Trip.fromJson(item));
+      } catch (_) {
+        // Skip malformed items silently in isolate
+      }
+    }
+  }
+  return trips;
+}
+
 /// Cached response for trip requests
 class _CachedTripResponse {
   _CachedTripResponse({
@@ -238,18 +254,7 @@ class TripRepository {
           }
         }
         if (data is List) {
-          final trips = <Trip>[];
-          for (final item in data) {
-            if (item is Map<String, dynamic>) {
-              try {
-                trips.add(Trip.fromJson(item));
-              } catch (_) {
-                if (kDebugMode) {
-                  debugPrint('[TripRepository] ⚠️ Skipped malformed trip item');
-                }
-              }
-            }
-          }
+          final trips = await _parseTripsInBackground(data);
           debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
           return trips;
         } else {
@@ -294,6 +299,26 @@ class TripRepository {
       debugPrint(st.toString());
       rethrow;
     }
+  }
+
+  /// Parse trips in background isolate for heavy computation
+  /// Uses compute() for lists >10 items to avoid blocking the UI thread
+  Future<List<Trip>> _parseTripsInBackground(List<dynamic> data) async {
+    if (data.length <= 10) {
+      // Small lists: parse synchronously (isolate overhead not worth it)
+      return _parseTripsIsolate(data);
+    }
+    
+    // Large lists: offload to isolate
+    debugPrint('[TripRepository] 🔄 Parsing ${data.length} trips in background isolate');
+    final stopwatch = Stopwatch()..start();
+    
+    final trips = await compute(_parseTripsIsolate, data);
+    
+    stopwatch.stop();
+    debugPrint('[TripRepository] ✅ Background parsing completed in ${stopwatch.elapsedMilliseconds}ms');
+    
+    return trips;
   }
 
   // Feature flag to toggle legacy /generate fallback for older Traccar servers
