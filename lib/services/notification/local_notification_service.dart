@@ -23,6 +23,10 @@ class LocalNotificationService {
 
   static final LocalNotificationService instance = LocalNotificationService._();
 
+  /// When true, disables plugin initialization and all show/cancel calls.
+  /// Use this in tests to avoid MissingPluginException.
+  static bool testMode = false;
+
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
@@ -57,6 +61,11 @@ class LocalNotificationService {
   /// Must be called during app startup, typically in main().
   /// Requests permissions and sets up notification channels.
   Future<bool> initialize() async {
+    if (testMode) {
+      _log('🧪 Test mode enabled, skipping LocalNotificationService.initialize');
+      // Do not mark initialized so show calls are safely no-ops in tests
+      return false;
+    }
     if (_initialized) {
       _log('✅ Already initialized');
       return true;
@@ -165,6 +174,10 @@ class LocalNotificationService {
   /// Maps event types to appropriate notification titles and messages.
   /// Only shows notification if event hasn't been notified recently.
   Future<void> showEventNotification(Event event) async {
+    if (testMode) {
+      _log('🧪 Test mode: suppressing showEventNotification');
+      return;
+    }
     if (!_initialized) {
       _log('⚠️ Service not initialized, call initialize() first');
       return;
@@ -228,6 +241,10 @@ class LocalNotificationService {
   ///
   /// Useful when multiple events arrive simultaneously.
   Future<void> showBatchSummary(List<Event> events) async {
+    if (testMode) {
+      _log('🧪 Test mode: suppressing showBatchSummary');
+      return;
+    }
     if (!_initialized || events.isEmpty) return;
     if (!await isNotificationsEnabled()) {
       _log('🔕 Notifications disabled, skipping batch summary');
@@ -262,6 +279,10 @@ class LocalNotificationService {
 
   /// Cancel a specific notification
   Future<void> cancelNotification(int notificationId) async {
+    if (testMode) {
+      _log('🧪 Test mode: suppressing cancelNotification');
+      return;
+    }
     await _plugin.cancel(notificationId);
     _recentlyNotifiedIds.remove(notificationId);
     _log('🗑️ Cancelled notification: $notificationId');
@@ -269,6 +290,10 @@ class LocalNotificationService {
 
   /// Cancel all notifications
   Future<void> cancelAll() async {
+    if (testMode) {
+      _log('🧪 Test mode: suppressing cancelAll');
+      return;
+    }
     await _plugin.cancelAll();
     _recentlyNotifiedIds.clear();
     _log('🗑️ Cancelled all notifications');

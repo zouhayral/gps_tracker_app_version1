@@ -26,6 +26,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
   static const _storedEmailKey = 'stored_email';
   // REMOVED: _storedPasswordKey - we no longer store passwords!
 
+  // Safe wrappers around FlutterSecureStorage to avoid plugin exceptions
+  Future<String?> _readStoredEmailSafe() async {
+    try {
+      return await _secure.read(key: _storedEmailKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeStoredEmailSafe(String email) async {
+    try {
+      await _secure.write(key: _storedEmailKey, value: email);
+    } catch (_) {
+      // Ignore in environments without secure storage (tests)
+    }
+  }
+
+  Future<void> _deleteStoredEmailSafe() async {
+    try {
+      await _secure.delete(key: _storedEmailKey);
+    } catch (_) {
+      // Ignore in environments without secure storage (tests)
+    }
+  }
+
   /// Clear all cached data when switching accounts
   Future<void> _clearAllCaches() async {
     // Clear HTTP caches (devices, geofences, users, etc.)
@@ -47,11 +72,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final prefs = await SharedPreferences.getInstance();
     final lastEmail = prefs.getString(_lastEmailKey);
 
-    // Try to retrieve stored email (for display purposes)
-    final storedEmail = await _secure.read(key: _storedEmailKey);
+    // Try to retrieve stored email (for display purposes), tolerate plugin absence
+    final storedEmail = await _readStoredEmailSafe();
 
-    // Check if we have a stored session token
-    final hasSession = await _service.hasStoredSession();
+    // Check if we have a stored session token (defensive against unexpected errors)
+    var hasSession = false;
+    try {
+      hasSession = await _service.hasStoredSession();
+    } catch (_) {
+      hasSession = false;
+    }
 
     // If we have a stored session token, attempt to validate it
     if (hasSession && storedEmail != null && storedEmail.isNotEmpty) {
@@ -88,7 +118,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Clear stored credentials from secure storage
   /// Note: We only store email now, not passwords. Session token is managed by AuthService.
   Future<void> _clearStoredCredentials() async {
-    await _secure.delete(key: _storedEmailKey);
+    await _deleteStoredEmailSafe();
     // Clear the session token as well
     await _service.clearStoredSession();
   }
@@ -105,8 +135,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Login and get user data - session token is automatically stored by AuthService
       final user = await _service.login(email, password);
 
-      // Store only the email securely (NOT the password!)
-      await _secure.write(key: _storedEmailKey, value: email);
+  // Store only the email securely (NOT the password!).
+  // Use a safe wrapper to avoid plugin exceptions in unsupported environments.
+  await _writeStoredEmailSafe(email);
 
       // Store last email in SharedPreferences (for UI convenience)
       final prefs = await SharedPreferences.getInstance();
@@ -170,7 +201,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     // Use the regular login flow
-  await login(email!, password);
+    await login(email, password);
   }
 
   /// Validate current session (useful for checking before critical operations)

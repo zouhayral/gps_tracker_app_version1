@@ -4,12 +4,20 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app_gps/core/database/dao/devices_dao.dart';
+import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/dao/positions_dao.dart';
+import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
+import 'package:my_app_gps/core/database/entities/device_entity.dart';
+import 'package:my_app_gps/core/database/entities/event_entity.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart';
 import 'package:my_app_gps/features/map/data/positions_live_provider.dart';
 import 'package:my_app_gps/features/map/view/map_page.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
+import 'package:my_app_gps/repositories/notifications_repository.dart';
+import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
 
@@ -49,6 +57,22 @@ void main() {
         WebSocketManager.testMode = true;
         return WebSocketManager();
       }),
+      // Provide a safe notifications repository to avoid early DAO reads in banner init
+      notificationsRepositoryProvider.overrideWith((ref) {
+        // Use a real EventService instance; we won't trigger network calls in this test
+        // DAOs are in-memory fakes defined below
+        final eventService = EventService(dio: Dio(), ref: ref);
+        return NotificationsRepository(
+          eventService: eventService,
+          eventsDao: _EventsDaoFake(),
+          devicesDao: _DevicesDaoFake(),
+          ref: ref,
+        );
+      }),
+      // Avoid ObjectBox-backed DAOs in this widget test
+      telemetryDaoProvider.overrideWithValue(TelemetryDaoNoop()),
+      eventsDaoProvider.overrideWith((ref) async => _EventsDaoFake()),
+      devicesDaoProvider.overrideWith((ref) async => _DevicesDaoFake()),
       // Devices list
       devicesNotifierProvider
           .overrideWith((ref) => _DevicesNotifierFixed(devices)),
@@ -107,3 +131,58 @@ class PositionsLastKnownNotifierFixed extends PositionsLastKnownNotifier {
 }
 
 // ...existing code...
+
+class _EventsDaoFake implements EventsDaoBase {
+  @override
+  Future<void> delete(String eventId) async {}
+
+  @override
+  Future<void> deleteAll() async {}
+
+  @override
+  Future<List<EventEntity>> getAll() async => <EventEntity>[];
+
+  @override
+  Future<List<EventEntity>> getByDevice(int deviceId) async => <EventEntity>[];
+
+  @override
+  Future<List<EventEntity>> getByDeviceAndType(int deviceId, String eventType) async => <EventEntity>[];
+
+  @override
+  Future<List<EventEntity>> getByDeviceInRange(int deviceId, DateTime startTime, DateTime endTime) async => <EventEntity>[];
+
+  @override
+  Future<EventEntity?> getById(String eventId) async => null;
+
+  @override
+  Future<List<EventEntity>> getByType(String eventType) async => <EventEntity>[];
+
+  @override
+  Future<void> upsert(EventEntity event) async {}
+
+  @override
+  Future<void> upsertMany(List<EventEntity> events) async {}
+}
+
+class _DevicesDaoFake implements DevicesDaoBase {
+  @override
+  Future<void> delete(int deviceId) async {}
+
+  @override
+  Future<void> deleteAll() async {}
+
+  @override
+  Future<List<DeviceEntity>> getAll() async => <DeviceEntity>[];
+
+  @override
+  Future<DeviceEntity?> getById(int deviceId) async => null;
+
+  @override
+  Future<List<DeviceEntity>> getByStatus(String status) async => <DeviceEntity>[];
+
+  @override
+  Future<void> upsert(DeviceEntity device) async {}
+
+  @override
+  Future<void> upsertMany(List<DeviceEntity> devices) async {}
+}
