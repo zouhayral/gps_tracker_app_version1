@@ -15,6 +15,21 @@ import 'package:my_app_gps/data/models/trip_aggregate.dart';
 import 'package:my_app_gps/data/models/trip_snapshot.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 
+/// Cached response for trip requests
+class _CachedTripResponse {
+  _CachedTripResponse({
+    required this.trips,
+    required this.timestamp,
+  });
+
+  final List<Trip> trips;
+  final DateTime timestamp;
+
+  bool isExpired(Duration ttl) {
+    return DateTime.now().difference(timestamp) > ttl;
+  }
+}
+
 /// Repository responsible for fetching Trips from Traccar and caching results.
 ///
 /// Endpoint: /api/reports/trips
@@ -28,12 +43,129 @@ class TripRepository {
   // Keeping Ref for DAO and future integrations (e.g., device lookups, prefs)
   final Ref _ref;
 
-  // Note: In-memory cache removed from active code path for simpler, safer networking.
+  // In-memory cache for network responses
+  final Map<String, _CachedTripResponse> _cache = {};
+  
+  // Track ongoing requests to prevent duplicates
+  final Map<String, Future<List<Trip>>> _ongoingRequests = {};
+  
+  // Cache TTL: 2 minutes
+  static const Duration _cacheTTL = Duration(minutes: 2);
 
   Future<List<Trip>> fetchTrips({
     required int deviceId,
     required DateTime from,
     required DateTime to,
+    CancelToken? cancelToken,
+  }) async {
+    final cacheKey = _buildCacheKey(deviceId, from, to);
+    final sw = Stopwatch()..start();
+
+    // 1. Check cache first
+    final cached = _cache[cacheKey];
+    if (cached != null && !cached.isExpired(_cacheTTL)) {
+      final age = DateTime.now().difference(cached.timestamp).inSeconds;
+      debugPrint('[TripRepository][CACHE HIT] 🎯 Returning ${cached.trips.length} trips (age: ${age}s, TTL: ${_cacheTTL.inSeconds}s)');
+      return cached.trips;
+    }
+
+    // 2. Check for ongoing request (throttling)
+    final ongoing = _ongoingRequests[cacheKey];
+    if (ongoing != null) {
+      debugPrint('[TripRepository][THROTTLED] ⏸️ Skipping duplicate fetch for $cacheKey');
+      return ongoing;
+    }
+
+    // 3. Create new request with retry logic
+    final requestFuture = _fetchTripsWithRetry(
+      deviceId: deviceId,
+      from: from,
+      to: to,
+      cancelToken: cancelToken,
+      attempts: 3,
+    ).then((trips) {
+      sw.stop();
+      debugPrint('[TripRepository][TIMING] ⏱️ Fetch completed in ${sw.elapsedMilliseconds}ms');
+      
+      // Cache the result
+      _cache[cacheKey] = _CachedTripResponse(
+        trips: trips,
+        timestamp: DateTime.now(),
+      );
+      debugPrint('[TripRepository][CACHE STORE] 💾 Stored ${trips.length} trips (key: $cacheKey)');
+      
+      return trips;
+    }).catchError((Object error, StackTrace stackTrace) {
+      debugPrint('[TripRepository][FALLBACK] ⚠️ Network error, checking cache: $error');
+      
+      // Graceful fallback: return stale cache if available
+      final stale = _cache[cacheKey];
+      if (stale != null) {
+        final age = DateTime.now().difference(stale.timestamp).inSeconds;
+        debugPrint('[TripRepository][FALLBACK] 🔄 Returning stale cache (${stale.trips.length} trips, age: ${age}s)');
+        return stale.trips;
+      }
+      
+      debugPrint('[TripRepository][FALLBACK] ❌ No cache available, returning empty');
+      return <Trip>[];
+    }).whenComplete(() {
+      // Remove from ongoing requests
+      _ongoingRequests.remove(cacheKey);
+    });
+
+    // Track ongoing request
+    _ongoingRequests[cacheKey] = requestFuture;
+    return requestFuture;
+  }
+
+  /// Build cache key from request parameters
+  String _buildCacheKey(int deviceId, DateTime from, DateTime to) {
+    return '$deviceId|${_toUtcIso(from)}|${_toUtcIso(to)}';
+  }
+
+  /// Fetch trips with exponential backoff retry
+  Future<List<Trip>> _fetchTripsWithRetry({
+    required int deviceId,
+    required DateTime from,
+    required DateTime to,
+    CancelToken? cancelToken,
+    required int attempts,
+  }) async {
+    var attempt = 0;
+    var delay = const Duration(seconds: 1);
+
+    while (attempt < attempts) {
+      attempt++;
+      
+      try {
+        debugPrint('[TripRepository][ATTEMPT] 🔄 Attempt $attempt/$attempts');
+        return await _fetchTripsNetwork(
+          deviceId: deviceId,
+          from: from,
+          to: to,
+          cancelToken: cancelToken,
+        );
+      } catch (e) {
+        if (attempt >= attempts) {
+          debugPrint('[TripRepository][RETRY EXHAUSTED] ❌ All $attempts attempts failed');
+          rethrow;
+        }
+        
+        debugPrint('[TripRepository][RETRY] ⏳ Attempt $attempt failed, retrying in ${delay.inSeconds}s: $e');
+        await Future<void>.delayed(delay);
+        delay *= 2; // Exponential backoff: 1s, 2s, 4s
+      }
+    }
+
+    return <Trip>[];
+  }
+
+  /// Core network fetch logic
+  Future<List<Trip>> _fetchTripsNetwork({
+    required int deviceId,
+    required DateTime from,
+    required DateTime to,
+    CancelToken? cancelToken,
   }) async {
     // Ensure cookie is present in jar (silent restore)
     try {
@@ -72,6 +204,7 @@ class TripRepository {
       final response = await dio.get<dynamic>(
         url,
         queryParameters: params,
+        cancelToken: cancelToken,
         options: Options(
           responseType: ResponseType.json,
           headers: const {'Accept': 'application/json'},
@@ -132,7 +265,13 @@ class TripRepository {
       // Non-200 or invalid type → optional fallback to legacy /generate POST
       debugPrint('[TripRepository] ⚠️ Unexpected response: status=${response.statusCode}, type=${response.data.runtimeType}');
       if (_useGenerateFallback) {
-        return await _fetchTripsGenerateFallback(dio: dio, deviceId: deviceId, from: from, to: to);
+        return await _fetchTripsGenerateFallback(
+          dio: dio,
+          deviceId: deviceId,
+          from: from,
+          to: to,
+          cancelToken: cancelToken,
+        );
       }
       return <Trip>[];
     } on DioException catch (e, st) {
@@ -140,14 +279,20 @@ class TripRepository {
       debugPrint(st.toString());
       if (_useGenerateFallback) {
         try {
-          return await _fetchTripsGenerateFallback(dio: dio, deviceId: deviceId, from: from, to: to);
+          return await _fetchTripsGenerateFallback(
+            dio: dio,
+            deviceId: deviceId,
+            from: from,
+            to: to,
+            cancelToken: cancelToken,
+          );
         } catch (_) {}
       }
-      return <Trip>[];
+      rethrow;
     } catch (e, st) {
       debugPrint('[TripRepository] ❌ Unexpected error: $e');
       debugPrint(st.toString());
-      return <Trip>[];
+      rethrow;
     }
   }
 
@@ -162,6 +307,7 @@ class TripRepository {
     required int deviceId,
     required DateTime from,
     required DateTime to,
+    CancelToken? cancelToken,
   }) async {
     final path = '/api/reports/trips/generate';
     final body = {
@@ -173,6 +319,7 @@ class TripRepository {
     final r = await dio.post<dynamic>(
       path,
       data: body,
+      cancelToken: cancelToken,
       options: Options(
         headers: const {'Accept': 'application/json'},
         contentType: 'application/json',
@@ -230,6 +377,16 @@ class TripRepository {
   }
 
   /// Placeholder for retention policy: delete trips older than 30 days from local cache.
+  /// Remove expired entries from memory cache
+  void cleanupExpiredCache() {
+    final before = _cache.length;
+    _cache.removeWhere((key, cached) => cached.isExpired(_cacheTTL));
+    final after = _cache.length;
+    if (before != after) {
+      debugPrint('[TripRepository][CACHE CLEANUP] 🧹 Removed ${before - after} expired entries (${after} remain)');
+    }
+  }
+
   Future<void> cleanupOldTrips() async {
     try {
       final tripsDao = await _ref.read(tripsDaoProvider.future);
