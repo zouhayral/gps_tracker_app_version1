@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -68,13 +69,41 @@ class TripRepository {
       } catch (_) {}
 
       debugPrint('[TripRepository] ⇢ URL=${resolved.toString()}');
-  final response = await dio.get<List<dynamic>>(url, queryParameters: params);
+      final response = await dio.get<dynamic>(
+        url,
+        queryParameters: params,
+        options: Options(
+          responseType: ResponseType.json,
+          headers: const {'Accept': 'application/json'},
+          // Let us handle 4xx gracefully without throwing in Dio
+          validateStatus: (code) => code != null && code < 500,
+        ),
+      );
 
       debugPrint('[TripRepository] ⇢ Status=${response.statusCode}, Type=${response.data.runtimeType}');
 
       if (response.statusCode == 200) {
         final contentType = response.headers.value('content-type') ?? '';
-        final data = response.data;
+        var data = response.data;
+        // If server returned text, try to decode JSON from it when plausible
+        if (data is String) {
+          final t = data.trimLeft();
+          if (t.startsWith('[') || t.startsWith('{')) {
+            try {
+              data = jsonDecode(data);
+            } catch (_) {
+              if (kDebugMode) {
+                debugPrint('[TripRepository] ⚠️ Text payload not JSON-decodable');
+              }
+              return const <Trip>[];
+            }
+          } else {
+            if (kDebugMode) {
+              debugPrint('[TripRepository] ⚠️ Text payload (likely HTML), returning empty');
+            }
+            return const <Trip>[];
+          }
+        }
         if (data is List) {
           final trips = <Trip>[];
           for (final item in data) {
@@ -230,7 +259,18 @@ class TripRepository {
 
   // Removed persistTripsAndCleanup to simplify network path.
 
-  String _toUtcIso(DateTime d) => d.toUtc().toIso8601String();
+  // Format to second precision (no fractional seconds) per Traccar expectations
+  String _toUtcIso(DateTime d) {
+    final dt = d.toUtc();
+    String pad2(int n) => n.toString().padLeft(2, '0');
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = pad2(dt.month);
+    final day = pad2(dt.day);
+    final h = pad2(dt.hour);
+    final min = pad2(dt.minute);
+    final s = pad2(dt.second);
+    return '$y-$m-$day' 'T' '$h:$min:$s' 'Z';
+  }
 
   // Removed POST/GET fallback helpers; server should return JSON list for POST.
 
