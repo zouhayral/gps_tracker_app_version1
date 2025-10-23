@@ -34,6 +34,17 @@ class TripRepository {
     required DateTime from,
     required DateTime to,
   }) async {
+    // Ensure session cookie is present (silent restore) and emit debug context
+    try {
+      await _ref.read(authServiceProvider).rehydrateSessionCookie();
+    } catch (_) {}
+
+    if (kDebugMode) {
+      String _iso(DateTime d) => d.toUtc().toIso8601String();
+      debugPrint('[TripRepository] 🔍 fetchTrips deviceId=$deviceId from=${_iso(from)} to=${_iso(to)}');
+      debugPrint('[TripRepository] 🌐 BaseURL=${_dio.options.baseUrl}');
+      debugPrint('[TripRepository] ↩️  Default headers=${_dio.options.headers}');
+    }
     final key = _cacheKey(deviceId, from, to);
     if (_cache.containsKey(key)) {
       return _cache[key]!;
@@ -130,8 +141,12 @@ class TripRepository {
       if (kDebugMode) {
         final code = e.response?.statusCode;
         final body = e.response?.data;
-        debugPrint(
-            '[TripRepository] ❌ DioException (trips): code=$code type=${e.type.name} err=${e.message} body=${_safeBody(body)}',);
+        final underlying = e.error?.toString();
+        debugPrint('[TripRepository] ❌ DioException (trips): code=$code type=${e.type.name} err=${e.message}');
+        debugPrint('[TripRepository] ❌ Body: ${_safeBody(body)}');
+        if (underlying != null) {
+          debugPrint('[TripRepository] ❌ Underlying: $underlying');
+        }
       }
       // Network failed; try local cache as a fallback
       try {
@@ -266,6 +281,9 @@ class TripRepository {
             'to': to.toUtc().toIso8601String(),
           };
     final path = trailingSlash ? '/api/reports/trips/' : '/api/reports/trips';
+    if (kDebugMode) {
+      debugPrint('[TripRepository] ⇢ POST $path body=$body');
+    }
     return _dio.post<List<dynamic>>(
       path,
       data: body,
@@ -292,13 +310,17 @@ class TripRepository {
     required DateTime from,
     required DateTime to,
   }) async {
+    final qp = {
+      'deviceId': deviceId,
+      'from': from.toUtc().toIso8601String(),
+      'to': to.toUtc().toIso8601String(),
+    };
+    if (kDebugMode) {
+      debugPrint('[TripRepository] ⇢ GET /api/reports/trips query=$qp');
+    }
     final r = await _dio.get<List<dynamic>>(
       '/api/reports/trips',
-      queryParameters: {
-        'deviceId': deviceId,
-        'from': from.toUtc().toIso8601String(),
-        'to': to.toUtc().toIso8601String(),
-      },
+      queryParameters: qp,
       options: Options(
         responseType: ResponseType.json,
         headers: const {'Accept': 'application/json'},
