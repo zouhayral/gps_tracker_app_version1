@@ -32,45 +32,38 @@ class TripRepository {
     required DateTime from,
     required DateTime to,
   }) async {
+    final dio = _ref.read(dioProvider);
+    final url = '/api/reports/trips';
     final params = {
       'deviceId': deviceId,
       'from': _toUtcIso(from),
       'to': _toUtcIso(to),
     };
 
-    debugPrint('[TripRepository] 🔍 fetchTrips deviceId=$deviceId from=${params['from']} to=${params['to']}');
-    debugPrint('[TripRepository] 🌐 BaseURL=${_dio.options.baseUrl}');
-    debugPrint('[TripRepository] ↩️  Headers=${_dio.options.headers}');
-
     try {
-      final res = await _dio.post<dynamic>('/api/reports/trips', data: params);
-      debugPrint('[TripRepository] ⇢ Status=${res.statusCode} Type=${res.data.runtimeType}');
+      debugPrint('[TripRepository] 🔍 fetchTrips GET deviceId=$deviceId from=${params['from']} to=${params['to']}');
+      final response = await dio.get<List<dynamic>>(url, queryParameters: params);
 
-      // Defensive check for non-200
-      if (res.statusCode != 200) {
-        debugPrint('[TripRepository] ⚠️ Non-200: ${res.statusCode}, body=${res.data}');
+      debugPrint('[TripRepository] ⇢ Status=${response.statusCode}, Type=${response.data.runtimeType}');
+
+      if (response.statusCode == 200 && response.data is List) {
+        final trips = (response.data!)
+            .whereType<Map<String, dynamic>>()
+            .map((e) => Trip.fromJson(e))
+            .toList(growable: false);
+        debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
+        return trips;
+      } else {
+        debugPrint('[TripRepository] ⚠️ Unexpected response type: ${response.data.runtimeType}');
         return <Trip>[];
       }
-
-      // Ensure we got JSON List
-      if (res.data is! List) {
-        debugPrint('[TripRepository] ⚠️ Unexpected data type: ${res.data.runtimeType}, content=${res.data}');
-        return <Trip>[];
-      }
-
-      final trips = (res.data as List)
-          .whereType<Map<String, dynamic>>()
-          .map((e) => Trip.fromJson(e))
-          .toList(growable: false);
-
-      debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
-      return trips;
-    } on DioException catch (e) {
-      debugPrint('[TripRepository] ❌ DioException (trips): ${e.type}, ${e.message}');
-      debugPrint('[TripRepository] ❌ Body: ${e.response?.data}');
+    } on DioException catch (e, st) {
+      debugPrint('[TripRepository] ❌ DioException (trips): $e');
+      debugPrint(st.toString());
       return <Trip>[];
     } catch (e, st) {
-      debugPrint('[TripRepository] 💥 Fatal error: $e\n$st');
+      debugPrint('[TripRepository] ❌ Unexpected error: $e');
+      debugPrint(st.toString());
       return <Trip>[];
     }
   }
