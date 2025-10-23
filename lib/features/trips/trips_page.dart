@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/features/trips/trip_details_page.dart';
 import 'package:my_app_gps/providers/trip_auto_refresh_registrar.dart';
@@ -45,11 +43,6 @@ class _TripsPageState extends ConsumerState<TripsPage> {
       appBar: AppBar(
         title: const Text('Trips'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.insights),
-            tooltip: 'Analytics',
-            onPressed: () => context.push(AppRoutes.tripAnalytics),
-          ),
           IconButton(
             icon: const Icon(Icons.date_range),
             onPressed: _pickRange,

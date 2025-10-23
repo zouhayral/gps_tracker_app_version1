@@ -7,10 +7,7 @@ import 'package:my_app_gps/core/database/dao/trip_snapshots_dao.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/data/models/position.dart';
 import 'package:my_app_gps/data/models/trip.dart';
-import 'package:my_app_gps/data/models/trip_aggregate.dart';
 import 'package:my_app_gps/data/models/trip_snapshot.dart';
-import 'package:my_app_gps/features/trips/analytics/widgets/trip_trends_chart.dart'
-    show MetricType;
 import 'package:my_app_gps/repositories/trip_repository.dart';
 
 /// Simple query struct for requesting trips for a device and date range.
@@ -168,18 +165,6 @@ final tripPositionsProvider =
   return positions;
 });
 
-/// Analytics provider (aggregates by day) for a given date range.
-final tripAnalyticsProvider =
-    FutureProvider.family<Map<String, TripAggregate>, DateTimeRange>(
-        (ref, range) async {
-  final repo = ref.watch(tripRepositoryProvider);
-  final sw = Stopwatch()..start();
-  final data = await repo.fetchAggregates(from: range.start, to: range.end);
-  sw.stop();
-  DevDiagnostics.instance.recordFilterCompute(sw.elapsedMilliseconds);
-  return data;
-});
-
 /// Provider for persisted monthly snapshots
 final tripSnapshotsProvider = FutureProvider<List<TripSnapshot>>((ref) async {
   final dao = await ref.watch(tripSnapshotsDaoProvider.future);
@@ -202,10 +187,6 @@ final tripTrendsProvider = Provider<List<TripSnapshot>>((ref) {
   DevDiagnostics.instance.recordFilterCompute(sw.elapsedMilliseconds);
   return snapshots;
 });
-
-/// UI state: selected metric for trends chart
-final tripTrendsMetricProvider =
-    StateProvider<MetricType>((_) => MetricType.distance);
 
 /// Debounced, cache-first trips list for the last 24h per device.
 final tripListProvider =
