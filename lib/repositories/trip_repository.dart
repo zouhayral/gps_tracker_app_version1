@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/dao/trip_snapshots_dao.dart';
 import 'package:my_app_gps/core/database/dao/trips_dao.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
+import 'dart:io' show Cookie;
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:my_app_gps/data/models/position.dart' as model;
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/data/models/trip_aggregate.dart';
@@ -32,6 +34,11 @@ class TripRepository {
     required DateTime from,
     required DateTime to,
   }) async {
+    // Ensure cookie is present in jar (silent restore)
+    try {
+      await _ref.read(authServiceProvider).rehydrateSessionCookie();
+    } catch (_) {}
+
     final dio = _ref.read(dioProvider);
     final url = '/api/reports/trips';
     final params = {
@@ -41,7 +48,23 @@ class TripRepository {
     };
 
     try {
+      // Log resolved URL and cookie presence
+      final base = dio.options.baseUrl;
+      final resolved = Uri.parse(base).resolve(Uri(path: url, queryParameters: params).toString());
       debugPrint('[TripRepository] 🔍 fetchTrips GET deviceId=$deviceId from=${params['from']} to=${params['to']}');
+      debugPrint('[TripRepository] 🌐 BaseURL=$base');
+      // Peek cookie jar for Cookie header presence
+      try {
+        final jar = _ref.read(authCookieJarProvider);
+        final cookieUri = Uri(scheme: resolved.scheme, host: resolved.host, port: resolved.hasPort ? resolved.port : null, path: '/');
+  final List<Cookie> cookies = await jar.loadForRequest(cookieUri);
+  final js = cookies.firstWhere((Cookie c) => c.name.toUpperCase() == 'JSESSIONID', orElse: () => Cookie('NONE', ''));
+        final hasJs = js.name.toUpperCase() == 'JSESSIONID';
+        final preview = hasJs ? (js.value.isNotEmpty ? '${js.value.substring(0, (js.value.length).clamp(0, 8))}…' : '<empty>') : '<none>';
+        debugPrint('[TripRepository] 🍪 Cookie JSESSIONID: ${hasJs ? 'present' : 'missing'} (${preview})');
+      } catch (_) {}
+
+      debugPrint('[TripRepository] ⇢ URL=${resolved.toString()}');
       final response = await dio.get<List<dynamic>>(url, queryParameters: params);
 
       debugPrint('[TripRepository] ⇢ Status=${response.statusCode}, Type=${response.data.runtimeType}');
@@ -53,19 +76,70 @@ class TripRepository {
             .toList(growable: false);
         debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
         return trips;
-      } else {
-        debugPrint('[TripRepository] ⚠️ Unexpected response type: ${response.data.runtimeType}');
-        return <Trip>[];
       }
+
+      // Non-200 or invalid type → optional fallback to legacy /generate POST
+      debugPrint('[TripRepository] ⚠️ Unexpected response: status=${response.statusCode}, type=${response.data.runtimeType}');
+      if (_useGenerateFallback) {
+        return await _fetchTripsGenerateFallback(dio: dio, deviceId: deviceId, from: from, to: to);
+      }
+      return <Trip>[];
     } on DioException catch (e, st) {
       debugPrint('[TripRepository] ❌ DioException (trips): $e');
       debugPrint(st.toString());
+      if (_useGenerateFallback) {
+        try {
+          return await _fetchTripsGenerateFallback(dio: dio, deviceId: deviceId, from: from, to: to);
+        } catch (_) {}
+      }
       return <Trip>[];
     } catch (e, st) {
       debugPrint('[TripRepository] ❌ Unexpected error: $e');
       debugPrint(st.toString());
       return <Trip>[];
     }
+  }
+
+  // Feature flag to toggle legacy /generate fallback for older Traccar servers
+  static const bool _useGenerateFallback = bool.fromEnvironment(
+    'USE_TRIPS_GENERATE',
+    defaultValue: true,
+  );
+
+  Future<List<Trip>> _fetchTripsGenerateFallback({
+    required Dio dio,
+    required int deviceId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final path = '/api/reports/trips/generate';
+    final body = {
+      'deviceIds': [deviceId],
+      'from': _toUtcIso(from),
+      'to': _toUtcIso(to),
+    };
+    debugPrint('[TripRepository] 🧪 Fallback POST $path body=$body');
+    final r = await dio.post<dynamic>(
+      path,
+      data: body,
+      options: Options(
+        headers: const {'Accept': 'application/json'},
+        contentType: 'application/json',
+        responseType: ResponseType.json,
+        validateStatus: (code) => code != null && code < 500,
+      ),
+    );
+    debugPrint('[TripRepository] 🧪 Fallback status=${r.statusCode} type=${r.data.runtimeType}');
+    if (r.statusCode == 200 && r.data is List) {
+      final trips = (r.data as List)
+          .whereType<Map<String, dynamic>>()
+          .map((e) => Trip.fromJson(e))
+          .toList(growable: false);
+      debugPrint('[TripRepository] ✅ Fallback parsed ${trips.length} trips');
+      return trips;
+    }
+    debugPrint('[TripRepository] ⚠️ Fallback failed or non-JSON, returning empty');
+    return <Trip>[];
   }
 
   /// Safe cached trips lookup from DAO; returns empty list on error.
