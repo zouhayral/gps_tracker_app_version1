@@ -181,13 +181,34 @@ class EnhancedMarkerCache {
 
           if (existingSnapshot == null) {
             created.add(markerId);
+            if (kDebugMode) {
+              debugPrint('[MAP][CACHE][MISS] Marker(deviceId=$deviceId) - First time creation');
+            }
           } else {
             modified++;
+            if (kDebugMode) {
+              // Log why marker was rebuilt
+              final reasons = <String>[];
+              if ((existingSnapshot.lat - snapshot.lat).abs() >= 0.000001 ||
+                  (existingSnapshot.lon - snapshot.lon).abs() >= 0.000001) {
+                reasons.add('position changed');
+              }
+              if (existingSnapshot.engineOn != snapshot.engineOn) {
+                reasons.add('engineOn: ${existingSnapshot.engineOn}→${snapshot.engineOn}');
+              }
+              if (existingSnapshot.speed != snapshot.speed) {
+                reasons.add('speed: ${existingSnapshot.speed}→${snapshot.speed}');
+              }
+              if (existingSnapshot.isSelected != snapshot.isSelected) {
+                reasons.add('selection: ${existingSnapshot.isSelected}→${snapshot.isSelected}');
+              }
+              debugPrint('[MAP][CACHE][MISS] Marker(deviceId=$deviceId) - Rebuilt: ${reasons.join(", ")}');
+            }
           }
         } else {
           // Reuse existing marker (delta rebuild skip)
           if (kDebugMode) {
-            debugPrint('[MARKER] 🔁 Skipped rebuild for deviceId=$deviceId');
+            debugPrint('[MAP][CACHE][HIT] Marker(deviceId=$deviceId) - Reused (no changes)');
           }
           if (existingMarker != null) {
             updated.add(existingMarker);

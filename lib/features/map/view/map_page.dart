@@ -44,6 +44,7 @@ import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
 import 'package:url_launcher/url_launcher.dart';
 // Removed SmoothSheetController; using direct controller-driven logic
 // import 'package:my_app_gps/services/websocket_manager.dart';
@@ -149,6 +150,13 @@ class _MapPageState extends ConsumerState<MapPage>
   FleetMapPrefetchManager? _prefetchManager;
   bool _isShowingSnapshot = false;
   MapSnapshot? _cachedSnapshot;
+  
+  // OPTIMIZATION: Marker cache statistics
+  int _cacheHits = 0;
+  int _cacheMisses = 0;
+  double get _cacheHitRate => _cacheHits + _cacheMisses == 0 
+      ? 0.0 
+      : _cacheHits / (_cacheHits + _cacheMisses);
   // Avoid re-registering position listeners every build which can cause churn
   final Set<int> _positionListenerIds = <int>{};
   // MIGRATION NOTE: Removed _debouncedPositions - repository provides debouncing
@@ -193,6 +201,27 @@ class _MapPageState extends ConsumerState<MapPage>
   bool _isRefreshing = false;
 
   // MIGRATION NOTE: Removed _posSub - VehicleDataRepository manages subscriptions
+
+  // LIFECYCLE: App lifecycle state tracking
+  bool _isPaused = false;
+
+  // REBUILD CONTROL: Camera position tracking with threshold-based rebuilds
+  final ValueNotifier<LatLng?> _cameraCenterNotifier = ValueNotifier<LatLng?>(null);
+  static const _kCameraMovementThreshold = 0.001; // ~111 meters at equator
+  
+  // PERFORMANCE: Rebuild tracking
+  int _rebuildCount = 0;
+  int _skippedRebuildCount = 0;
+  final Stopwatch _rebuildStopwatch = Stopwatch();
+  DateTime? _lastRebuildTime;
+
+  // TRIPS INTEGRATION: Track trips refresh state
+  bool _isTripsRefreshing = false;
+  DateTime? _tripsLastRefreshTime;
+
+  // CONNECTIVITY: Track WebSocket connection state
+  bool _showConnectivityBanner = false;
+  WebSocketStatus? _lastWsStatus;
 
   @override
   void initState() {
@@ -478,21 +507,47 @@ class _MapPageState extends ConsumerState<MapPage>
     });
   }
 
+  // OPTIMIZATION: Marker update throttling timer
+  Timer? _markerUpdateDebouncer;
+  List<Map<String, dynamic>>? _pendingDevices;
+  
   /// PERF PHASE 2: Schedule a debounced marker update
-  /// Collapses multiple rapid updates into a single rebuild frame
+  /// Collapses multiple rapid updates into a single rebuild frame (300-500ms window)
   void _scheduleMarkerUpdate(List<Map<String, dynamic>> devices) {
-    // Delegate rate limiting to the throttled notifier used by FlutterMapAdapter.
     if (kDebugMode) {
-      debugPrint('[PERF] Scheduling marker update for ${devices.length} devices (throttle handled by notifier)');
+      debugPrint('[PERF] Scheduling marker update for ${devices.length} devices (300ms debounce)');
     }
-    _triggerMarkerUpdate(devices);
+    
+    // Store pending devices for batching
+    _pendingDevices = devices;
+    
+    // Cancel existing timer and create new one
+    _markerUpdateDebouncer?.cancel();
+    _markerUpdateDebouncer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) {
+        debugPrint('[MAP][PERF] Marker update cancelled (widget disposed)');
+        return;
+      }
+      
+      final devicesToProcess = _pendingDevices;
+      if (devicesToProcess != null) {
+        _triggerMarkerUpdate(devicesToProcess);
+      }
+      _pendingDevices = null;
+    });
   }
 
   /// Trigger marker update with current state
-  /// Called by listeners when data changes
+  /// Called by debounced timer when data changes
   void _triggerMarkerUpdate(List<Map<String, dynamic>> devices) {
     if (kDebugMode) {
       debugPrint('[MAP] _triggerMarkerUpdate called for ${devices.length} devices');
+    }
+    
+    // Safety check: prevent update after disposal
+    if (!mounted) {
+      debugPrint('[MAP][PERF] ⏸️ Marker update skipped (widget disposed)');
+      return;
     }
     
     // Use last-known positions captured by listeners to avoid timing gaps
@@ -753,6 +808,83 @@ class _MapPageState extends ConsumerState<MapPage>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] App state changed: $state');
+    }
+
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        _onAppPaused();
+      case AppLifecycleState.resumed:
+        _onAppResumed();
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        // No action needed
+        break;
+    }
+  }
+
+  /// LIFECYCLE: Handle app pause/inactive state
+  /// - Pause live updates and cancel marker debouncer timers
+  /// - Stop map animation controllers
+  void _onAppPaused() {
+    if (_isPaused) return;
+    _isPaused = true;
+
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] Pausing: canceling timers');
+    }
+
+    // Cancel marker update debouncer
+    _markerUpdateDebouncer?.cancel();
+    _pendingDevices = null;
+
+    // Cancel camera fit debouncer
+    _debouncedCameraFit?.cancel();
+
+    // Cancel sheet animation debouncer
+    _sheetDebounce?.cancel();
+    
+    // Note: MarkerMotionController continues running (internal timer-based)
+    // This is acceptable as it's lightweight and prevents jarring when resuming
+    
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] ⏸️ Paused (debounce timers canceled)');
+    }
+  }
+
+  /// LIFECYCLE: Handle app resume state
+  /// - Resume live WebSocket position updates
+  /// - Refresh stale data via repository
+  void _onAppResumed() {
+    if (!_isPaused) return;
+    _isPaused = false;
+
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] Resuming: restarting live updates');
+    }
+
+    // Trigger fresh marker update with current data
+    final devicesAsync = ref.read(devicesNotifierProvider);
+    final devices = devicesAsync.asData?.value ?? [];
+    if (devices.isNotEmpty) {
+      _scheduleMarkerUpdate(devices);
+    }
+
+    // Request repository refresh for fresh data
+    final repo = ref.read(vehicleDataRepositoryProvider);
+    repo.refreshAll();
+
+    if (kDebugMode) {
+      debugPrint('[MAP][LIFECYCLE] ▶️ Resumed (marker updates scheduled, data refresh requested)');
+    }
+  }
+
+  @override
   void dispose() {
     // Clean up manual listeners first
     for (final subscription in _listenerCleanups) {
@@ -764,6 +896,14 @@ class _MapPageState extends ConsumerState<MapPage>
     _motionController.globalTick.removeListener(_onMotionTick);
     _motionController.dispose();
 
+    // OPTIMIZATION: Cancel marker update debouncer to prevent updates after disposal
+    _markerUpdateDebouncer?.cancel();
+    _markerUpdateDebouncer = null;
+    _pendingDevices = null;
+    
+    // LIFECYCLE: Cleanup camera center notifier
+    _cameraCenterNotifier.dispose();
+    
     // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
   _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
@@ -773,6 +913,18 @@ class _MapPageState extends ConsumerState<MapPage>
   // No sheet controller to dispose for InstantInfoSheet
     _markersNotifier
         .dispose(); // OPTIMIZATION: Clean up throttled marker notifier
+    
+    // PERFORMANCE: Print final rebuild statistics
+    if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+      final totalRebuilds = _rebuildCount + _skippedRebuildCount;
+      final skipRate = totalRebuilds > 0 
+          ? (_skippedRebuildCount / totalRebuilds * 100).toStringAsFixed(1)
+          : '0.0';
+      debugPrint(
+        '[MAP][PERF] Final stats: $_rebuildCount rebuilds, '
+        '$_skippedRebuildCount skipped ($skipRate% skip rate)',
+      );
+    }
 
     // OPTIMIZATION: Cleanup prefetch manager
     if (MapDebugFlags.enablePrefetch) {
@@ -1038,6 +1190,10 @@ class _MapPageState extends ConsumerState<MapPage>
         removed: diffResult.removed,
         processingTime: stopwatch.elapsed,
       );
+      
+      // Update cache statistics
+      _cacheMisses += diffResult.created + diffResult.modified;
+      _cacheHits += diffResult.reused;
 
       // Update notifier. For the first non-empty render, bypass throttle to ensure
       // immediate visibility of markers.
@@ -1046,9 +1202,15 @@ class _MapPageState extends ConsumerState<MapPage>
       diffResult.modified > 0 ||
       _markersNotifier.value.length != diffResult.markers.length) {
         if (kDebugMode) {
+          final hitRate = _cacheHitRate * 100;
           debugPrint('[MapPage] 📊 $diffResult');
           debugPrint(
             '[MapPage] ⚡ Processing: ${stopwatch.elapsedMilliseconds}ms',
+          );
+          debugPrint(
+            '[MAP][PERF] Marker rebuild took ${stopwatch.elapsedMilliseconds}ms '
+            '(reuse rate: ${diffResult.efficiency * 100}%, '
+            'total cache hit rate: ${hitRate.toStringAsFixed(1)}%)',
           );
         }
         final isFirstNonEmpty = _markersNotifier.value.isEmpty &&
@@ -1319,15 +1481,278 @@ class _MapPageState extends ConsumerState<MapPage>
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
+  /// CONNECTIVITY: Build WebSocket connection status banner
+  Widget _buildConnectivityBanner() {
+    return Positioned(
+      top: 60,
+      left: 16,
+      right: 16,
+      child: AnimatedOpacity(
+        opacity: _showConnectivityBanner ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Live updates paused • Reconnecting...',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() => _showConnectivityBanner = false);
+                },
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Dismiss',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// TRIPS: Build data freshness indicator banner
+  Widget _buildTripsRefreshBanner() {
+    final now = DateTime.now();
+    final age = _tripsLastRefreshTime != null
+        ? now.difference(_tripsLastRefreshTime!)
+        : Duration.zero;
+
+    final ageText = age.inMinutes < 1
+        ? 'just now'
+        : age.inMinutes == 1
+            ? '1 min ago'
+            : '${age.inMinutes} mins ago';
+
+    return Positioned(
+      top: 60,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_isTripsRefreshing)
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            else
+              const Icon(
+                Icons.check_circle,
+                color: Colors.greenAccent,
+                size: 14,
+              ),
+            const SizedBox(width: 6),
+            Text(
+              _isTripsRefreshing ? 'Refreshing...' : 'Updated $ageText',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Monitor WebSocket connectivity and trigger banner display
+  void _monitorConnectivity() {
+    final wsState = ref.watch(webSocketManagerProvider);
+    
+    // Update connectivity banner visibility
+    final shouldShow = wsState.status == WebSocketStatus.disconnected ||
+        wsState.status == WebSocketStatus.retrying;
+    
+    if (shouldShow != _showConnectivityBanner) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _showConnectivityBanner = shouldShow);
+        }
+      });
+    }
+
+    // Log status changes
+    if (_lastWsStatus != wsState.status) {
+      if (kDebugMode) {
+        debugPrint('[MAP][WS] Status changed: ${_lastWsStatus} → ${wsState.status}');
+      }
+      _lastWsStatus = wsState.status;
+
+      // Auto-resume marker updates when connection restored
+      if (wsState.status == WebSocketStatus.connected && !_isPaused) {
+        if (kDebugMode) {
+          debugPrint('[MAP][WS] Connection restored, triggering marker refresh');
+        }
+        final devicesAsync = ref.read(devicesNotifierProvider);
+        final devices = devicesAsync.asData?.value ?? [];
+        if (devices.isNotEmpty) {
+          _scheduleMarkerUpdate(devices);
+        }
+      }
+    }
+  }
+
+  /// REBUILD CONTROL: Determine if map rebuild should proceed
+  /// 
+  /// Only rebuilds when:
+  /// - Camera center moved beyond threshold (> 50m or 0.001° lat/lon)
+  /// - Device selection changed
+  /// - Search query changed
+  /// - Refresh is in progress
+  /// - App lifecycle resumed
+  /// 
+  /// Returns true to proceed with rebuild, false to skip
+  bool _shouldTriggerRebuild(BuildContext context, WidgetRef ref) {
+    // Always rebuild if paused (lifecycle resume triggers rebuild)
+    if (_isPaused) {
+      if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+        debugPrint('[MAP][PERF] Rebuild triggered (app lifecycle resumed)');
+      }
+      return true;
+    }
+    
+    // Always rebuild if refreshing
+    if (_isRefreshing) {
+      if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+        debugPrint('[MAP][PERF] Rebuild triggered (manual refresh)');
+      }
+      return true;
+    }
+    
+    // Check if camera moved significantly
+    final mapState = _mapKey.currentState;
+    if (mapState != null) {
+      final currentCenter = mapState.mapController.camera.center;
+      final previousCenter = _cameraCenterNotifier.value;
+      
+      if (previousCenter != null) {
+        final latDiff = (currentCenter.latitude - previousCenter.latitude).abs();
+        final lonDiff = (currentCenter.longitude - previousCenter.longitude).abs();
+        
+        if (latDiff > _kCameraMovementThreshold || lonDiff > _kCameraMovementThreshold) {
+          _cameraCenterNotifier.value = currentCenter;
+          if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+            final distanceMeters = ((latDiff + lonDiff) * 111000).toStringAsFixed(0);
+            debugPrint(
+              '[MAP][PERF] Rebuild triggered (camera moved ~${distanceMeters}m)',
+            );
+          }
+          return true;
+        }
+      } else {
+        // First time - record position
+        _cameraCenterNotifier.value = currentCenter;
+        return true;
+      }
+    }
+    
+    // If we get here, no significant changes detected
+    return false;
+  }
+
   // 7F: Build device overlay info card
   // ---------- Build ----------
   @override
   Widget build(BuildContext context) {
+    // PERFORMANCE: Track rebuild timing
+    _rebuildStopwatch.reset();
+    _rebuildStopwatch.start();
+    final now = DateTime.now();
+    
+    // CONNECTIVITY: Monitor WebSocket status and update banner
+    _monitorConnectivity();
+    
     // CRITICAL FIX: Setup position update listeners in build method
     // ref.listen() must be called in build method, not in initState
     _setupPositionListenersInBuild();
     
+    // REBUILD CONTROL: Check if rebuild is necessary based on data changes
+    final shouldRebuild = _shouldTriggerRebuild(context, ref);
+    
+    if (!shouldRebuild) {
+      _skippedRebuildCount++;
+      _rebuildStopwatch.stop();
+      
+      if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+        final timeSinceLastRebuild = _lastRebuildTime != null
+            ? now.difference(_lastRebuildTime!).inMilliseconds
+            : 0;
+        debugPrint(
+          '[MAP][PERF] Skipped rebuild (no data change, '
+          '${timeSinceLastRebuild}ms since last rebuild)',
+        );
+      }
+      
+      // Return previous content without rebuilding
+      return _buildMapContent();
+    }
+    
+    // Proceeding with rebuild
+    _rebuildCount++;
+    _lastRebuildTime = now;
+    
     var content = _buildMapContent();
+    
+    _rebuildStopwatch.stop();
+    
+    // Log rebuild performance
+    if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+      final duration = _rebuildStopwatch.elapsedMilliseconds;
+      final totalRebuilds = _rebuildCount + _skippedRebuildCount;
+      final skipRate = totalRebuilds > 0 
+          ? (_skippedRebuildCount / totalRebuilds * 100).toStringAsFixed(1)
+          : '0.0';
+      debugPrint(
+        '[MAP][PERF] Map rebuild triggered (reason: data change) '
+        'took ${duration}ms (rebuild #$_rebuildCount, skip rate: $skipRate%)',
+      );
+    }
 
     // Add performance profiling overlay (disabled by default)
     if (MapDebugFlags.showRebuildOverlay) {
@@ -1621,6 +2046,12 @@ class _MapPageState extends ConsumerState<MapPage>
                   ),
                   // Notification banner: shows on Map page (bottom)
                   const NotificationBanner(),
+                  // CONNECTIVITY: WebSocket connection status banner
+                  if (_showConnectivityBanner)
+                    _buildConnectivityBanner(),
+                  // TRIPS: Data freshness indicator banner
+                  if (_tripsLastRefreshTime != null)
+                    _buildTripsRefreshBanner(),
                 // OPTIMIZATION: Show cached snapshot overlay during initial load
                 if (MapDebugFlags.showSnapshotOverlay &&
                     _isShowingSnapshot &&

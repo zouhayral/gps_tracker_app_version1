@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/dao/trip_snapshots_dao.dart';
@@ -293,3 +294,364 @@ class TripListNotifier extends AutoDisposeFamilyAsyncNotifier<List<Trip>, int> {
     return merged;
   }
 }
+
+// ============================================================================
+// LIFECYCLE-AWARE OPTIMIZED TRIPS PROVIDER
+// ============================================================================
+
+/// State model for lifecycle-aware trips provider
+@immutable
+class TripsState {
+  const TripsState({
+    this.trips = const [],
+    this.isLoading = false,
+    this.hasError = false,
+    this.lastUpdated,
+    this.errorMessage,
+  });
+
+  final List<Trip> trips;
+  final bool isLoading;
+  final bool hasError;
+  final DateTime? lastUpdated;
+  final String? errorMessage;
+
+  /// Check if cached data is still fresh (< 2 minutes old)
+  bool get isFresh {
+    if (lastUpdated == null) return false;
+    return DateTime.now().difference(lastUpdated!) < const Duration(minutes: 2);
+  }
+
+  TripsState copyWith({
+    List<Trip>? trips,
+    bool? isLoading,
+    bool? hasError,
+    DateTime? lastUpdated,
+    String? errorMessage,
+  }) {
+    return TripsState(
+      trips: trips ?? this.trips,
+      isLoading: isLoading ?? this.isLoading,
+      hasError: hasError ?? this.hasError,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
+      errorMessage: errorMessage ?? this.errorMessage,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TripsState &&
+          runtimeType == other.runtimeType &&
+          trips.length == other.trips.length &&
+          isLoading == other.isLoading &&
+          hasError == other.hasError &&
+          lastUpdated == other.lastUpdated;
+
+  @override
+  int get hashCode =>
+      trips.length.hashCode ^
+      isLoading.hashCode ^
+      hasError.hashCode ^
+      lastUpdated.hashCode;
+}
+
+/// Lifecycle-aware trips provider with caching, throttling, and resilient fetch logic
+class LifecycleAwareTripsNotifier
+    extends AutoDisposeFamilyAsyncNotifier<TripsState, TripQuery> {
+  bool _isFetching = false;
+  Future<void>? _ongoingFetch;
+  CancelToken? _cancelToken;
+  AppLifecycleListener? _lifecycleListener;
+  bool _isDisposed = false;
+  bool _isPaused = false;
+
+  @override
+  Future<TripsState> build(TripQuery query) async {
+    // Setup lifecycle listener
+    _setupLifecycleListener();
+
+    // Setup disposal cleanup
+    ref.onDispose(() {
+      debugPrint('[TripsProvider] 🗑️ Disposing provider for device ${query.deviceId}');
+      _isDisposed = true;
+      _cancelToken?.cancel('Provider disposed');
+      _lifecycleListener?.dispose();
+    });
+
+    // Initial load: cache-first, then background refresh
+    return _initialLoad(query);
+  }
+
+  void _setupLifecycleListener() {
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () {
+        if (!_isDisposed) {
+          debugPrint('[TripsProvider] 📱 App resumed, refreshing if stale');
+          _isPaused = false;
+          refreshIfStale();
+        }
+      },
+      onInactive: () {
+        if (!_isDisposed) {
+          debugPrint('[TripsProvider] 📱 App inactive, pausing fetches');
+          _isPaused = true;
+        }
+      },
+      onPause: () {
+        if (!_isDisposed) {
+          debugPrint('[TripsProvider] 📱 App paused, cancelling ongoing fetch');
+          _isPaused = true;
+          _cancelToken?.cancel('App paused');
+        }
+      },
+    );
+  }
+
+  Future<TripsState> _initialLoad(TripQuery query) async {
+    final repo = ref.read(tripRepositoryProvider);
+    final sw = Stopwatch()..start();
+
+    try {
+      // 1. Try to load from cache first (instant return)
+      final cached = await repo.getCachedTrips(
+        query.deviceId,
+        query.from,
+        query.to,
+      );
+
+      if (cached.isNotEmpty) {
+        sw.stop();
+        debugPrint(
+          '[TripsProvider] 🗄️ Loaded ${cached.length} trips from cache in ${sw.elapsedMilliseconds}ms',
+        );
+
+        final initialState = TripsState(
+          trips: cached,
+          isLoading: false,
+          hasError: false,
+          lastUpdated: DateTime.now(),
+        );
+
+        // Schedule background refresh
+        Future.microtask(() => _backgroundRefresh(query));
+
+        return initialState;
+      }
+
+      // 2. No cache: fetch from network
+      debugPrint('[TripsProvider] 🌐 No cache, fetching from network...');
+      final trips = await _fetchFromNetwork(query, repo);
+      sw.stop();
+
+      debugPrint(
+        '[TripsProvider] ✅ Loaded ${trips.length} trips from network in ${sw.elapsedMilliseconds}ms',
+      );
+
+      return TripsState(
+        trips: trips,
+        isLoading: false,
+        hasError: false,
+        lastUpdated: DateTime.now(),
+      );
+    } catch (e, st) {
+      sw.stop();
+      debugPrint('[TripsProvider] ⚠️ Initial load failed: $e');
+      debugPrint(st.toString());
+
+      return TripsState(
+        trips: const [],
+        isLoading: false,
+        hasError: true,
+        errorMessage: e.toString(),
+      );
+    }
+  }
+
+  Future<void> _backgroundRefresh(TripQuery query) async {
+    if (_isDisposed || _isPaused) return;
+
+    final currentState = state.valueOrNull;
+    if (currentState?.isFresh ?? false) {
+      debugPrint('[TripsProvider] ✨ Cache still fresh, skipping background refresh');
+      return;
+    }
+
+    await refreshIfStale();
+  }
+
+  /// Fetch trips from network with lifecycle checks
+  Future<List<Trip>> _fetchFromNetwork(TripQuery query, TripRepository repo) async {
+    if (_isDisposed) {
+      debugPrint('[TripsProvider] ⏸️ Fetch aborted: provider disposed');
+      return const [];
+    }
+
+    if (_isPaused) {
+      debugPrint('[TripsProvider] ⏸️ Fetch aborted: app paused');
+      return const [];
+    }
+
+    _cancelToken = CancelToken();
+
+    try {
+      final trips = await repo.fetchTrips(
+        deviceId: query.deviceId,
+        from: query.from,
+        to: query.to,
+        cancelToken: _cancelToken,
+      );
+      return trips;
+    } finally {
+      _cancelToken = null;
+    }
+  }
+
+  /// Refresh trips if cache is stale (> 2 minutes old)
+  Future<void> refreshIfStale() async {
+    if (_isDisposed || _isPaused) {
+      debugPrint('[TripsProvider] ⏸️ Refresh skipped: ${_isDisposed ? "disposed" : "paused"}');
+      return;
+    }
+
+    final currentState = state.valueOrNull;
+    if (currentState?.isFresh ?? false) {
+      debugPrint('[TripsProvider] ✨ Cache still fresh (age: ${DateTime.now().difference(currentState!.lastUpdated!).inSeconds}s), skipping refresh');
+      return;
+    }
+
+    await refresh(silent: currentState?.trips.isNotEmpty ?? false);
+  }
+
+  /// Force refresh trips from network
+  Future<void> refresh({bool silent = false}) async {
+    // Prevent concurrent fetches
+    if (_isFetching) {
+      debugPrint('[TripsProvider] ⏸️ Refresh skipped: already fetching');
+      return _ongoingFetch ?? Future.value();
+    }
+
+    if (_isDisposed) {
+      debugPrint('[TripsProvider] ⏸️ Refresh skipped: provider disposed');
+      return;
+    }
+
+    if (_isPaused) {
+      debugPrint('[TripsProvider] ⏸️ Refresh skipped: app paused');
+      return;
+    }
+
+    _isFetching = true;
+    final query = arg;
+    final repo = ref.read(tripRepositoryProvider);
+    final sw = Stopwatch()..start();
+
+    // Store current state as fallback
+    final previousState = state.valueOrNull;
+
+    _ongoingFetch = Future(() async {
+      try {
+        // Update state to loading (unless silent)
+        if (!silent) {
+          final loadingState = previousState?.copyWith(isLoading: true) ??
+              const TripsState(isLoading: true);
+          state = AsyncData(loadingState);
+        }
+
+        debugPrint('[TripsProvider] ⏳ Fetching trips for device ${query.deviceId}...');
+
+        final trips = await _fetchFromNetwork(query, repo);
+        sw.stop();
+
+        if (_isDisposed) {
+          debugPrint('[TripsProvider] ⏸️ Fetch completed but provider disposed, discarding result');
+          return;
+        }
+
+        // Check if data actually changed
+        final dataChanged = previousState == null ||
+            previousState.trips.length != trips.length ||
+            !_areTripsEqual(previousState.trips, trips);
+
+        if (dataChanged) {
+          debugPrint(
+            '[TripsProvider] ✅ Loaded ${trips.length} trips from network in ${sw.elapsedMilliseconds}ms',
+          );
+          DevDiagnostics.instance.recordFilterCompute(sw.elapsedMilliseconds);
+
+          state = AsyncData(
+            TripsState(
+              trips: trips,
+              isLoading: false,
+              hasError: false,
+              lastUpdated: DateTime.now(),
+            ),
+          );
+        } else {
+          debugPrint('[TripsProvider] ✨ Data unchanged, skipping notification');
+          // Update lastUpdated but don't trigger rebuild
+          state = AsyncData(previousState.copyWith(
+            isLoading: false,
+            lastUpdated: DateTime.now(),
+          ));
+        }
+      } catch (e) {
+        sw.stop();
+        debugPrint('[TripsProvider] ⚠️ Fetch failed after ${sw.elapsedMilliseconds}ms: $e');
+
+        if (_isDisposed) return;
+
+        // Resilient fallback: keep previous data if available
+        if (previousState != null && previousState.trips.isNotEmpty) {
+          debugPrint('[TripsProvider] 🔄 Reverting to cached data (${previousState.trips.length} trips)');
+          state = AsyncData(
+            previousState.copyWith(
+              isLoading: false,
+              hasError: true,
+              errorMessage: e.toString(),
+            ),
+          );
+        } else {
+          state = AsyncData(
+            TripsState(
+              trips: const [],
+              isLoading: false,
+              hasError: true,
+              errorMessage: e.toString(),
+            ),
+          );
+        }
+      } finally {
+        _isFetching = false;
+        _ongoingFetch = null;
+      }
+    });
+
+    return _ongoingFetch;
+  }
+
+  /// Compare trips lists for equality (by id and basic properties)
+  bool _areTripsEqual(List<Trip> a, List<Trip> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id ||
+          a[i].startTime != b[i].startTime ||
+          a[i].endTime != b[i].endTime) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Retry last failed fetch
+  Future<void> retry() async {
+    debugPrint('[TripsProvider] 🔄 Retrying failed fetch...');
+    await refresh(silent: false);
+  }
+}
+
+/// Lifecycle-aware trips provider - optimized with caching, throttling, and resilience
+final lifecycleAwareTripsProvider = AutoDisposeAsyncNotifierProviderFamily<
+    LifecycleAwareTripsNotifier, TripsState, TripQuery>(
+  LifecycleAwareTripsNotifier.new,
+);
