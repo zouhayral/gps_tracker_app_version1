@@ -44,6 +44,7 @@ import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
 import 'package:url_launcher/url_launcher.dart';
 // Removed SmoothSheetController; using direct controller-driven logic
 // import 'package:my_app_gps/services/websocket_manager.dart';
@@ -213,6 +214,14 @@ class _MapPageState extends ConsumerState<MapPage>
   int _skippedRebuildCount = 0;
   final Stopwatch _rebuildStopwatch = Stopwatch();
   DateTime? _lastRebuildTime;
+
+  // TRIPS INTEGRATION: Track trips refresh state
+  bool _isTripsRefreshing = false;
+  DateTime? _tripsLastRefreshTime;
+
+  // CONNECTIVITY: Track WebSocket connection state
+  bool _showConnectivityBanner = false;
+  WebSocketStatus? _lastWsStatus;
 
   @override
   void initState() {
@@ -1472,6 +1481,163 @@ class _MapPageState extends ConsumerState<MapPage>
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
+  /// CONNECTIVITY: Build WebSocket connection status banner
+  Widget _buildConnectivityBanner() {
+    return Positioned(
+      top: 60,
+      left: 16,
+      right: 16,
+      child: AnimatedOpacity(
+        opacity: _showConnectivityBanner ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Live updates paused • Reconnecting...',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() => _showConnectivityBanner = false);
+                },
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Dismiss',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// TRIPS: Build data freshness indicator banner
+  Widget _buildTripsRefreshBanner() {
+    final now = DateTime.now();
+    final age = _tripsLastRefreshTime != null
+        ? now.difference(_tripsLastRefreshTime!)
+        : Duration.zero;
+
+    final ageText = age.inMinutes < 1
+        ? 'just now'
+        : age.inMinutes == 1
+            ? '1 min ago'
+            : '${age.inMinutes} mins ago';
+
+    return Positioned(
+      top: 60,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_isTripsRefreshing)
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            else
+              const Icon(
+                Icons.check_circle,
+                color: Colors.greenAccent,
+                size: 14,
+              ),
+            const SizedBox(width: 6),
+            Text(
+              _isTripsRefreshing ? 'Refreshing...' : 'Updated $ageText',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Monitor WebSocket connectivity and trigger banner display
+  void _monitorConnectivity() {
+    final wsState = ref.watch(webSocketManagerProvider);
+    
+    // Update connectivity banner visibility
+    final shouldShow = wsState.status == WebSocketStatus.disconnected ||
+        wsState.status == WebSocketStatus.retrying;
+    
+    if (shouldShow != _showConnectivityBanner) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _showConnectivityBanner = shouldShow);
+        }
+      });
+    }
+
+    // Log status changes
+    if (_lastWsStatus != wsState.status) {
+      if (kDebugMode) {
+        debugPrint('[MAP][WS] Status changed: ${_lastWsStatus} → ${wsState.status}');
+      }
+      _lastWsStatus = wsState.status;
+
+      // Auto-resume marker updates when connection restored
+      if (wsState.status == WebSocketStatus.connected && !_isPaused) {
+        if (kDebugMode) {
+          debugPrint('[MAP][WS] Connection restored, triggering marker refresh');
+        }
+        final devicesAsync = ref.read(devicesNotifierProvider);
+        final devices = devicesAsync.asData?.value ?? [];
+        if (devices.isNotEmpty) {
+          _scheduleMarkerUpdate(devices);
+        }
+      }
+    }
+  }
+
   /// REBUILD CONTROL: Determine if map rebuild should proceed
   /// 
   /// Only rebuilds when:
@@ -1538,6 +1704,9 @@ class _MapPageState extends ConsumerState<MapPage>
     _rebuildStopwatch.reset();
     _rebuildStopwatch.start();
     final now = DateTime.now();
+    
+    // CONNECTIVITY: Monitor WebSocket status and update banner
+    _monitorConnectivity();
     
     // CRITICAL FIX: Setup position update listeners in build method
     // ref.listen() must be called in build method, not in initState
@@ -1877,6 +2046,12 @@ class _MapPageState extends ConsumerState<MapPage>
                   ),
                   // Notification banner: shows on Map page (bottom)
                   const NotificationBanner(),
+                  // CONNECTIVITY: WebSocket connection status banner
+                  if (_showConnectivityBanner)
+                    _buildConnectivityBanner(),
+                  // TRIPS: Data freshness indicator banner
+                  if (_tripsLastRefreshTime != null)
+                    _buildTripsRefreshBanner(),
                 // OPTIMIZATION: Show cached snapshot overlay during initial load
                 if (MapDebugFlags.showSnapshotOverlay &&
                     _isShowingSnapshot &&
