@@ -77,6 +77,7 @@ class TripRepository {
           headers: const {'Accept': 'application/json'},
           // Let us handle 4xx gracefully without throwing in Dio
           validateStatus: (code) => code != null && code < 500,
+          receiveTimeout: const Duration(seconds: 30),
         ),
       );
 
@@ -178,6 +179,7 @@ class TripRepository {
         contentType: 'application/json',
         responseType: ResponseType.json,
         validateStatus: (code) => code != null && code < 500,
+        receiveTimeout: const Duration(seconds: 30),
       ),
     );
     debugPrint('[TripRepository] 🧪 Fallback status=${r.statusCode} type=${r.data.runtimeType}');

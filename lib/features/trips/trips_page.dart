@@ -32,8 +32,16 @@ class _TripsPageState extends ConsumerState<TripsPage> {
   Widget build(BuildContext context) {
     // Activate WS auto-refresh listener while page is alive
     ref.watch(tripAutoRefreshRegistrarProvider(widget.deviceId));
-    // Use debounced, cache-first provider for last 24h
-    final tripsAsync = ref.watch(tripListProvider(widget.deviceId));
+    // Use range-aware provider so the calendar selection drives the query
+    final tripsAsync = ref.watch(
+      tripsByDeviceProvider(
+        TripQuery(
+          deviceId: widget.deviceId,
+          from: _from,
+          to: _to,
+        ),
+      ),
+    );
 
     return Scaffold(
       appBar: AppBar(
