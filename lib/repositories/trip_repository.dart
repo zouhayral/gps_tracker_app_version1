@@ -41,17 +41,20 @@ class TripRepository {
 
     final dio = _ref.read(dioProvider);
     final url = '/api/reports/trips';
-    final params = {
-      'deviceId': deviceId,
+    // Normalize all query parameters to strings to prevent Uri/encoder issues
+    final params = <String, String>{
+      'deviceId': deviceId.toString(),
       'from': _toUtcIso(from),
       'to': _toUtcIso(to),
     };
 
     try {
       // Log resolved URL and cookie presence
-      final base = dio.options.baseUrl;
-      final resolved = Uri.parse(base).resolve(Uri(path: url, queryParameters: params).toString());
-      debugPrint('[TripRepository] 🔍 fetchTrips GET deviceId=$deviceId from=${params['from']} to=${params['to']}');
+    final base = dio.options.baseUrl;
+    final resolved = Uri.parse(base)
+      .resolve(Uri(path: url, queryParameters: params).toString());
+    debugPrint('[TripRepository] 🔍 fetchTrips GET deviceId=${params['deviceId']} from=${params['from']} to=${params['to']}');
+    debugPrint('[TripRepository] 🔧 Query=${params.toString()}');
       debugPrint('[TripRepository] 🌐 BaseURL=$base');
       // Peek cookie jar for Cookie header presence
       try {
@@ -65,17 +68,36 @@ class TripRepository {
       } catch (_) {}
 
       debugPrint('[TripRepository] ⇢ URL=${resolved.toString()}');
-      final response = await dio.get<List<dynamic>>(url, queryParameters: params);
+  final response = await dio.get<List<dynamic>>(url, queryParameters: params);
 
       debugPrint('[TripRepository] ⇢ Status=${response.statusCode}, Type=${response.data.runtimeType}');
 
-      if (response.statusCode == 200 && response.data is List) {
-        final trips = (response.data!)
-            .whereType<Map<String, dynamic>>()
-            .map((e) => Trip.fromJson(e))
-            .toList(growable: false);
-        debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
-        return trips;
+      if (response.statusCode == 200) {
+        final contentType = response.headers.value('content-type') ?? '';
+        final data = response.data;
+        if (data is List) {
+          final trips = <Trip>[];
+          for (final item in data) {
+            if (item is Map<String, dynamic>) {
+              try {
+                trips.add(Trip.fromJson(item));
+              } catch (_) {
+                if (kDebugMode) {
+                  debugPrint('[TripRepository] ⚠️ Skipped malformed trip item');
+                }
+              }
+            }
+          }
+          debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
+          return trips;
+        } else {
+          // Defensive: non-list response
+          if (kDebugMode) {
+            final hint = contentType.contains('html') ? ' (content-type suggests HTML)' : '';
+            debugPrint('[TripRepository] ⚠️ 200 but non-list payload: type=${data.runtimeType}$hint');
+          }
+          return const <Trip>[];
+        }
       }
 
       // Non-200 or invalid type → optional fallback to legacy /generate POST
@@ -130,16 +152,34 @@ class TripRepository {
       ),
     );
     debugPrint('[TripRepository] 🧪 Fallback status=${r.statusCode} type=${r.data.runtimeType}');
-    if (r.statusCode == 200 && r.data is List) {
-      final trips = (r.data as List)
-          .whereType<Map<String, dynamic>>()
-          .map((e) => Trip.fromJson(e))
-          .toList(growable: false);
-      debugPrint('[TripRepository] ✅ Fallback parsed ${trips.length} trips');
-      return trips;
+    if (r.statusCode == 200) {
+      final contentType = r.headers.value('content-type') ?? '';
+      final data = r.data;
+      if (data is List) {
+        final trips = <Trip>[];
+        for (final item in data) {
+          if (item is Map<String, dynamic>) {
+            try {
+              trips.add(Trip.fromJson(item));
+            } catch (_) {
+              if (kDebugMode) {
+                debugPrint('[TripRepository] ⚠️ Skipped malformed trip item (fallback)');
+              }
+            }
+          }
+        }
+        debugPrint('[TripRepository] ✅ Fallback parsed ${trips.length} trips');
+        return trips;
+      } else {
+        if (kDebugMode) {
+          final hint = contentType.contains('html') ? ' (content-type suggests HTML)' : '';
+          debugPrint('[TripRepository] ⚠️ Fallback 200 but non-list payload: type=${data.runtimeType}$hint');
+        }
+        return const <Trip>[];
+      }
     }
     debugPrint('[TripRepository] ⚠️ Fallback failed or non-JSON, returning empty');
-    return <Trip>[];
+    return const <Trip>[];
   }
 
   /// Safe cached trips lookup from DAO; returns empty list on error.
