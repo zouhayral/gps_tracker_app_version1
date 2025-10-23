@@ -26,8 +26,9 @@ final dioProvider = Provider<Dio>((ref) {
     BaseOptions(
       baseUrl: effectiveBase,
       // Increase defaults to accommodate slow report endpoints (Traccar trips)
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 30),
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+      sendTimeout: const Duration(seconds: 15),
     ),
     allowInsecure: allowInsecure,
   );

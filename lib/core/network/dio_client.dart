@@ -14,12 +14,14 @@ class DioClient {
     required String baseUrl,
     Duration? connectTimeout,
     Duration? receiveTimeout,
+    Duration? sendTimeout,
   }) {
     final dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: connectTimeout ?? const Duration(seconds: 2),
-        receiveTimeout: receiveTimeout ?? const Duration(seconds: 10),
+        connectTimeout: connectTimeout ?? const Duration(seconds: 30),
+        receiveTimeout: receiveTimeout ?? const Duration(seconds: 60),
+        sendTimeout: sendTimeout ?? const Duration(seconds: 15),
       ),
     );
     attachCoreInterceptors(dio);
