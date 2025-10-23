@@ -151,52 +151,12 @@ class EventService {
 
       return events;
     } on DioException catch (e) {
+      // Log full context and surface the error. Traccar 6.10 uses /api/events only; no fallback.
       if (kDebugMode) {
         debugPrint('[EventService] ❌ DioException: ${e.message}');
         debugPrint('[EventService] Status: ${e.response?.statusCode}');
         debugPrint('[EventService] Response: ${e.response?.data}');
       }
-      // Fallback: Some backends expose events under /api/reports/events and require a bounded window
-      final code = e.response?.statusCode;
-      final canFallback = code == 404 || code == 405;
-      if (canFallback) {
-        try {
-          if (kDebugMode) {
-            debugPrint('[EventService] 🔁 Fallback to /api/reports/events');
-          }
-          final resp2 = await _dio.get<List<dynamic>>(
-            '/api/reports/events',
-            queryParameters: Map<String, dynamic>.from(queryParams),
-            options: Options(headers: const {'Accept': 'application/json'}),
-          );
-          final data2 = resp2.data;
-          if (data2 is List) {
-            final events = <Event>[];
-            for (final json in data2) {
-              if (json is Map<String, dynamic>) {
-                try {
-                  events.add(Event.fromJson(json));
-                } catch (_) {}
-              }
-            }
-            if (events.isNotEmpty) {
-              await _persistEvents(events);
-            }
-            return events;
-          }
-        } on DioException catch (e2) {
-          if (kDebugMode) {
-            debugPrint('[EventService] ❌ Fallback DioException: ${e2.message}');
-            debugPrint('[EventService] Status: ${e2.response?.statusCode}');
-          }
-        } catch (e2) {
-          if (kDebugMode) {
-            debugPrint('[EventService] ❌ Fallback unexpected error: $e2');
-          }
-        }
-      }
-
-      // Rethrow with more context
       throw Exception('Failed to fetch events: ${e.message}');
     } catch (e, stackTrace) {
       if (kDebugMode) {
