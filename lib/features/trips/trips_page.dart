@@ -19,6 +19,7 @@ class TripsPage extends ConsumerStatefulWidget {
 class _TripsPageState extends ConsumerState<TripsPage> {
   late DateTime _from;
   late DateTime _to;
+  late TripQuery _currentQuery;
 
   @override
   void initState() {
@@ -26,6 +27,11 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     final now = DateTime.now();
     _to = now;
     _from = now.subtract(const Duration(days: 1));
+    _currentQuery = TripQuery(
+      deviceId: widget.deviceId,
+      from: _from,
+      to: _to,
+    );
   }
 
   @override
@@ -33,15 +39,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     // Activate WS auto-refresh listener while page is alive
     ref.watch(tripAutoRefreshRegistrarProvider(widget.deviceId));
     // Use range-aware provider so the calendar selection drives the query
-    final tripsAsync = ref.watch(
-      tripsByDeviceProvider(
-        TripQuery(
-          deviceId: widget.deviceId,
-          from: _from,
-          to: _to,
-        ),
-      ),
-    );
+    final tripsAsync = ref.watch(tripsByDeviceProvider(_currentQuery));
 
     return Scaffold(
       appBar: AppBar(
@@ -62,7 +60,42 @@ class _TripsPageState extends ConsumerState<TripsPage> {
       body: tripsAsync.when(
         data: (trips) => _buildList(context, trips),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Failed to load trips: $e')),
+        error: (e, st) => _buildError(context, e),
+      ),
+    );
+  }
+
+  Widget _buildError(BuildContext context, Object error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load trips',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error.toString(),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                ref.invalidate(tripsByDeviceProvider(_currentQuery));
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -79,6 +112,12 @@ class _TripsPageState extends ConsumerState<TripsPage> {
       setState(() {
         _from = DateTime(picked.start.year, picked.start.month, picked.start.day);
         _to = DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59);
+        // Update query to trigger provider refresh with new date range
+        _currentQuery = TripQuery(
+          deviceId: widget.deviceId,
+          from: _from,
+          to: _to,
+        );
       });
     }
   }
@@ -87,28 +126,33 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     if (trips.isEmpty) {
       return const Center(child: Text('No trips in selected range'));
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-      itemCount: trips.length,
-      itemBuilder: (context, index) {
-        final t = trips[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            key: ValueKey('trip-${t.id}'),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Theme.of(context).dividerColor)),
-            title: Text(_formatRange(t.startTime, t.endTime)),
-            subtitle: Text('${_formatDuration(t.duration)} • ${t.formattedDistanceKm} • ${t.formattedAvgSpeed} avg'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push<Widget>(
-                context,
-                MaterialPageRoute<Widget>(builder: (_) => TripDetailsPage(trip: t)),
-              );
-            },
-          ),
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(tripsByDeviceProvider(_currentQuery).notifier).refresh();
       },
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        itemCount: trips.length,
+        itemBuilder: (context, index) {
+          final t = trips[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              key: ValueKey('trip-${t.id}'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Theme.of(context).dividerColor)),
+              title: Text(_formatRange(t.startTime, t.endTime)),
+              subtitle: Text('${_formatDuration(t.duration)} • ${t.formattedDistanceKm} • ${t.formattedAvgSpeed} avg'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push<Widget>(
+                  context,
+                  MaterialPageRoute<Widget>(builder: (_) => TripDetailsPage(trip: t)),
+                );
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 

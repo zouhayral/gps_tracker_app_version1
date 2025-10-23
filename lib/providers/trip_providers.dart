@@ -13,58 +13,114 @@ import 'package:my_app_gps/features/trips/analytics/widgets/trip_trends_chart.da
 import 'package:my_app_gps/repositories/trip_repository.dart';
 
 /// Simple query struct for requesting trips for a device and date range.
+@immutable
 class TripQuery {
   const TripQuery(
       {required this.deviceId, required this.from, required this.to,});
   final int deviceId;
   final DateTime from;
   final DateTime to;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TripQuery &&
+          runtimeType == other.runtimeType &&
+          deviceId == other.deviceId &&
+          from == other.from &&
+          to == other.to;
+
+  @override
+  int get hashCode => deviceId.hashCode ^ from.hashCode ^ to.hashCode;
+}
+
+/// AsyncNotifier for trips by device and date range with proper loading state management.
+class TripsByDeviceNotifier extends AutoDisposeFamilyAsyncNotifier<List<Trip>, TripQuery> {
+  bool _isLoading = false;
+  bool _hasLoaded = false;
+  TripQuery? _lastQuery;
+
+  @override
+  Future<List<Trip>> build(TripQuery arg) async {
+    // Prevent multiple simultaneous fetches for the same query
+    if (_isLoading && _lastQuery == arg) {
+      debugPrint('[TripProviders] ⏸️ Already loading this query, returning current state');
+      return state.valueOrNull ?? const <Trip>[];
+    }
+
+    // If we've already loaded this exact query, return cached data without refetching
+    if (_hasLoaded && _lastQuery == arg && state.hasValue) {
+      debugPrint('[TripProviders] ✅ Data already loaded for this query, skipping fetch');
+      return state.valueOrNull ?? const <Trip>[];
+    }
+
+    _isLoading = true;
+    _lastQuery = arg;
+
+    try {
+      final repo = ref.read(tripRepositoryProvider);
+
+      // 1) Load from cache immediately if available
+      final cached = await repo.getCachedTrips(arg.deviceId, arg.from, arg.to);
+      if (cached.isNotEmpty) {
+        debugPrint('[TripProviders] 🗄️ Loaded ${cached.length} trips from cache');
+        _hasLoaded = true;
+        _isLoading = false;
+        return cached;
+      }
+
+      // 2) No cache: fetch from network
+      final fetched = await repo.fetchTrips(
+        deviceId: arg.deviceId,
+        from: arg.from,
+        to: arg.to,
+      );
+      debugPrint('[TripProviders] 🌐 Loaded ${fetched.length} trips from network');
+      _hasLoaded = true;
+      return fetched;
+    } catch (e) {
+      debugPrint('[TripProviders] ⚠️ Network fetch failed: $e');
+      // Return empty list instead of throwing to prevent infinite error states
+      return const <Trip>[];
+    } finally {
+      _isLoading = false;
+    }
+  }
+
+  /// Manual refresh method for pull-to-refresh
+  Future<void> refresh() async {
+    if (_isLoading) {
+      debugPrint('[TripProviders] ⏸️ Refresh skipped, already loading');
+      return;
+    }
+
+    _isLoading = true;
+    final repo = ref.read(tripRepositoryProvider);
+    state = const AsyncLoading();
+    
+    try {
+      final fetched = await repo.fetchTrips(
+        deviceId: arg.deviceId,
+        from: arg.from,
+        to: arg.to,
+      );
+      debugPrint('[TripProviders] 🔄 Manual refresh: ${fetched.length} trips');
+      state = AsyncData(fetched);
+      _hasLoaded = true;
+    } catch (e, st) {
+      debugPrint('[TripProviders] ⚠️ Manual refresh failed: $e');
+      state = AsyncError(e, st);
+    } finally {
+      _isLoading = false;
+    }
+  }
 }
 
 /// Family provider to fetch trips by device and date range.
 final tripsByDeviceProvider =
-    FutureProvider.autoDispose.family<List<Trip>, TripQuery>((ref, q) async {
-  final repo = ref.watch(tripRepositoryProvider);
-
-  // 1) Load from cache immediately if available
-  final cached = await repo.getCachedTrips(q.deviceId, q.from, q.to);
-  if (cached.isNotEmpty) {
-    debugPrint('[TripProviders] 🗄️ Loaded ${cached.length} trips from cache');
-    // Kick a background refresh; when done, invalidate this provider to update UI
-    unawaited(Future(() async {
-      try {
-        final fetched =
-            await repo.fetchTrips(deviceId: q.deviceId, from: q.from, to: q.to);
-        if (fetched.isNotEmpty) {
-          debugPrint(
-              '[TripProviders] 🌐 Refreshed ${fetched.length} trips from network',);
-          // Recompute this provider to surface fresh network data
-          ref.invalidateSelf();
-        }
-      } catch (e) {
-        debugPrint('[TripProviders] ⚠️ Network fetch failed: $e');
-      }
-    }),);
-    return cached;
-  }
-
-  // 2) No cache: do network fetch and return
-  try {
-    final fetched =
-        await repo.fetchTrips(deviceId: q.deviceId, from: q.from, to: q.to);
-    if (fetched.isNotEmpty) {
-      debugPrint(
-          '[TripProviders] 🌐 Loaded ${fetched.length} trips from network',);
-      return fetched;
-    }
-  } catch (e) {
-    debugPrint('[TripProviders] ⚠️ Network fetch failed: $e');
-  }
-
-  // 3) Nothing found
-  debugPrint('[TripProviders] ❌ No trips found (cache or network)');
-  return const <Trip>[];
-});
+    AutoDisposeAsyncNotifierProviderFamily<TripsByDeviceNotifier, List<Trip>, TripQuery>(
+  TripsByDeviceNotifier.new,
+);
 
 /// Playback state for trip replay.
 class TripPlaybackState {
