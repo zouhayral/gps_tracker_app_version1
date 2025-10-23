@@ -15,6 +15,47 @@ import 'package:my_app_gps/data/models/trip_aggregate.dart';
 import 'package:my_app_gps/data/models/trip_snapshot.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 
+/// Top-level function for isolate-based trip parsing with JSON decoding
+/// This function must be top-level (not a method) to work with compute()
+/// 
+/// Accepts either:
+/// - String: Raw JSON that needs decoding + parsing
+/// - List<dynamic>: Already decoded JSON that needs parsing
+List<Trip> _parseTripsIsolate(dynamic jsonData) {
+  List<dynamic> jsonList;
+  
+  // Step 1: Decode JSON if needed (offloading json.decode from main thread)
+  if (jsonData is String) {
+    try {
+      final decoded = jsonDecode(jsonData);
+      if (decoded is List) {
+        jsonList = decoded;
+      } else {
+        return []; // Not a list, return empty
+      }
+    } catch (_) {
+      return []; // JSON decode failed, return empty
+    }
+  } else if (jsonData is List) {
+    jsonList = jsonData;
+  } else {
+    return []; // Unexpected type, return empty
+  }
+  
+  // Step 2: Parse Trip objects from JSON list
+  final trips = <Trip>[];
+  for (final item in jsonList) {
+    if (item is Map<String, dynamic>) {
+      try {
+        trips.add(Trip.fromJson(item));
+      } catch (_) {
+        // Skip malformed items silently in isolate
+      }
+    }
+  }
+  return trips;
+}
+
 /// Cached response for trip requests
 class _CachedTripResponse {
   _CachedTripResponse({
@@ -218,18 +259,19 @@ class TripRepository {
       if (response.statusCode == 200) {
         final contentType = response.headers.value('content-type') ?? '';
         var data = response.data;
-        // If server returned text, try to decode JSON from it when plausible
+        
+        // If server returned text, parse it in background if it looks like JSON
         if (data is String) {
           final t = data.trimLeft();
           if (t.startsWith('[') || t.startsWith('{')) {
-            try {
-              data = jsonDecode(data);
-            } catch (_) {
-              if (kDebugMode) {
-                debugPrint('[TripRepository] ⚠️ Text payload not JSON-decodable');
-              }
-              return const <Trip>[];
+            // Offload JSON decoding + parsing to isolate
+            final trips = await _parseTripsInBackground(data);
+            if (trips.isEmpty && kDebugMode) {
+              debugPrint('[TripRepository] ⚠️ Text payload not JSON-decodable or empty');
+            } else {
+              debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips from JSON string');
             }
+            return trips;
           } else {
             if (kDebugMode) {
               debugPrint('[TripRepository] ⚠️ Text payload (likely HTML), returning empty');
@@ -237,19 +279,10 @@ class TripRepository {
             return const <Trip>[];
           }
         }
+        
+        // Data already decoded (Dio handled it)
         if (data is List) {
-          final trips = <Trip>[];
-          for (final item in data) {
-            if (item is Map<String, dynamic>) {
-              try {
-                trips.add(Trip.fromJson(item));
-              } catch (_) {
-                if (kDebugMode) {
-                  debugPrint('[TripRepository] ⚠️ Skipped malformed trip item');
-                }
-              }
-            }
-          }
+          final trips = await _parseTripsInBackground(data);
           debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
           return trips;
         } else {
@@ -294,6 +327,39 @@ class TripRepository {
       debugPrint(st.toString());
       rethrow;
     }
+  }
+
+  /// Parse trips in background isolate for heavy computation
+  /// 
+  /// Accepts either:
+  /// - String: Raw JSON response (will decode + parse in isolate)
+  /// - List<dynamic>: Already decoded JSON (will parse in isolate)
+  /// 
+  /// Uses compute() to avoid blocking the UI thread for:
+  /// - JSON decoding (when String input)
+  /// - Trip.fromJson() parsing (always)
+  Future<List<Trip>> _parseTripsInBackground(dynamic data) async {
+    // Determine if we should use isolate based on data size
+    final shouldUseIsolate = data is String 
+        ? data.length > 500  // Use isolate for large JSON strings
+        : (data is List && data.length > 10); // Use isolate for large lists
+    
+    if (!shouldUseIsolate) {
+      // Small data: parse synchronously (isolate overhead not worth it)
+      return _parseTripsIsolate(data);
+    }
+    
+    // Large data: offload to isolate
+    final itemCount = data is String ? 'unknown' : (data as List).length;
+    debugPrint('[TripRepository] 🔄 Parsing $itemCount trips in background isolate (with JSON decoding: ${data is String})');
+    final stopwatch = Stopwatch()..start();
+    
+    final trips = await compute(_parseTripsIsolate, data);
+    
+    stopwatch.stop();
+    debugPrint('[TripRepository] ✅ Background parsing completed in ${stopwatch.elapsedMilliseconds}ms');
+    
+    return trips;
   }
 
   // Feature flag to toggle legacy /generate fallback for older Traccar servers

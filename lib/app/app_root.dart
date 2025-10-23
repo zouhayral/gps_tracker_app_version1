@@ -9,7 +9,27 @@ import 'package:my_app_gps/data/models/event.dart';
 // Debug HUD disabled globally; overlay imports removed
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
+import 'package:my_app_gps/repositories/trip_repository.dart';
 import 'package:my_app_gps/theme/app_theme.dart';
+
+/// Lifecycle observer to automatically clean up expired trip cache
+/// when the app goes to background or becomes inactive
+class _TripRepositoryLifecycleObserver with WidgetsBindingObserver {
+  final TripRepository tripRepository;
+
+  _TripRepositoryLifecycleObserver(this.tripRepository);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      tripRepository.cleanupExpiredCache();
+      if (kDebugMode) {
+        debugPrint('[TripRepository][LIFECYCLE] 🧹 Cleared expired trips on ${state.name}');
+      }
+    }
+  }
+}
 
 class AppRoot extends ConsumerStatefulWidget {
   const AppRoot({super.key});
@@ -19,9 +39,25 @@ class AppRoot extends ConsumerStatefulWidget {
 
 class _AppRootState extends ConsumerState<AppRoot> {
   StreamSubscription<Map<String, dynamic>>? _eventSub;
+  _TripRepositoryLifecycleObserver? _lifecycleObserver;
+  
   @override
   void initState() {
     super.initState();
+    
+    // Register lifecycle observer for automatic trip cache cleanup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final tripRepo = ref.read(tripRepositoryProvider);
+        _lifecycleObserver = _TripRepositoryLifecycleObserver(tripRepo);
+        WidgetsBinding.instance.addObserver(_lifecycleObserver!);
+        
+        if (kDebugMode) {
+          debugPrint('[AppRoot] 🔗 Registered TripRepository lifecycle observer');
+        }
+      }
+    });
+    
     // Precache common marker images to avoid frame jank when markers first appear.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -113,6 +149,15 @@ class _AppRootState extends ConsumerState<AppRoot> {
   @override
   void dispose() {
     _eventSub?.cancel();
+    
+    // Unregister lifecycle observer
+    if (_lifecycleObserver != null) {
+      WidgetsBinding.instance.removeObserver(_lifecycleObserver!);
+      if (kDebugMode) {
+        debugPrint('[AppRoot] 🔌 Unregistered TripRepository lifecycle observer');
+      }
+    }
+    
     super.dispose();
   }
 }
