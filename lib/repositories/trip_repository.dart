@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/dao/trip_snapshots_dao.dart';
 import 'package:my_app_gps/core/database/dao/trips_dao.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
+import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/data/models/position.dart' as model;
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/data/models/trip_aggregate.dart';
@@ -78,6 +79,8 @@ class _CachedTripResponse {
 /// Endpoint: /api/reports/trips
 /// Query params: deviceId, from, to (ISO8601)
 class TripRepository {
+  static final _log = 'TripRepository'.logger;
+  
   TripRepository({required Dio dio, required Ref ref})
       : _dio = dio,
         _ref = ref;
@@ -117,14 +120,14 @@ class TripRepository {
     final cached = _cache[cacheKey];
     if (cached != null && !cached.isExpired(_cacheTTL)) {
       final age = DateTime.now().difference(cached.timestamp).inSeconds;
-      debugPrint('[TripRepository][CACHE HIT] 🎯 Returning ${cached.trips.length} trips (age: ${age}s, TTL: ${_cacheTTL.inSeconds}s)');
+      _log.debug('🎯 Returning ${cached.trips.length} trips (age: ${age}s, TTL: ${_cacheTTL.inSeconds}s)');
       return cached.trips;
     }
 
     // 2. Check for ongoing request (throttling)
     final ongoing = _ongoingRequests[cacheKey];
     if (ongoing != null) {
-      debugPrint('[TripRepository][THROTTLED] ⏸️ Skipping duplicate fetch for $cacheKey');
+      _log.debug('⏸️ Skipping duplicate fetch for $cacheKey');
       return ongoing;
     }
 
@@ -138,7 +141,7 @@ class TripRepository {
     ).then((trips) async {
       // TASK 4: Smart retry for empty responses on active devices
       if (trips.isEmpty && await _isDeviceOnline(deviceId)) {
-        debugPrint('[TRIP][RETRY] Empty response for online device $deviceId — retrying in 2s');
+        _log.debug('Empty response for online device $deviceId — retrying in 2s');
         await Future<void>.delayed(const Duration(seconds: 2));
         
         // Single retry attempt
@@ -151,40 +154,40 @@ class TripRepository {
           );
           
           if (retryTrips.isNotEmpty) {
-            debugPrint('[TRIP][RETRY] ✅ Retry successful: ${retryTrips.length} trips');
+            _log.debug('✅ Retry successful: ${retryTrips.length} trips');
             trips = retryTrips;
           } else {
-            debugPrint('[TRIP][RETRY] Still empty after retry');
+            _log.debug('Still empty after retry');
           }
         } catch (e) {
-          debugPrint('[TRIP][RETRY] ⚠️ Retry failed: $e');
+          _log.warning('Retry failed', error: e);
           // Continue with empty list
         }
       }
       
       sw.stop();
-      debugPrint('[TripRepository][TIMING] ⏱️ Fetch completed in ${sw.elapsedMilliseconds}ms');
+      _log.debug('⏱️ Fetch completed in ${sw.elapsedMilliseconds}ms');
       
       // Cache the result
       _cache[cacheKey] = _CachedTripResponse(
         trips: trips,
         timestamp: DateTime.now(),
       );
-      debugPrint('[TripRepository][CACHE STORE] 💾 Stored ${trips.length} trips (key: $cacheKey)');
+      _log.debug('💾 Stored ${trips.length} trips (key: $cacheKey)');
       
       return trips;
     }).catchError((Object error, StackTrace stackTrace) {
-      debugPrint('[TripRepository][FALLBACK] ⚠️ Network error, checking cache: $error');
+      _log.warning('Network error, checking cache', error: error);
       
       // Graceful fallback: return stale cache if available
       final stale = _cache[cacheKey];
       if (stale != null) {
         final age = DateTime.now().difference(stale.timestamp).inSeconds;
-        debugPrint('[TripRepository][FALLBACK] 🔄 Returning stale cache (${stale.trips.length} trips, age: ${age}s)');
+        _log.debug('🔄 Returning stale cache (${stale.trips.length} trips, age: ${age}s)');
         return stale.trips;
       }
       
-      debugPrint('[TripRepository][FALLBACK] ❌ No cache available, returning empty');
+      _log.debug('❌ No cache available, returning empty');
       return <Trip>[];
     }).whenComplete(() {
       // Remove from ongoing requests
@@ -231,7 +234,7 @@ class TripRepository {
       
       return true; // Default to online if status says so
     } catch (e) {
-      debugPrint('[TRIP][ONLINE CHECK] ⚠️ Error checking device status: $e');
+      _log.warning('Error checking device status', error: e);
       return false;
     }
   }
@@ -240,12 +243,12 @@ class TripRepository {
   /// Called on app resume to warm cache with fresh data
   Future<void> prefetchLastUsedFilter() async {
     if (_lastUsedFilter == null) {
-      debugPrint('[TRIP][PREFETCH] No last filter stored, skipping prefetch');
+      _log.debug('No last filter stored, skipping prefetch');
       return;
     }
     
     final filter = _lastUsedFilter!;
-    debugPrint('[TRIP][PREFETCH] Background prefetch for last filter: ${filter.deviceIds.length} devices');
+    _log.debug('Background prefetch for last filter: ${filter.deviceIds.length} devices');
     
     try {
       // Prefetch for each device in the filter
@@ -262,15 +265,15 @@ class TripRepository {
             to: filter.to,
             filter: filter,
           ).catchError((Object e) {
-            debugPrint('[TRIP][PREFETCH] ⚠️ Prefetch failed for device $deviceId: $e');
+            _log.warning('Prefetch failed for device $deviceId', error: e);
             return <Trip>[]; // Return empty list on error
           }),
         );
       }
       
-      debugPrint('[TRIP][PREFETCH] ✅ Started background prefetch for ${deviceIds.length} devices');
+      _log.debug('✅ Started background prefetch for ${deviceIds.length} devices');
     } catch (e) {
-      debugPrint('[TRIP][PREFETCH] ❌ Prefetch error: $e');
+      _log.error('Prefetch error', error: e);
     }
   }
 
@@ -284,7 +287,7 @@ class TripRepository {
           .map((Map<String, dynamic> d) => d['id'] as int)
           .toList();
     } catch (e) {
-      debugPrint('[TRIP][PREFETCH] ⚠️ Error getting device IDs: $e');
+      _log.warning('Error getting device IDs', error: e);
       return [];
     }
   }
@@ -303,7 +306,7 @@ class TripRepository {
       attempt++;
       
       try {
-        debugPrint('[TripRepository][ATTEMPT] 🔄 Attempt $attempt/$attempts');
+        _log.debug('🔄 Attempt $attempt/$attempts');
         return await _fetchTripsNetwork(
           deviceId: deviceId,
           from: from,
@@ -312,11 +315,11 @@ class TripRepository {
         );
       } catch (e) {
         if (attempt >= attempts) {
-          debugPrint('[TripRepository][RETRY EXHAUSTED] ❌ All $attempts attempts failed');
+          _log.warning('❌ All $attempts attempts failed');
           rethrow;
         }
         
-        debugPrint('[TripRepository][RETRY] ⏳ Attempt $attempt failed, retrying in ${delay.inSeconds}s: $e');
+        _log.debug('⏳ Attempt $attempt failed, retrying in ${delay.inSeconds}s: $e');
         await Future<void>.delayed(delay);
         delay *= 2; // Exponential backoff: 1s, 2s, 4s
       }
@@ -336,7 +339,7 @@ class TripRepository {
     try {
       await _ref.read(authServiceProvider).rehydrateSessionCookie();
     } catch (e) {
-      debugPrint('[TripRepository] ⚠️ Failed to rehydrate session cookie: $e');
+      _log.warning('Failed to rehydrate session cookie', error: e);
     }
 
     final dio = _ref.read(dioProvider);
@@ -353,9 +356,9 @@ class TripRepository {
     final base = dio.options.baseUrl;
     final resolved = Uri.parse(base)
       .resolve(Uri(path: url, queryParameters: params).toString());
-    debugPrint('[TripRepository] 🔍 fetchTrips GET deviceId=${params['deviceId']} from=${params['from']} to=${params['to']}');
-    debugPrint('[TripRepository] 🔧 Query=$params');
-      debugPrint('[TripRepository] 🌐 BaseURL=$base');
+    _log.debug('🔍 fetchTrips GET deviceId=${params['deviceId']} from=${params['from']} to=${params['to']}');
+    _log.debug('🔧 Query=$params');
+      _log.debug('🌐 BaseURL=$base');
       // Peek cookie jar for Cookie header presence
       try {
         final jar = _ref.read(authCookieJarProvider);
@@ -364,12 +367,12 @@ class TripRepository {
   final js = cookies.firstWhere((Cookie c) => c.name.toUpperCase() == 'JSESSIONID', orElse: () => Cookie('NONE', ''));
         final hasJs = js.name.toUpperCase() == 'JSESSIONID';
         final preview = hasJs ? (js.value.isNotEmpty ? '${js.value.substring(0, js.value.length.clamp(0, 8))}…' : '<empty>') : '<none>';
-        debugPrint('[TripRepository] 🍪 Cookie JSESSIONID: ${hasJs ? 'present' : 'missing'} ($preview)');
+        _log.debug('🍪 Cookie JSESSIONID: ${hasJs ? 'present' : 'missing'} ($preview)');
       } catch (e) {
-        debugPrint('[TripRepository] ⚠️ Failed to peek cookie jar: $e');
+        _log.warning('Failed to peek cookie jar', error: e);
       }
 
-      debugPrint('[TripRepository] ⇢ URL=$resolved');
+      _log.debug('⇢ URL=$resolved');
       final response = await dio.get<dynamic>(
         url,
         queryParameters: params,
@@ -382,7 +385,7 @@ class TripRepository {
         ),
       );
 
-      debugPrint('[TripRepository] ⇢ Status=${response.statusCode}, Type=${response.data.runtimeType}');
+      _log.debug('⇢ Status=${response.statusCode}, Type=${response.data.runtimeType}');
 
       if (response.statusCode == 200) {
         final contentType = response.headers.value('content-type') ?? '';
@@ -394,16 +397,14 @@ class TripRepository {
           if (t.startsWith('[') || t.startsWith('{')) {
             // Offload JSON decoding + parsing to isolate
             final trips = await _parseTripsInBackground(data);
-            if (trips.isEmpty && kDebugMode) {
-              debugPrint('[TripRepository] ⚠️ Text payload not JSON-decodable or empty');
+            if (trips.isEmpty) {
+              _log.debug('Text payload not JSON-decodable or empty');
             } else {
-              debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips from JSON string');
+              _log.debug('✅ Parsed ${trips.length} trips from JSON string');
             }
             return trips;
           } else {
-            if (kDebugMode) {
-              debugPrint('[TripRepository] ⚠️ Text payload (likely HTML), returning empty');
-            }
+            _log.debug('Text payload (likely HTML), returning empty');
             return const <Trip>[];
           }
         }
@@ -411,20 +412,18 @@ class TripRepository {
         // Data already decoded (Dio handled it)
         if (data is List) {
           final trips = await _parseTripsInBackground(data);
-          debugPrint('[TripRepository] ✅ Parsed ${trips.length} trips');
+          _log.debug('✅ Parsed ${trips.length} trips');
           return trips;
         } else {
           // Defensive: non-list response
-          if (kDebugMode) {
-            final hint = contentType.contains('html') ? ' (content-type suggests HTML)' : '';
-            debugPrint('[TripRepository] ⚠️ 200 but non-list payload: type=${data.runtimeType}$hint');
-          }
+          final hint = contentType.contains('html') ? ' (content-type suggests HTML)' : '';
+          _log.debug('200 but non-list payload: type=${data.runtimeType}$hint');
           return const <Trip>[];
         }
       }
 
       // Non-200 or invalid type → optional fallback to legacy /generate POST
-      debugPrint('[TripRepository] ⚠️ Unexpected response: status=${response.statusCode}, type=${response.data.runtimeType}');
+      _log.debug('Unexpected response: status=${response.statusCode}, type=${response.data.runtimeType}');
       if (_useGenerateFallback) {
         return await _fetchTripsGenerateFallback(
           dio: dio,
@@ -436,8 +435,7 @@ class TripRepository {
       }
       return <Trip>[];
     } on DioException catch (e, st) {
-      debugPrint('[TripRepository] ❌ DioException (trips): $e');
-      debugPrint(st.toString());
+      _log.error('DioException (trips)', error: e, stackTrace: st);
       if (_useGenerateFallback) {
         try {
           return await _fetchTripsGenerateFallback(
@@ -448,13 +446,12 @@ class TripRepository {
             cancelToken: cancelToken,
           );
         } catch (e) {
-          debugPrint('[TripRepository] ⚠️ Background parsing fallback failed: $e');
+          _log.warning('Background parsing fallback failed', error: e);
         }
       }
       rethrow;
     } catch (e, st) {
-      debugPrint('[TripRepository] ❌ Unexpected error: $e');
-      debugPrint(st.toString());
+      _log.error('Unexpected error', error: e, stackTrace: st);
       rethrow;
     }
   }
@@ -481,13 +478,13 @@ class TripRepository {
     
     // Large data: offload to isolate
     final itemCount = data is String ? 'unknown' : (data as List).length;
-    debugPrint('[TripRepository] 🔄 Parsing $itemCount trips in background isolate (with JSON decoding: ${data is String})');
+    _log.debug('🔄 Parsing $itemCount trips in background isolate (with JSON decoding: ${data is String})');
     final stopwatch = Stopwatch()..start();
     
     final trips = await compute(_parseTripsIsolate, data);
     
     stopwatch.stop();
-    debugPrint('[TripRepository] ✅ Background parsing completed in ${stopwatch.elapsedMilliseconds}ms');
+    _log.debug('✅ Background parsing completed in ${stopwatch.elapsedMilliseconds}ms');
     
     return trips;
   }
@@ -511,7 +508,7 @@ class TripRepository {
       'from': _toUtcIso(from),
       'to': _toUtcIso(to),
     };
-    debugPrint('[TripRepository] 🧪 Fallback POST $path body=$body');
+    _log.debug('🧪 Fallback POST $path body=$body');
     final r = await dio.post<dynamic>(
       path,
       data: body,
@@ -523,7 +520,7 @@ class TripRepository {
         validateStatus: (code) => code != null && code < 500,
       ),
     );
-    debugPrint('[TripRepository] 🧪 Fallback status=${r.statusCode} type=${r.data.runtimeType}');
+    _log.debug('🧪 Fallback status=${r.statusCode} type=${r.data.runtimeType}');
     if (r.statusCode == 200) {
       final contentType = r.headers.value('content-type') ?? '';
       final data = r.data;
@@ -534,23 +531,19 @@ class TripRepository {
             try {
               trips.add(Trip.fromJson(item));
             } catch (_) {
-              if (kDebugMode) {
-                debugPrint('[TripRepository] ⚠️ Skipped malformed trip item (fallback)');
-              }
+              _log.debug('Skipped malformed trip item (fallback)');
             }
           }
         }
-        debugPrint('[TripRepository] ✅ Fallback parsed ${trips.length} trips');
+        _log.debug('✅ Fallback parsed ${trips.length} trips');
         return trips;
       } else {
-        if (kDebugMode) {
-          final hint = contentType.contains('html') ? ' (content-type suggests HTML)' : '';
-          debugPrint('[TripRepository] ⚠️ Fallback 200 but non-list payload: type=${data.runtimeType}$hint');
-        }
+        final hint = contentType.contains('html') ? ' (content-type suggests HTML)' : '';
+        _log.debug('Fallback 200 but non-list payload: type=${data.runtimeType}$hint');
         return const <Trip>[];
       }
     }
-    debugPrint('[TripRepository] ⚠️ Fallback failed or non-JSON, returning empty');
+    _log.debug('Fallback failed or non-JSON, returning empty');
     return const <Trip>[];
   }
 
@@ -565,9 +558,7 @@ class TripRepository {
           .map((e) => Trip.fromJson(e.toDomain()))
           .toList(growable: false);
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[TripRepository] ⚠️ Cache lookup failed: $e');
-      }
+      _log.warning('Cache lookup failed', error: e);
       return const <Trip>[];
     }
   }
@@ -582,9 +573,7 @@ class TripRepository {
         .toList();
     
     if (expired.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('[TripRepository][CLEANUP][SKIPPED] No expired entries (${_cache.length} cached)');
-      }
+      _log.debug('No expired entries (${_cache.length} cached)');
       return;
     }
     
@@ -593,9 +582,7 @@ class TripRepository {
     _cache.removeWhere((key, cached) => cached.isExpired(_cacheTTL));
     final after = _cache.length;
     
-    if (kDebugMode) {
-      debugPrint('[TripRepository][CLEANUP] 🧹 Removed ${before - after} expired entries ($after remain)');
-    }
+    _log.debug('🧹 Removed ${before - after} expired entries ($after remain)');
   }
 
   Future<void> cleanupOldTrips() async {
@@ -611,17 +598,15 @@ class TripRepository {
 
       // Proceed with deletion
       final old = await tripsDao.getOlderThan(cutoff);
-      if (old.isNotEmpty && kDebugMode) {
+      if (old.isNotEmpty) {
         final totalKm = old.fold<double>(0, (s, t) => s + t.distanceKm);
-        debugPrint(
-            '[TripRepository] 🧹 Retention: deleting ${old.length} trips (< ${cutoff.toIso8601String()}) totaling ${totalKm.toStringAsFixed(1)} km',);
+        _log.debug(
+            '🧹 Retention: deleting ${old.length} trips (< ${cutoff.toIso8601String()}) totaling ${totalKm.toStringAsFixed(1)} km',);
       }
       await tripsDao.deleteOlderThan(cutoff);
     } catch (e) {
       // Best-effort cleanup; ignore DAO issues
-      if (kDebugMode) {
-        debugPrint('[TripRepository] ⚠️ cleanupOldTrips error: $e');
-      }
+      _log.warning('cleanupOldTrips error', error: e);
     }
   }
 
@@ -676,15 +661,10 @@ class TripRepository {
       }
       return positions;
     } on DioException catch (e) {
-      if (kDebugMode) {
-        debugPrint('[TripRepository] ❌ DioException (positions): ${e.message}');
-      }
+      _log.error('DioException (positions)', error: e);
       rethrow;
     } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('[TripRepository] ❌ Error (positions): $e');
-        debugPrint(st.toString());
-      }
+      _log.error('Error (positions)', error: e, stackTrace: st);
       rethrow;
     }
   }
@@ -700,9 +680,7 @@ class TripRepository {
       final result = await dao.getAggregatesByDay(from, to);
       return result;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[TripRepository] ⚠️ fetchAggregates error: $e');
-      }
+      _log.warning('fetchAggregates error', error: e);
       return <String, TripAggregate>{};
     } finally {
       sw.stop();
@@ -749,14 +727,10 @@ class TripRepository {
           .toUtc()
           .subtract(const Duration(days: keepBackMonths * 30)),);
       await snapshotsDao.deleteOlderThan(olderCutoff);
-      if (kDebugMode) {
-        debugPrint(
-            '[TripSnapshots] ✅ Saved monthly snapshot for $monthKey: ${totals.tripCount} trips, ${totals.totalDistanceKm.toStringAsFixed(1)} km',);
-      }
+      _log.debug(
+          'Saved monthly snapshot for $monthKey: ${totals.tripCount} trips, ${totals.totalDistanceKm.toStringAsFixed(1)} km',);
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[TripSnapshots] ⚠️ Snapshot persist failed: $e');
-      }
+      _log.warning('Snapshot persist failed', error: e);
     } finally {
       sw.stop();
       if (kDebugMode) {

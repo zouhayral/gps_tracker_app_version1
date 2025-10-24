@@ -25,6 +25,7 @@ import 'package:my_app_gps/core/map/marker_processing_isolate.dart';
 import 'package:my_app_gps/core/map/rebuild_profiler.dart';
 import 'package:my_app_gps/core/providers/connectivity_providers.dart';
 import 'package:my_app_gps/core/providers/vehicle_providers.dart';
+import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/core/utils/throttled_value_notifier.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
@@ -49,7 +50,7 @@ import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
-import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 // Removed SmoothSheetController; using direct controller-driven logic
 // import 'package:my_app_gps/services/websocket_manager.dart';
@@ -103,6 +104,9 @@ class _MapPageState extends ConsumerState<MapPage>
         WidgetsBindingObserver,
         MapPageLifecycleMixin<MapPage>,
         AutomaticKeepAliveClientMixin<MapPage> {
+  // Logger
+  static final _log = 'MapPage'.logger;
+  
   // TASK 6: Keep map alive to prevent frame drops during view transitions
   @override
   bool get wantKeepAlive => true;
@@ -258,18 +262,14 @@ class _MapPageState extends ConsumerState<MapPage>
         BitmapDescriptorCache.instance
             .preloadAll(StandardMarkerIcons.assetPaths)
             .catchError((Object e) {
-          if (kDebugMode) {
-            debugPrint('[MapPage] Bitmap cache preload error (non-fatal): $e');
-          }
+          _log.warning('Bitmap cache preload error (non-fatal)', error: e);
         }),
       );
 
       // OPTIMIZATION: Preload marker icons for reduced first-draw latency
       unawaited(
         MarkerIconManager.instance.preloadIcons().catchError((Object e) {
-          if (kDebugMode) {
-            debugPrint('[MapPage] Icon preload error (non-fatal): $e');
-          }
+          _log.warning('Icon preload error (non-fatal)', error: e);
         }),
       );
 
@@ -303,11 +303,7 @@ class _MapPageState extends ConsumerState<MapPage>
       if (deviceIds.isNotEmpty) {
         // Fetch from cache (instant) and trigger REST fetch (background)
         unawaited(repo.fetchMultipleDevices(deviceIds));
-        if (kDebugMode) {
-          debugPrint(
-            '[MapPage] Initialized repository with ${deviceIds.length} devices',
-          );
-        }
+        _log.debug('Initialized repository with ${deviceIds.length} devices');
       }
 
       // Register marker count supplier for performance overlay (disabled by default)
@@ -330,13 +326,9 @@ class _MapPageState extends ConsumerState<MapPage>
         FMTCInitializer.warmup(),
         FMTCInitializer.warmupStoresForSources(MapTileProviders.all),
       ]).then((_) {
-        if (kDebugMode) {
-          debugPrint('[FMTC] ✅ Parallel warmup finished (core + per-source stores)');
-        }
+        _log.debug('[FMTC] ✅ Parallel warmup finished (core + per-source stores)');
       }).catchError((Object e, StackTrace? st) {
-        if (kDebugMode) {
-          debugPrint('[FMTC] ⚠️ Warmup error: $e');
-        }
+        _log.warning('[FMTC] Warmup error', error: e);
       }),
     );
 
@@ -407,9 +399,7 @@ class _MapPageState extends ConsumerState<MapPage>
   /// - Marker updates only when data actually changes
   /// - No redundant processing on unrelated rebuilds
   void _setupMarkerUpdateListeners() {
-    if (kDebugMode) {
-      debugPrint('[MAP] _setupMarkerUpdateListeners called');
-    }
+    _log.debug('_setupMarkerUpdateListeners called');
     
     // Track which devices we've set up listeners for
     final listenedDeviceIds = <int>{};
@@ -417,16 +407,12 @@ class _MapPageState extends ConsumerState<MapPage>
     // Helper to setup position listeners for a device
     void setupPositionListener(int deviceId) {
       if (listenedDeviceIds.contains(deviceId)) {
-        if (kDebugMode) {
-          debugPrint('[MAP] Skipping duplicate listener for device $deviceId');
-        }
+        _log.debug('Skipping duplicate listener for device $deviceId');
         return;
       }
       listenedDeviceIds.add(deviceId);
       
-      if (kDebugMode) {
-        debugPrint('[MAP] Setting up position listener for device $deviceId');
-      }
+      _log.debug('Setting up position listener for device $deviceId');
       
       // Listen to position updates for this device using listenManual
       // Note: vehiclePositionProvider is a StreamProvider, so we listen to AsyncValue changes
@@ -434,11 +420,9 @@ class _MapPageState extends ConsumerState<MapPage>
         vehiclePositionProvider(deviceId),
         (previous, next) {
           if (!mounted) return;
-          if (kDebugMode) {
-            debugPrint('[MAP] Position listener fired for device $deviceId: '
-                'previous=${previous?.valueOrNull != null}, '
-                'next=${next.valueOrNull != null}');
-          }
+          _log.debug('Position listener fired for device $deviceId: '
+              'previous=${previous?.valueOrNull != null}, '
+              'next=${next.valueOrNull != null}');
           final pos = next.valueOrNull;
           if (pos != null) {
             _lastPositions[deviceId] = pos;
@@ -478,11 +462,9 @@ class _MapPageState extends ConsumerState<MapPage>
       positionsLastKnownProvider,
       (previous, next) {
         if (!mounted) return;
-        if (kDebugMode) {
-          final prevCount = previous?.valueOrNull?.length ?? 0;
-          final nextCount = next.valueOrNull?.length ?? 0;
-          debugPrint('[MAP] positionsLastKnown changed: $prevCount -> $nextCount');
-        }
+        final prevCount = previous?.valueOrNull?.length ?? 0;
+        final nextCount = next.valueOrNull?.length ?? 0;
+        _log.debug('positionsLastKnown changed: $prevCount -> $nextCount');
         final devices = ref.read(devicesNotifierProvider).asData?.value ?? const <Map<String, dynamic>>[];
         if (devices.isNotEmpty) {
           _scheduleMarkerUpdate(devices);
@@ -569,10 +551,8 @@ class _MapPageState extends ConsumerState<MapPage>
       }
     }
 
-    if (kDebugMode) {
-      final selInfo = _selectedIds.isEmpty ? 'none' : _selectedIds.join(',');
-      debugPrint('[MAP] Found ${positions.length} positions for marker update (selected: $selInfo)');
-    }
+    final selInfo = _selectedIds.isEmpty ? 'none' : _selectedIds.join(',');
+    _log.debug('Found ${positions.length} positions for marker update (selected: $selInfo)');
 
     // Process markers asynchronously
     _processMarkersAsync(
@@ -650,9 +630,7 @@ class _MapPageState extends ConsumerState<MapPage>
     
     if (selectedPositions.isEmpty) return;
 
-    if (kDebugMode) {
-      debugPrint('[CAMERA_FIT] Fitting to ${_selectedIds.length} selected markers');
-    }
+    _log.debug('Fitting to ${_selectedIds.length} selected markers');
 
     await _animatedMoveToBounds(
       selectedPositions,
@@ -673,9 +651,7 @@ class _MapPageState extends ConsumerState<MapPage>
     
     if (allPositions.isEmpty) return;
 
-    if (kDebugMode) {
-      debugPrint('[CAMERA_FIT] Fitting to all ${allPositions.length} markers (fleet view)');
-    }
+    _log.debug('Fitting to all ${allPositions.length} markers (fleet view)');
 
     await _animatedMoveToBounds(
       allPositions,
@@ -735,12 +711,10 @@ class _MapPageState extends ConsumerState<MapPage>
     // Use the existing safe move method
     _mapKey.currentState!.safeZoomTo(center, targetZoom);
 
-    if (kDebugMode) {
-      debugPrint(
-        '[CAMERA_FIT] Moved to center: (${center.latitude.toStringAsFixed(4)}, '
-        '${center.longitude.toStringAsFixed(4)}) @ zoom ${targetZoom.toStringAsFixed(1)}',
-      );
-    }
+    _log.debug(
+      'Moved to center: (${center.latitude.toStringAsFixed(4)}, '
+      '${center.longitude.toStringAsFixed(4)}) @ zoom ${targetZoom.toStringAsFixed(1)}',
+    );
   }
 
   /// Open the selected device location in native maps app
@@ -788,19 +762,13 @@ class _MapPageState extends ConsumerState<MapPage>
     try {
       if (await canLaunchUrl(geoUri)) {
         await launchUrl(geoUri, mode: LaunchMode.externalApplication);
-        if (kDebugMode) {
-          debugPrint('[MAP] ✅ Opened native Maps app (geo:)');
-        }
+        _log.debug('✅ Opened native Maps app (geo:)');
       } else {
         await launchUrl(webUri, mode: LaunchMode.externalApplication);
-        if (kDebugMode) {
-          debugPrint('[MAP] 🌐 Opened Google Maps web');
-        }
+        _log.debug('🌐 Opened Google Maps web');
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[MAP][ERROR] Failed to launch map: $e');
-      }
+      _log.error('Failed to launch map', error: e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -817,9 +785,7 @@ class _MapPageState extends ConsumerState<MapPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     
-    if (kDebugMode) {
-      debugPrint('[MAP][LIFECYCLE] App state changed: $state');
-    }
+    _log.debug('[LIFECYCLE] App state changed: $state');
 
     switch (state) {
       case AppLifecycleState.paused:
@@ -842,9 +808,7 @@ class _MapPageState extends ConsumerState<MapPage>
     if (_isPaused) return;
     _isPaused = true;
 
-    if (kDebugMode) {
-      debugPrint('[MAP][LIFECYCLE] Pausing: canceling timers');
-    }
+    _log.debug('[LIFECYCLE] Pausing: canceling timers');
 
     // Cancel marker update debouncer
     _markerUpdateDebouncer?.cancel();
@@ -863,9 +827,7 @@ class _MapPageState extends ConsumerState<MapPage>
     // Note: MarkerMotionController continues running (internal timer-based)
     // This is acceptable as it's lightweight and prevents jarring when resuming
     
-    if (kDebugMode) {
-      debugPrint('[MAP][LIFECYCLE] ⏸️ Paused (debounce timers canceled, cache persisted)');
-    }
+    _log.debug('[LIFECYCLE] ⏸️ Paused (debounce timers canceled, cache persisted)');
   }
 
   /// LIFECYCLE: Handle app resume state
@@ -876,9 +838,7 @@ class _MapPageState extends ConsumerState<MapPage>
     if (!_isPaused) return;
     _isPaused = false;
 
-    if (kDebugMode) {
-      debugPrint('[MAP][LIFECYCLE] Resuming: restarting live updates');
-    }
+    _log.debug('[LIFECYCLE] Resuming: restarting live updates');
 
     // TASK 3: Restore marker cache from disk after resume
     // Provides 60-70% cache hit rate on first rebuild (vs 0% without persistence)
@@ -895,9 +855,7 @@ class _MapPageState extends ConsumerState<MapPage>
     final repo = ref.read(vehicleDataRepositoryProvider);
     repo.refreshAll();
 
-    if (kDebugMode) {
-      debugPrint('[MAP][LIFECYCLE] ▶️ Resumed (cache restored, marker updates scheduled, data refresh requested)');
-    }
+    _log.debug('[LIFECYCLE] ▶️ Resumed (cache restored, marker updates scheduled, data refresh requested)');
   }
 
   /// TASK 7: Start lightweight performance diagnostics
@@ -908,9 +866,7 @@ class _MapPageState extends ConsumerState<MapPage>
       (_) => _logPerformanceMetrics(),
     );
     
-    if (kDebugMode) {
-      debugPrint('[MAP][PERF] Performance diagnostics started (30s interval)');
-    }
+    _log.debug('[PERF] Performance diagnostics started (30s interval)');
   }
 
   /// TASK 7: Log aggregated performance metrics

@@ -31,7 +31,6 @@ import 'package:my_app_gps/objectbox.g.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart'
   as local_notif;
 import 'package:my_app_gps/services/websocket_manager.dart';
-import 'package:my_app_gps/services/websocket_manager_enhanced.dart' as ws_enhanced;
 // Including this ensures native libs are bundled for Flutter tests when available.
 // ignore: unused_import
 import 'package:objectbox_flutter_libs/objectbox_flutter_libs.dart';
@@ -86,10 +85,8 @@ Future<void> setupTestEnvironment() async {
   await mockHiveAndPrefsForTests();
   await skipObjectBoxTestsIfUnavailable();
 
-  // Ensure WebSocketManager test mode so it doesn't throw unimplemented mocks
+  // Disable WS auto-connect in tests by default
   WebSocketManager.testMode = true;
-  // Disable enhanced WS auto-connect in tests by default
-  ws_enhanced.WebSocketManagerEnhanced.testMode = true;
   // Disable background timers that cause pending timers in widget tests
   netmon.NetworkConnectivityMonitor.testMode = true;
   coordinator.ConnectivityCoordinator.testMode = true;

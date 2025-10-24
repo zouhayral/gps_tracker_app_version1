@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 
@@ -15,6 +16,8 @@ final positionsServiceProvider = Provider<PositionsService>((ref) {
 });
 
 class PositionsService {
+  static final _log = 'PositionsService'.logger;
+  
   PositionsService(this._dio);
   final Dio _dio;
   // In-memory latest position cache
@@ -94,7 +97,7 @@ class PositionsService {
         try {
           bytes = utf8.encode(jsonEncode(list)).length;
         } catch (e) {
-          debugPrint('[PositionsService] ⚠️ Failed to calculate payload bytes: $e');
+          _log.warning('Failed to calculate payload bytes', error: e);
         }
         final step = HistoryProbeStep(
           windowHours: hours,
@@ -293,13 +296,11 @@ class PositionsService {
         
         if (allCached && cached.isNotEmpty) {
           _bulkFetchThrottled++;
-          if (kDebugMode) {
-            debugPrint(
-              '[PositionsService][CACHE][THROTTLED] ✋ Using cached positions '
-              '(age: ${timeSinceLastBulkFetch.inSeconds}s, TTL: ${_bulkFetchTTL.inMinutes}m, '
-              'throttled: $_bulkFetchThrottled, devices: ${cached.length})',
-            );
-          }
+          _log.debug(
+            '✋ Using cached positions '
+            '(age: ${timeSinceLastBulkFetch.inSeconds}s, TTL: ${_bulkFetchTTL.inMinutes}m, '
+            'throttled: $_bulkFetchThrottled, devices: ${cached.length})',
+          );
           return cached;
         }
       }
@@ -350,11 +351,7 @@ class PositionsService {
     // 🎯 PHASE 2: Update bulk fetch timestamp
     _lastBulkFetchTime = DateTime.now();
     
-    if (kDebugMode) {
-      debugPrint(
-        '[PositionsService][FETCH] Bulk fetch complete: ${out.length} positions',
-      );
-    }
+    _log.debug('Bulk fetch complete: ${out.length} positions');
 
     return out;
   }
@@ -384,9 +381,7 @@ class PositionsService {
     _cacheHits = 0;
     _cacheMisses = 0;
     _bulkFetchThrottled = 0;
-    if (kDebugMode) {
-      debugPrint('[PositionsService][CACHE][CLEAR] Cache cleared');
-    }
+    _log.debug('Cache cleared');
   }
 }
 

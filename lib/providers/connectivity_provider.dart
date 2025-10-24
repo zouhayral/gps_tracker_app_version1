@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/controllers/connectivity_coordinator.dart';
-import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
 
 /// Riverpod provider for unified connectivity state
 ///

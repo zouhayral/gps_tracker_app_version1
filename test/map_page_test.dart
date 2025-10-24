@@ -19,6 +19,7 @@ import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/repositories/notifications_repository.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/event_service.dart';
+import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
 
 import 'test_utils/test_config.dart';
@@ -53,9 +54,13 @@ void main() {
     ];
 
     final container = ProviderContainer(overrides: [
-      webSocketProvider.overrideWith(() {
+      webSocketManagerProvider.overrideWith(() {
         WebSocketManager.testMode = true;
         return WebSocketManager();
+      }),
+      // Override TraccarSocketService to prevent actual WebSocket connections
+      traccarSocketServiceProvider.overrideWith((ref) {
+        throw UnimplementedError('Mock socket service');
       }),
       // Provide a safe notifications repository to avoid early DAO reads in banner init
       notificationsRepositoryProvider.overrideWith((ref) {

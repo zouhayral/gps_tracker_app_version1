@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
-import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
 
 /// Mixin that handles lifecycle events for MapPage to ensure:
 /// 1. WebSocket reconnection when app resumes

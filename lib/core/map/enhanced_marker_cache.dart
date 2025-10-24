@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/core/map/marker_performance_monitor.dart';
+import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:path_provider/path_provider.dart';
@@ -28,6 +29,8 @@ class EnhancedMarkerCache {
   // Singleton pattern for global lifecycle access
   EnhancedMarkerCache._();
   static final EnhancedMarkerCache instance = EnhancedMarkerCache._();
+  
+  static final _log = 'MarkerCache'.logger;
 
   final Map<String, MapMarkerData> _cache = {};
   final Map<String, _MarkerSnapshot> _snapshots = {};
@@ -97,12 +100,9 @@ class EnhancedMarkerCache {
     if (!forceUpdate && !isFirstRender &&
         _lastUpdate != null &&
         now.difference(_lastUpdate!) < _minUpdateInterval) {
-      if (kDebugMode) {
-        debugPrint(
-          '[EnhancedMarkerCache] ⏸️ Throttled update '
-          '(${now.difference(_lastUpdate!).inMilliseconds}ms since last)',
-        );
-      }
+      _log.debug(
+        '⏸️ Throttled update (${now.difference(_lastUpdate!).inMilliseconds}ms since last)',
+      );
 
       // Return cached markers without processing
       return MarkerDiffResult(
@@ -192,35 +192,29 @@ class EnhancedMarkerCache {
 
           if (existingSnapshot == null) {
             created.add(markerId);
-            if (kDebugMode) {
-              debugPrint('[MAP][CACHE][MISS] Marker(deviceId=$deviceId) - First time creation');
-            }
+            _log.debug('[MISS] Marker(deviceId=$deviceId) - First time creation');
           } else {
             modified++;
-            if (kDebugMode) {
-              // Log why marker was rebuilt
-              final reasons = <String>[];
-              if ((existingSnapshot.lat - snapshot.lat).abs() >= 0.000001 ||
-                  (existingSnapshot.lon - snapshot.lon).abs() >= 0.000001) {
-                reasons.add('position changed');
-              }
-              if (existingSnapshot.engineOn != snapshot.engineOn) {
-                reasons.add('engineOn: ${existingSnapshot.engineOn}→${snapshot.engineOn}');
-              }
-              if (existingSnapshot.speed != snapshot.speed) {
-                reasons.add('speed: ${existingSnapshot.speed}→${snapshot.speed}');
-              }
-              if (existingSnapshot.isSelected != snapshot.isSelected) {
-                reasons.add('selection: ${existingSnapshot.isSelected}→${snapshot.isSelected}');
-              }
-              debugPrint('[MAP][CACHE][MISS] Marker(deviceId=$deviceId) - Rebuilt: ${reasons.join(", ")}');
+            // Log why marker was rebuilt
+            final reasons = <String>[];
+            if ((existingSnapshot.lat - snapshot.lat).abs() >= 0.000001 ||
+                (existingSnapshot.lon - snapshot.lon).abs() >= 0.000001) {
+              reasons.add('position changed');
             }
+            if (existingSnapshot.engineOn != snapshot.engineOn) {
+              reasons.add('engineOn: ${existingSnapshot.engineOn}→${snapshot.engineOn}');
+            }
+            if (existingSnapshot.speed != snapshot.speed) {
+              reasons.add('speed: ${existingSnapshot.speed}→${snapshot.speed}');
+            }
+            if (existingSnapshot.isSelected != snapshot.isSelected) {
+              reasons.add('selection: ${existingSnapshot.isSelected}→${snapshot.isSelected}');
+            }
+            _log.debug('[MISS] Marker(deviceId=$deviceId) - Rebuilt: ${reasons.join(", ")}');
           }
         } else {
           // Reuse existing marker (delta rebuild skip)
-          if (kDebugMode) {
-            debugPrint('[MAP][CACHE][HIT] Marker(deviceId=$deviceId) - Reused (no changes)');
-          }
+          _log.debug('[HIT] Marker(deviceId=$deviceId) - Reused (no changes)');
           if (existingMarker != null) {
             updated.add(existingMarker);
             reused.add(markerId);
@@ -337,10 +331,10 @@ class EnhancedMarkerCache {
       totalCached: _cache.length,
     );
 
-    if (kDebugMode && result.markers.isEmpty) {
+    if (result.markers.isEmpty) {
       final deviceCount = devices.length;
       final posCount = positions.length;
-      debugPrint('[EnhancedMarkerCache] ⚠️ Produced 0 markers (devices=$deviceCount, positions=$posCount).');
+      _log.warning('⚠️ Produced 0 markers (devices=$deviceCount, positions=$posCount)');
     }
 
     // Record performance metrics
@@ -353,23 +347,22 @@ class EnhancedMarkerCache {
     );
 
     // Log reuse ratio if significant activity
-    if (kDebugMode && (result.created > 0 || result.removed > 0 || result.modified > 0)) {
+    if (result.created > 0 || result.removed > 0 || result.modified > 0) {
       final rebuildCount = result.created + result.modified;
       final reuseRate = result.efficiency * 100;
       
-      debugPrint(
-        '[MARKER] ✅ Rebuilt $rebuildCount/${result.markers.length} markers (${reuseRate.toStringAsFixed(1)}% reuse)',
+      _log.info(
+        '✅ Rebuilt $rebuildCount/${result.markers.length} markers (${reuseRate.toStringAsFixed(1)}% reuse)',
       );
 
       // Highlight if reuse is below target (should be >90% with optimization)
       if (result.efficiency < 0.9 && result.created + result.reused > 10) {
-        debugPrint(
-          '[EnhancedMarkerCache] ⚠️ Low reuse rate: ${reuseRate.toStringAsFixed(1)}% '
-          '(target: >90%)',
+        _log.warning(
+          '⚠️ Low reuse rate: ${reuseRate.toStringAsFixed(1)}% (target: >90%)',
         );
       } else if (result.efficiency >= 0.9) {
-        debugPrint(
-          '[EnhancedMarkerCache] ✅ Excellent reuse rate: ${reuseRate.toStringAsFixed(1)}%',
+        _log.debug(
+          '✅ Excellent reuse rate: ${reuseRate.toStringAsFixed(1)}%',
         );
       }
     }
@@ -388,9 +381,7 @@ class EnhancedMarkerCache {
   }) async {
     // Prevent overlapping updates
     if (_updateQueued && !forceUpdate) {
-      if (kDebugMode) {
-        debugPrint('[PERF] Marker update already queued, skipping duplicate');
-      }
+      _log.debug('[PERF] Marker update already queued, skipping duplicate');
       // Return current cached state
       return MarkerDiffResult(
         markers: _cache.values.toList(),
@@ -421,8 +412,8 @@ class EnhancedMarkerCache {
         
         stopwatch.stop();
         
-        if (kDebugMode && (result.created > 0 || result.modified > 0)) {
-          debugPrint(
+        if (result.created > 0 || result.modified > 0) {
+          _log.debug(
             '[PERF] Marker diff batched: ${result.markers.length} markers '
             '(created: ${result.created}, modified: ${result.modified}, '
             'reused: ${result.reused}) in ${stopwatch.elapsedMilliseconds}ms',
@@ -463,9 +454,7 @@ class EnhancedMarkerCache {
   /// **Impact**: +60-70% cache reuse rate after app resume
   Future<void> persistToDisk() async {
     if (_snapshots.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('[CACHE][PERSIST] No snapshots to persist, skipping');
-      }
+      _log.debug('[PERSIST] No snapshots to persist, skipping');
       return;
     }
 
@@ -493,17 +482,11 @@ class EnhancedMarkerCache {
       await file.writeAsString(jsonEncode(data));
       stopwatch.stop();
 
-      if (kDebugMode) {
-        debugPrint(
-          '[CACHE][PERSIST] ✅ Persisted ${_snapshots.length} snapshots '
-          'in ${stopwatch.elapsedMilliseconds}ms',
-        );
-      }
+      _log.info(
+        '[PERSIST] ✅ Persisted ${_snapshots.length} snapshots in ${stopwatch.elapsedMilliseconds}ms',
+      );
     } catch (e, stack) {
-      if (kDebugMode) {
-        debugPrint('[CACHE][PERSIST] ❌ Failed to persist cache: $e');
-        debugPrint(stack.toString());
-      }
+      _log.error('[PERSIST] Failed to persist cache', error: e, stackTrace: stack);
     }
   }
 
@@ -516,9 +499,7 @@ class EnhancedMarkerCache {
   /// **Impact**: First rebuild after resume has 60-70% cache hit rate instead of 0%
   Future<void> restoreFromDisk() async {
     if (_isRestoringFromDisk) {
-      if (kDebugMode) {
-        debugPrint('[CACHE][RESTORE] Already restoring, skipping duplicate call');
-      }
+      _log.debug('[RESTORE] Already restoring, skipping duplicate call');
       return;
     }
 
@@ -531,9 +512,7 @@ class EnhancedMarkerCache {
 
       // Use sync exists check to avoid slow async I/O lint warning
       if (!file.existsSync()) {
-        if (kDebugMode) {
-          debugPrint('[CACHE][RESTORE] No cache file found, starting fresh');
-        }
+        _log.debug('[RESTORE] No cache file found, starting fresh');
         _isRestoringFromDisk = false;
         return;
       }
@@ -560,25 +539,17 @@ class EnhancedMarkerCache {
 
           restored++;
         } catch (e) {
-          if (kDebugMode) {
-            debugPrint('[CACHE][RESTORE] ⚠️ Failed to restore snapshot ${entry.key}: $e');
-          }
+          _log.warning('⚠️ Failed to restore snapshot ${entry.key}', error: e);
         }
       }
 
       stopwatch.stop();
 
-      if (kDebugMode) {
-        debugPrint(
-          '[CACHE][RESTORE] ✅ Restored $restored snapshots '
-          'in ${stopwatch.elapsedMilliseconds}ms',
-        );
-      }
+      _log.info(
+        '[RESTORE] ✅ Restored $restored snapshots in ${stopwatch.elapsedMilliseconds}ms',
+      );
     } catch (e, stack) {
-      if (kDebugMode) {
-        debugPrint('[CACHE][RESTORE] ❌ Failed to restore cache: $e');
-        debugPrint(stack.toString());
-      }
+      _log.error('[RESTORE] Failed to restore cache', error: e, stackTrace: stack);
     } finally {
       _isRestoringFromDisk = false;
     }

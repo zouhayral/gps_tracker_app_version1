@@ -1,8 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
-import 'package:my_app_gps/services/websocket_manager.dart' as ws_manager;
-import 'package:my_app_gps/services/websocket_manager_enhanced.dart';
+import 'package:my_app_gps/services/websocket_manager.dart';
 
 /// Tests to verify provider initialization doesn't crash
 /// Regression test for: "Bad state: Tried to read the state of an uninitialized provider"
@@ -35,29 +34,6 @@ void main() {
       container.dispose();
     });
 
-    test('WebSocketManager initializes without crashing', () async {
-      final container = ProviderContainer();
-
-      // Enable test mode to prevent actual connection
-      ws_manager.WebSocketManager.testMode = true;
-
-      // This should NOT throw
-      expect(
-        () => container.read(ws_manager.webSocketProvider),
-        returnsNormally,
-      );
-
-      // Wait for microtask
-      await Future.microtask(() {});
-
-      final state = container.read(ws_manager.webSocketProvider);
-      expect(state.status, ws_manager.WebSocketStatus.connecting);
-
-      // Cleanup
-      ws_manager.WebSocketManager.testMode = false;
-      container.dispose();
-    });
-
     test('Multiple providers can be read simultaneously', () async {
       final container = ProviderContainer(
         overrides: [
@@ -67,18 +43,15 @@ void main() {
         ],
       );
 
-      ws_manager.WebSocketManager.testMode = true;
-
-      // Read multiple providers in quick succession
+      // Read provider multiple times in quick succession
       // Should not crash with uninitialized provider error
       expect(() {
         container.read(webSocketManagerProvider);
-        container.read(ws_manager.webSocketProvider);
+        container.read(webSocketManagerProvider);
       }, returnsNormally,);
 
       await Future.microtask(() {});
 
-      ws_manager.WebSocketManager.testMode = false;
       container.dispose();
     });
 
