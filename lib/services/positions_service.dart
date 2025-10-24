@@ -23,6 +23,11 @@ class PositionsService {
   DateTime _lastPrune = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   int _cacheHits = 0;
   int _cacheMisses = 0;
+  
+  // 🎯 PHASE 2 TASK 2: Bulk fetch throttling
+  DateTime? _lastBulkFetchTime;
+  static const _bulkFetchTTL = Duration(minutes: 3);
+  int _bulkFetchThrottled = 0;
 
   void _pruneCache({Duration maxAge = const Duration(hours: 24)}) {
     final now = DateTime.now().toUtc();
@@ -265,7 +270,39 @@ class PositionsService {
   /// Resolve deviceId -> Position using device.positionId for a set of devices.
   /// Fallback: For devices without positionId, fetch last 30min history.
   Future<Map<int, Position>> latestForDevices(
-      List<Map<String, dynamic>> devices,) async {
+      List<Map<String, dynamic>> devices, {bool forceRefresh = false,}) async {
+    // 🎯 PHASE 2 TASK 2: Throttle bulk position fetches
+    if (!forceRefresh && _lastBulkFetchTime != null) {
+      final timeSinceLastBulkFetch = DateTime.now().difference(_lastBulkFetchTime!);
+      
+      if (timeSinceLastBulkFetch < _bulkFetchTTL) {
+        // Return cached positions for all requested devices
+        final cached = <int, Position>{};
+        var allCached = true;
+        
+        for (final d in devices) {
+          final devId = d['id'];
+          if (devId is int && _latestCache.containsKey(devId)) {
+            cached[devId] = _latestCache[devId]!;
+          } else {
+            allCached = false;
+          }
+        }
+        
+        if (allCached && cached.isNotEmpty) {
+          _bulkFetchThrottled++;
+          if (kDebugMode) {
+            debugPrint(
+              '[PositionsService][CACHE][THROTTLED] ✋ Using cached positions '
+              '(age: ${timeSinceLastBulkFetch.inSeconds}s, TTL: ${_bulkFetchTTL.inMinutes}m, '
+              'throttled: $_bulkFetchThrottled, devices: ${cached.length})',
+            );
+          }
+          return cached;
+        }
+      }
+    }
+    
     final out = <int, Position>{};
     final tasks = <Future<void>>[];
     final devicesWithoutPosId = <int>[];
@@ -308,7 +345,46 @@ class PositionsService {
       }
     }
 
+    // 🎯 PHASE 2: Update bulk fetch timestamp
+    _lastBulkFetchTime = DateTime.now();
+    
+    if (kDebugMode) {
+      debugPrint(
+        '[PositionsService][FETCH] Bulk fetch complete: ${out.length} positions',
+      );
+    }
+
     return out;
+  }
+  
+  /// 🎯 PHASE 2: Get cache statistics
+  Map<String, dynamic> getCacheStats() {
+    return {
+      'cacheSize': _latestCache.length,
+      'cacheHits': _cacheHits,
+      'cacheMisses': _cacheMisses,
+      'bulkFetchThrottled': _bulkFetchThrottled,
+      'lastBulkFetchTime': _lastBulkFetchTime?.toIso8601String(),
+      'bulkFetchAge': _lastBulkFetchTime != null
+          ? DateTime.now().difference(_lastBulkFetchTime!).inSeconds
+          : null,
+      'hitRate': (_cacheHits + _cacheMisses) > 0
+          ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1)
+          : '0.0',
+    };
+  }
+  
+  /// 🎯 PHASE 2: Clear cache (useful for testing or manual refresh)
+  void clearCache() {
+    _latestCache.clear();
+    _latestCacheTime.clear();
+    _lastBulkFetchTime = null;
+    _cacheHits = 0;
+    _cacheMisses = 0;
+    _bulkFetchThrottled = 0;
+    if (kDebugMode) {
+      debugPrint('[PositionsService][CACHE][CLEAR] Cache cleared');
+    }
   }
 }
 

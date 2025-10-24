@@ -40,6 +40,7 @@ final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
   final socketSvc = ref.watch(traccarSocketServiceProvider);
   final telemetryDao = ref.watch(telemetryDaoProvider);
   final eventService = ref.watch(eventServiceProvider);
+  final wsManager = ref.watch(webSocketManagerProvider.notifier);
 
   final repo = VehicleDataRepository(
     cache: cache,
@@ -48,6 +49,7 @@ final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
     socketService: socketSvc,
     telemetryDao: telemetryDao,
     eventService: eventService,
+    webSocketManager: wsManager,
   );
 
   // Listen to unified connectivity and update repository/WS behavior
@@ -86,6 +88,7 @@ class VehicleDataRepository {
     required this.socketService,
     required this.telemetryDao,
     required this.eventService,
+    required this.webSocketManager,
   }) {
     _init();
   }
@@ -96,6 +99,7 @@ class VehicleDataRepository {
   final TraccarSocketService socketService;
   final TelemetryDaoBase telemetryDao;
   final EventService eventService;
+  final WebSocketManagerEnhanced webSocketManager; // 🎯 PHASE 2: For fallback suppression
   // Throttle backfill to prevent duplicate runs on rapid reconnects
   DateTime? _lastBackfillRun;
 
@@ -1024,6 +1028,15 @@ class VehicleDataRepository {
         }
         return; // No network activity while offline
       }
+      
+      // 🎯 PHASE 2: Suppress fallback if WebSocket just reconnected
+      if (webSocketManager.shouldSuppressFallback()) {
+        if (kDebugMode) {
+          debugPrint('[VehicleRepo][FALLBACK-SUPPRESS] ✋ Skipping REST fallback - WS just reconnected');
+        }
+        return;
+      }
+      
       if (!_isWebSocketConnected && _notifiers.isNotEmpty) {
         if (kDebugMode) {
           debugPrint(

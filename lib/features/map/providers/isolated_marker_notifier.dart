@@ -33,7 +33,8 @@ class IsolatedMarkerNotifier extends ChangeNotifier {
   }
 
   final Ref ref;
-  final _enhancedMarkerCache = EnhancedMarkerCache();
+  // TASK 3: Use singleton instance for lifecycle persistence
+  final _enhancedMarkerCache = EnhancedMarkerCache.instance;
 
   // OPTIMIZATION: Throttled notifier reduces UI thread load
   final _markersNotifier = ThrottledValueNotifier<List<MapMarkerData>>(

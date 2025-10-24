@@ -42,6 +42,10 @@ class WebSocketManager extends Notifier<WebSocketState> {
   static const _maxRetries = 10; // Increased for better exponential backoff
   static const _circuitBreakerTimeout = Duration(minutes: 2);
   static const _maxRetryDelay = Duration(seconds: 60); // Cap exponential backoff
+  
+  // 🎯 PHASE 2: Reconnect debouncing
+  static const _reconnectDebounceWindow = Duration(seconds: 10); // Min time between reconnects
+  static const _fallbackSuppressionWindow = Duration(seconds: 3); // Suppress fallback if WS recovers quickly
 
   // Toggle to reduce log spam for heartbeats
   static bool verboseSocketLogs = false;
@@ -59,6 +63,11 @@ class WebSocketManager extends Notifier<WebSocketState> {
   bool _isFullyConnected = false; // 🎯 NEW: debounced connection flag
   bool _isPaused = false; // 🎯 NEW: pause retries when offline
   DateTime? _lastPingSent;
+  
+  // 🎯 PHASE 2: Reconnect throttling state
+  DateTime? _lastReconnectAttempt;
+  DateTime? _lastSuccessfulConnection;
+  int _successfulConnectionCount = 0;
 
   Stream<Map<String, dynamic>> get stream =>
       _controller?.stream ?? const Stream.empty();
@@ -89,6 +98,15 @@ class WebSocketManager extends Notifier<WebSocketState> {
       _log('[WS] ⚠️ Paused (offline) - skipping connection attempt');
       return;
     }
+
+    // 🎯 PHASE 2: Reconnect debouncing - prevent reconnect spam
+    final now = DateTime.now();
+    if (_lastReconnectAttempt != null &&
+        now.difference(_lastReconnectAttempt!) < _reconnectDebounceWindow) {
+      _log('[WS][DEBOUNCE] ⏸️ Reconnect skipped (last attempt ${now.difference(_lastReconnectAttempt!).inSeconds}s ago, min ${_reconnectDebounceWindow.inSeconds}s)');
+      return;
+    }
+    _lastReconnectAttempt = now;
 
     // Circuit breaker: Skip connection if placeholder hostname detected
     if (_wsUrl.contains('your.server')) {
@@ -161,7 +179,17 @@ class WebSocketManager extends Notifier<WebSocketState> {
             if (!_isFullyConnected) {
               _isFullyConnected = true;
               state = state.copyWith(status: WebSocketStatus.connected);
-              _log('[WS] ✅ Connection confirmed (first message received)');
+              
+              // 🎯 PHASE 2: Track successful connection for fallback suppression
+              _lastSuccessfulConnection = DateTime.now();
+              _successfulConnectionCount++;
+              
+              final reconnectTime = _lastReconnectAttempt != null 
+                  ? DateTime.now().difference(_lastReconnectAttempt!)
+                  : Duration.zero;
+              
+              _log('[WS] ✅ Connection confirmed (first message received) - reconnect took ${reconnectTime.inMilliseconds}ms');
+              
               // Dev diagnostics: count successful (re)connects in debug
               if (kDebugMode) {
                 DevDiagnostics.instance.onWsConnected();
@@ -316,6 +344,34 @@ class WebSocketManager extends Notifier<WebSocketState> {
     _socket?.close();
     _isFullyConnected = false;
     state = state.copyWith(status: WebSocketStatus.disconnected);
+  }
+
+  /// 🎯 PHASE 2: Check if REST fallback should be suppressed
+  /// Returns true if WebSocket reconnected successfully within the suppression window
+  bool shouldSuppressFallback() {
+    if (_lastSuccessfulConnection == null) return false;
+    
+    final timeSinceReconnect = DateTime.now().difference(_lastSuccessfulConnection!);
+    final shouldSuppress = timeSinceReconnect < _fallbackSuppressionWindow;
+    
+    if (shouldSuppress && kDebugMode) {
+      _log('[WS][FALLBACK-SUPPRESS] ✋ Suppressing REST fallback (reconnected ${timeSinceReconnect.inMilliseconds}ms ago)');
+    }
+    
+    return shouldSuppress;
+  }
+
+  /// 🎯 PHASE 2: Get connection stability metrics
+  Map<String, dynamic> getConnectionMetrics() {
+    return {
+      'successfulConnections': _successfulConnectionCount,
+      'currentRetryCount': _retryCount,
+      'isFullyConnected': _isFullyConnected,
+      'lastSuccessfulConnection': _lastSuccessfulConnection?.toIso8601String(),
+      'timeSinceLastSuccess': _lastSuccessfulConnection != null
+          ? DateTime.now().difference(_lastSuccessfulConnection!).inSeconds
+          : null,
+    };
   }
 
   void _dispose() {

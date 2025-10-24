@@ -57,6 +57,7 @@ dependencies:
   objectbox: ^4.3.1
   objectbox_flutter_libs: ^4.3.1
   package_info_plus: ^9.0.0
+  path_provider: any
   shared_preferences: ^2.2.3
   timezone: ^0.9.4
   url_launcher: ^6.3.0

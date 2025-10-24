@@ -18,6 +18,7 @@ class DevicesNotifier
   Future<void> load() async {
     try {
       state = const AsyncValue.loading();
+      // 🎯 PHASE 2: Use throttled cache
       final devices = await _service.fetchDevices();
       state = AsyncValue.data(devices);
     } catch (e, st) {
@@ -28,10 +29,22 @@ class DevicesNotifier
   /// Clear devices data (useful when logging out or switching users)
   void clear() {
     state = const AsyncValue.loading();
+    // 🎯 PHASE 2: Clear cache on logout
+    _service.clearCache();
   }
 
-  /// Force refresh devices for new user
+  /// Force refresh devices (bypasses cache)
   Future<void> refresh() async {
-    await load();
+    try {
+      state = const AsyncValue.loading();
+      // 🎯 PHASE 2: Force refresh bypasses cache
+      final devices = await _service.fetchDevices(forceRefresh: true);
+      state = AsyncValue.data(devices);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
   }
+  
+  /// 🎯 PHASE 2: Get cache statistics
+  Map<String, dynamic> getCacheStats() => _service.getCacheStats();
 }

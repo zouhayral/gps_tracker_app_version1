@@ -7,7 +7,10 @@ void main() {
     late EnhancedMarkerCache cache;
 
     setUp(() {
-      cache = EnhancedMarkerCache();
+      // Use singleton instance
+      cache = EnhancedMarkerCache.instance;
+      // Clear any existing state before each test
+      cache.clear();
     });
 
     tearDown(() {

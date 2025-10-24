@@ -1,18 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Cookie;
 
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/dao/trip_snapshots_dao.dart';
 import 'package:my_app_gps/core/database/dao/trips_dao.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
-import 'dart:io' show Cookie;
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:my_app_gps/data/models/position.dart' as model;
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/data/models/trip_aggregate.dart';
 import 'package:my_app_gps/data/models/trip_snapshot.dart';
+import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
+import 'package:my_app_gps/features/trips/models/trip_filter.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 
 /// Top-level function for isolate-based trip parsing with JSON decoding
@@ -93,12 +95,21 @@ class TripRepository {
   // Cache TTL: 2 minutes
   static const Duration _cacheTTL = Duration(minutes: 2);
 
+  // TASK 4: Last used filter for prefetch on resume
+  TripFilter? _lastUsedFilter;
+
   Future<List<Trip>> fetchTrips({
     required int deviceId,
     required DateTime from,
     required DateTime to,
     CancelToken? cancelToken,
+    TripFilter? filter, // TASK 4: Track filter for prefetch
   }) async {
+    // TASK 4: Store last used filter for prefetch
+    if (filter != null) {
+      _lastUsedFilter = filter;
+    }
+
     final cacheKey = _buildCacheKey(deviceId, from, to);
     final sw = Stopwatch()..start();
 
@@ -124,7 +135,33 @@ class TripRepository {
       to: to,
       cancelToken: cancelToken,
       attempts: 3,
-    ).then((trips) {
+    ).then((trips) async {
+      // TASK 4: Smart retry for empty responses on active devices
+      if (trips.isEmpty && await _isDeviceOnline(deviceId)) {
+        debugPrint('[TRIP][RETRY] Empty response for online device $deviceId — retrying in 2s');
+        await Future<void>.delayed(const Duration(seconds: 2));
+        
+        // Single retry attempt
+        try {
+          final retryTrips = await _fetchTripsNetwork(
+            deviceId: deviceId,
+            from: from,
+            to: to,
+            cancelToken: cancelToken,
+          );
+          
+          if (retryTrips.isNotEmpty) {
+            debugPrint('[TRIP][RETRY] ✅ Retry successful: ${retryTrips.length} trips');
+            trips = retryTrips;
+          } else {
+            debugPrint('[TRIP][RETRY] Still empty after retry');
+          }
+        } catch (e) {
+          debugPrint('[TRIP][RETRY] ⚠️ Retry failed: $e');
+          // Continue with empty list
+        }
+      }
+      
       sw.stop();
       debugPrint('[TripRepository][TIMING] ⏱️ Fetch completed in ${sw.elapsedMilliseconds}ms');
       
@@ -164,13 +201,100 @@ class TripRepository {
     return '$deviceId|${_toUtcIso(from)}|${_toUtcIso(to)}';
   }
 
+  /// TASK 4: Check if device is online
+  /// Returns true if device status is 'online' and last update is recent (< 5 min)
+  Future<bool> _isDeviceOnline(int deviceId) async {
+    try {
+      final devicesAsync = _ref.read(devicesNotifierProvider);
+      final devices = devicesAsync.asData?.value ?? <Map<String, dynamic>>[];
+      
+      final device = devices.firstWhere(
+        (Map<String, dynamic> d) => d['id'] == deviceId,
+        orElse: () => <String, dynamic>{},
+      );
+      
+      if (device.keys.isEmpty) return false;
+      
+      // Check status field
+      final status = (device['status']?.toString() ?? '').toLowerCase();
+      if (status != 'online') return false;
+      
+      // Check last update is recent (< 5 minutes)
+      final lastUpdate = device['lastUpdate'];
+      if (lastUpdate is String) {
+        final lastUpdateTime = DateTime.tryParse(lastUpdate);
+        if (lastUpdateTime != null) {
+          final age = DateTime.now().toUtc().difference(lastUpdateTime.toUtc());
+          return age < const Duration(minutes: 5);
+        }
+      }
+      
+      return true; // Default to online if status says so
+    } catch (e) {
+      debugPrint('[TRIP][ONLINE CHECK] ⚠️ Error checking device status: $e');
+      return false;
+    }
+  }
+
+  /// TASK 4: Prefetch trips for last used filter
+  /// Called on app resume to warm cache with fresh data
+  Future<void> prefetchLastUsedFilter() async {
+    if (_lastUsedFilter == null) {
+      debugPrint('[TRIP][PREFETCH] No last filter stored, skipping prefetch');
+      return;
+    }
+    
+    final filter = _lastUsedFilter!;
+    debugPrint('[TRIP][PREFETCH] Background prefetch for last filter: ${filter.deviceIds.length} devices');
+    
+    try {
+      // Prefetch for each device in the filter
+      final deviceIds = filter.deviceIds.isEmpty 
+          ? await _getAllDeviceIds() 
+          : filter.deviceIds;
+      
+      for (final deviceId in deviceIds) {
+        // Fire and forget - don't block
+        unawaited(
+          fetchTrips(
+            deviceId: deviceId,
+            from: filter.from,
+            to: filter.to,
+            filter: filter,
+          ).catchError((Object e) {
+            debugPrint('[TRIP][PREFETCH] ⚠️ Prefetch failed for device $deviceId: $e');
+            return <Trip>[]; // Return empty list on error
+          }),
+        );
+      }
+      
+      debugPrint('[TRIP][PREFETCH] ✅ Started background prefetch for ${deviceIds.length} devices');
+    } catch (e) {
+      debugPrint('[TRIP][PREFETCH] ❌ Prefetch error: $e');
+    }
+  }
+
+  /// Get all device IDs for prefetch
+  Future<List<int>> _getAllDeviceIds() async {
+    try {
+      final devicesAsync = _ref.read(devicesNotifierProvider);
+      final devices = devicesAsync.asData?.value ?? <Map<String, dynamic>>[];
+      return devices
+          .where((Map<String, dynamic> d) => d['id'] != null)
+          .map((Map<String, dynamic> d) => d['id'] as int)
+          .toList();
+    } catch (e) {
+      debugPrint('[TRIP][PREFETCH] ⚠️ Error getting device IDs: $e');
+      return [];
+    }
+  }
+
   /// Fetch trips with exponential backoff retry
   Future<List<Trip>> _fetchTripsWithRetry({
     required int deviceId,
     required DateTime from,
     required DateTime to,
-    CancelToken? cancelToken,
-    required int attempts,
+    required int attempts, CancelToken? cancelToken,
   }) async {
     var attempt = 0;
     var delay = const Duration(seconds: 1);
@@ -214,7 +338,7 @@ class TripRepository {
     } catch (_) {}
 
     final dio = _ref.read(dioProvider);
-    final url = '/api/reports/trips';
+    const url = '/api/reports/trips';
     // Normalize all query parameters to strings to prevent Uri/encoder issues
     final params = <String, String>{
       'deviceId': deviceId.toString(),
@@ -228,20 +352,20 @@ class TripRepository {
     final resolved = Uri.parse(base)
       .resolve(Uri(path: url, queryParameters: params).toString());
     debugPrint('[TripRepository] 🔍 fetchTrips GET deviceId=${params['deviceId']} from=${params['from']} to=${params['to']}');
-    debugPrint('[TripRepository] 🔧 Query=${params.toString()}');
+    debugPrint('[TripRepository] 🔧 Query=$params');
       debugPrint('[TripRepository] 🌐 BaseURL=$base');
       // Peek cookie jar for Cookie header presence
       try {
         final jar = _ref.read(authCookieJarProvider);
         final cookieUri = Uri(scheme: resolved.scheme, host: resolved.host, port: resolved.hasPort ? resolved.port : null, path: '/');
-  final List<Cookie> cookies = await jar.loadForRequest(cookieUri);
+  final cookies = await jar.loadForRequest(cookieUri);
   final js = cookies.firstWhere((Cookie c) => c.name.toUpperCase() == 'JSESSIONID', orElse: () => Cookie('NONE', ''));
         final hasJs = js.name.toUpperCase() == 'JSESSIONID';
-        final preview = hasJs ? (js.value.isNotEmpty ? '${js.value.substring(0, (js.value.length).clamp(0, 8))}…' : '<empty>') : '<none>';
-        debugPrint('[TripRepository] 🍪 Cookie JSESSIONID: ${hasJs ? 'present' : 'missing'} (${preview})');
+        final preview = hasJs ? (js.value.isNotEmpty ? '${js.value.substring(0, js.value.length.clamp(0, 8))}…' : '<empty>') : '<none>';
+        debugPrint('[TripRepository] 🍪 Cookie JSESSIONID: ${hasJs ? 'present' : 'missing'} ($preview)');
       } catch (_) {}
 
-      debugPrint('[TripRepository] ⇢ URL=${resolved.toString()}');
+      debugPrint('[TripRepository] ⇢ URL=$resolved');
       final response = await dio.get<dynamic>(
         url,
         queryParameters: params,
@@ -258,7 +382,7 @@ class TripRepository {
 
       if (response.statusCode == 200) {
         final contentType = response.headers.value('content-type') ?? '';
-        var data = response.data;
+        final data = response.data;
         
         // If server returned text, parse it in background if it looks like JSON
         if (data is String) {
@@ -375,7 +499,7 @@ class TripRepository {
     required DateTime to,
     CancelToken? cancelToken,
   }) async {
-    final path = '/api/reports/trips/generate';
+    const path = '/api/reports/trips/generate';
     final body = {
       'deviceIds': [deviceId],
       'from': _toUtcIso(from),
@@ -444,12 +568,27 @@ class TripRepository {
 
   /// Placeholder for retention policy: delete trips older than 30 days from local cache.
   /// Remove expired entries from memory cache
+  /// OPTIMIZATION: Skip cleanup if no expired entries exist
   void cleanupExpiredCache() {
+    // OPTIMIZATION: Guard clause - check for expired entries before cleanup
+    final expired = _cache.entries
+        .where((entry) => entry.value.isExpired(_cacheTTL))
+        .toList();
+    
+    if (expired.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('[TripRepository][CLEANUP][SKIPPED] No expired entries (${_cache.length} cached)');
+      }
+      return;
+    }
+    
+    // Proceed with cleanup
     final before = _cache.length;
     _cache.removeWhere((key, cached) => cached.isExpired(_cacheTTL));
     final after = _cache.length;
-    if (before != after) {
-      debugPrint('[TripRepository][CACHE CLEANUP] 🧹 Removed ${before - after} expired entries (${after} remain)');
+    
+    if (kDebugMode) {
+      debugPrint('[TripRepository][CLEANUP] 🧹 Removed ${before - after} expired entries ($after remain)');
     }
   }
 
@@ -587,14 +726,14 @@ class TripRepository {
       final daily = await tripsDao.getAggregatesByDay(monthStart, monthEnd);
       if (daily.isEmpty) return;
       final totals = TripAggregate(
-        totalDistanceKm: daily.values.fold(0.0, (double a, b) => a + b.totalDistanceKm),
+        totalDistanceKm: daily.values.fold<double>(0, (a, b) => a + b.totalDistanceKm),
         totalDurationHrs:
-            daily.values.fold(0.0, (double a, b) => a + b.totalDurationHrs),
+            daily.values.fold<double>(0, (a, b) => a + b.totalDurationHrs),
         avgSpeedKph: daily.values.isEmpty
             ? 0.0
-            : daily.values.fold(0.0, (double a, b) => a + b.avgSpeedKph) /
+            : daily.values.fold<double>(0, (a, b) => a + b.avgSpeedKph) /
                 daily.length,
-        tripCount: daily.values.fold(0, (int a, b) => a + b.tripCount),
+        tripCount: daily.values.fold<int>(0, (a, b) => a + b.tripCount),
       );
       await snapshotsDao
           .putSnapshot(TripSnapshot.fromAggregate(monthKey, totals));

@@ -287,6 +287,38 @@ class WebSocketManagerEnhanced extends Notifier<WebSocketState> {
     _log('[WS] Disposed');
   }
 
+  /// 🎯 PHASE 2: Check if REST fallback should be suppressed
+  /// Returns true if WebSocket reconnected successfully within 3 seconds
+  bool shouldSuppressFallback() {
+    if (_lastSuccessfulConnect == null) return false;
+    
+    final timeSinceReconnect = DateTime.now().difference(_lastSuccessfulConnect!);
+    const suppressionWindow = Duration(seconds: 3);
+    final shouldSuppress = timeSinceReconnect < suppressionWindow;
+    
+    if (shouldSuppress) {
+      _log('[WS][FALLBACK-SUPPRESS] ✋ Suppressing REST fallback (reconnected ${timeSinceReconnect.inMilliseconds}ms ago)');
+    }
+    
+    return shouldSuppress;
+  }
+
+  /// 🎯 PHASE 2: Get connection stability metrics
+  Map<String, dynamic> getConnectionMetrics() {
+    return {
+      'retryCount': _retryCount,
+      'isConnected': isConnected,
+      'lastSuccessfulConnect': _lastSuccessfulConnect?.toIso8601String(),
+      'timeSinceLastSuccess': _lastSuccessfulConnect != null
+          ? DateTime.now().difference(_lastSuccessfulConnect!).inSeconds
+          : null,
+      'lastEventAt': _lastEventAt?.toIso8601String(),
+      'timeSinceLastEvent': _lastEventAt != null
+          ? DateTime.now().difference(_lastEventAt!).inSeconds
+          : null,
+    };
+  }
+
   void _log(String msg) {
     if (kDebugMode) {
       debugPrint('${DateTime.now().toIso8601String()} $msg');

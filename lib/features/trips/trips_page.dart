@@ -397,6 +397,10 @@ class _TripsPageState extends ConsumerState<TripsPage> {
       );
     }
 
+    // Get devices for name lookup
+    final devicesAsync = ref.watch(devicesNotifierProvider);
+    final devices = devicesAsync.hasValue ? devicesAsync.value! : <Map<String, dynamic>>[];
+
     return RefreshIndicator(
       onRefresh: () async {
         // Invalidate all relevant providers
@@ -436,10 +440,24 @@ class _TripsPageState extends ConsumerState<TripsPage> {
           }
 
           final t = trips[index - 1];
-          return _buildModernTripCard(context, t);
+          final deviceName = _getDeviceName(devices, t.deviceId);
+          return _buildModernTripCard(context, t, deviceName);
         },
       ),
     );
+  }
+
+  // Helper method to get device name from device ID
+  String _getDeviceName(List<Map<String, dynamic>> devices, int deviceId) {
+    try {
+      final device = devices.firstWhere(
+        (d) => d['id'] == deviceId,
+        orElse: () => <String, dynamic>{},
+      );
+      return device['name'] as String? ?? 'Device $deviceId';
+    } catch (e) {
+      return 'Device $deviceId';
+    }
   }
 
   Widget _buildSummaryCard(
@@ -557,7 +575,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     );
   }
 
-  Widget _buildModernTripCard(BuildContext context, Trip trip) {
+  Widget _buildModernTripCard(BuildContext context, Trip trip, String deviceName) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
@@ -595,6 +613,40 @@ class _TripsPageState extends ConsumerState<TripsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Device name header
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.directions_car,
+                            size: 14,
+                            color: Theme.of(context).colorScheme.onSecondaryContainer,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            deviceName,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 // Date and time row
                 Row(
                   children: [

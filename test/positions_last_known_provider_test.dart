@@ -25,7 +25,9 @@ class _FakeService extends PositionsService {
   final Map<int, Position> map;
   @override
   Future<Map<int, Position>> latestForDevices(
-      List<Map<String, dynamic>> _,) async {
+    List<Map<String, dynamic>> _, {
+    bool forceRefresh = false,
+  }) async {
     // Simulate network latency so that DAO prefill is emitted first in tests.
     await Future<void>.delayed(const Duration(milliseconds: 50));
     return map;
@@ -139,5 +141,8 @@ class DevicesNotifierFake extends DevicesNotifier {
 class _DeviceServiceFake extends DeviceService {
   _DeviceServiceFake() : super(Dio());
   @override
-  Future<List<Map<String, dynamic>>> fetchDevices() async => [];
+  Future<List<Map<String, dynamic>>> fetchDevices({
+    bool forceRefresh = false,
+  }) async =>
+      [];
 }
