@@ -156,7 +156,9 @@ class ForcedLocalCacheInterceptor extends Interceptor {
         final text = jsonEncode(data);
         return jsonDecode(text);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ForcedCacheInterceptor] ⚠️ Failed to deep clone data: $e');
+    }
     return data;
   }
 

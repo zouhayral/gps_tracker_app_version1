@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart';
 
 Dio createPlatformDio(BaseOptions options, {required bool allowInsecure}) {
   final dio = Dio(options);
@@ -12,7 +13,9 @@ Dio createPlatformDio(BaseOptions options, {required bool allowInsecure}) {
         client.badCertificateCallback = (cert, host, port) => true; // DEV ONLY
         return client;
       };
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[PlatformDio] ⚠️ Failed to configure insecure certificate handler: $e');
+    }
   }
   return dio;
 }
@@ -24,7 +27,9 @@ String adjustBaseForEmulator(String rawBase) {
         (uri.host == 'localhost' || uri.host == '127.0.0.1')) {
       return rawBase.replaceFirst(uri.host, '10.0.2.2');
     }
-  } catch (_) {}
+  } catch (e) {
+    debugPrint('[PlatformDio] ⚠️ Failed to adjust base URL for emulator: $e');
+  }
   return rawBase;
 }
 

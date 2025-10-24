@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -357,7 +358,9 @@ class AuthService {
       try {
         // Also clear cookies from the cookie jar to remove any residual session state
         await _cookieJar.deleteAll();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[AuthService] ⚠️ Failed to clear cookie jar during logout: $e');
+      }
     }
   }
 

@@ -144,7 +144,9 @@ class _DeviceTile extends ConsumerWidget {
     // Rebuild log for profiling - schedule after frame to avoid side-effects
     try {
       ref.scheduleLogRebuild('DeviceTile($id)');
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[DeviceTile] ⚠️ Failed to schedule rebuild log: $e');
+    }
     final d = ref.watch(deviceByIdProvider(id));
     if (d == null) return const SizedBox.shrink();
     // debugPrint('[REBUILD] DeviceTile($id) rebuilt');

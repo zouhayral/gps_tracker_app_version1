@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:my_app_gps/core/network/forced_cache_interceptor.dart';
@@ -225,7 +226,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     try {
       await _service.logout();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AuthNotifier] ⚠️ Error during logout service call: $e');
+    }
     String? lastEmail;
     final current = state;
     if (current is AuthAuthenticated) lastEmail = current.email;

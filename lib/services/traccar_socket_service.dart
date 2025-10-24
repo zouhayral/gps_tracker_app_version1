@@ -244,7 +244,9 @@ class TraccarSocketService {
     _reconnectTimer = null;
     try {
       await _channel?.sink.close(ws_status.normalClosure);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[TraccarSocket] ⚠️ Error closing WebSocket channel: $e');
+    }
     _channel = null;
     await _controller?.close();
     _controller = null;

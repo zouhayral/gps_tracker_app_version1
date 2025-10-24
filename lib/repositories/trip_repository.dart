@@ -335,7 +335,9 @@ class TripRepository {
     // Ensure cookie is present in jar (silent restore)
     try {
       await _ref.read(authServiceProvider).rehydrateSessionCookie();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[TripRepository] ⚠️ Failed to rehydrate session cookie: $e');
+    }
 
     final dio = _ref.read(dioProvider);
     const url = '/api/reports/trips';
@@ -363,7 +365,9 @@ class TripRepository {
         final hasJs = js.name.toUpperCase() == 'JSESSIONID';
         final preview = hasJs ? (js.value.isNotEmpty ? '${js.value.substring(0, js.value.length.clamp(0, 8))}…' : '<empty>') : '<none>';
         debugPrint('[TripRepository] 🍪 Cookie JSESSIONID: ${hasJs ? 'present' : 'missing'} ($preview)');
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[TripRepository] ⚠️ Failed to peek cookie jar: $e');
+      }
 
       debugPrint('[TripRepository] ⇢ URL=$resolved');
       final response = await dio.get<dynamic>(
@@ -443,7 +447,9 @@ class TripRepository {
             to: to,
             cancelToken: cancelToken,
           );
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[TripRepository] ⚠️ Background parsing fallback failed: $e');
+        }
       }
       rethrow;
     } catch (e, st) {

@@ -155,7 +155,9 @@ class HttpCacheInterceptor extends Interceptor {
         final text = jsonEncode(data);
         return jsonDecode(text);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[HttpCacheInterceptor] ⚠️ Failed to deep clone data: $e');
+    }
     // Fallback: return as-is (caller should treat as read-only)
     return data;
   }

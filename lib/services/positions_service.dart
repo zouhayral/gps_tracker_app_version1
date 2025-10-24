@@ -93,7 +93,9 @@ class PositionsService {
         var bytes = 0;
         try {
           bytes = utf8.encode(jsonEncode(list)).length;
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[PositionsService] ⚠️ Failed to calculate payload bytes: $e');
+        }
         final step = HistoryProbeStep(
           windowHours: hours,
           from: from,

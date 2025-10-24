@@ -720,7 +720,9 @@ class VehicleDataRepository {
           // Avoid a hard dependency in release builds
           // ignore: unnecessary_statements
           DevDiagnostics.instance.onBackfillApplied(allMissed.length);
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[VehicleRepo] ⚠️ DevDiagnostics.onBackfillApplied failed: $e');
+        }
       }
     } catch (e) {
       if (kDebugMode) {

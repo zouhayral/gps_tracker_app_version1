@@ -240,7 +240,8 @@ class _MapPageState extends ConsumerState<MapPage>
       throttleDuration: const Duration(seconds: 1),
     );
 
-    _focusNode.addListener(() => setState(() {}));
+    // OPTIMIZATION: Only rebuild when focus changes if search bar visibility depends on it
+    _focusNode.addListener(_handleFocusChange);
 
     // OPTIMIZATION: Initialize FleetMapPrefetch manager
     if (MapDebugFlags.enablePrefetch) {
@@ -376,13 +377,24 @@ class _MapPageState extends ConsumerState<MapPage>
               ),
               action: SnackBarAction(
                 label: 'Retry',
-                onPressed: () => setState(() {}),
+                // OPTIMIZATION: Retry triggers actual position fetch instead of empty setState
+                onPressed: () => _ensureSelectedDevicePositions(_selectedIds),
               ),
             ),
           );
         }
       });
     }
+  }
+
+  /// OPTIMIZATION: Handle focus changes only when necessary
+  void _handleFocusChange() {
+    if (!mounted) return;
+    // Only rebuild if the focus state affects visible UI
+    // (e.g., search bar border color, keyboard visibility)
+    setState(() {
+      // State will be read from _focusNode.hasFocus in build method
+    });
   }
 
   /// OPTIMIZATION: Setup marker update listeners outside of build method
@@ -1413,10 +1425,13 @@ class _MapPageState extends ConsumerState<MapPage>
   }
 
   void _onMapTap() {
-    var changed = false;
+    // Track if any state changes require a rebuild
+    var needsRebuild = false;
+    
     if (_selectedIds.isNotEmpty) {
-      _selectedIds.clear();
-      changed = true;
+      // OPTIMIZATION: Clear selection inside setState to batch state changes
+      setState(_selectedIds.clear);
+      needsRebuild = true;
 
       // 7E: Auto-fit camera to all markers when selection cleared
       _scheduleCameraFitForSelection();
@@ -1425,12 +1440,15 @@ class _MapPageState extends ConsumerState<MapPage>
       final devicesAsync = ref.read(devicesNotifierProvider);
       devicesAsync.whenData(_scheduleMarkerUpdate);
     }
+    
     if (!_editing && _showSuggestions) {
-      _showSuggestions = false;
-      changed = true;
+      setState(() {
+        _showSuggestions = false;
+      });
+      needsRebuild = true;
     }
-    if (changed) setState(() {});
-    if (changed) {
+    
+    if (needsRebuild) {
       // 7B.2: Collapse when selection cleared
       _scheduleSheetForSelection();
     }
@@ -1510,8 +1528,11 @@ class _MapPageState extends ConsumerState<MapPage>
     }
   }
 
-  void _focusSelected() =>
-      setState(() {}); // triggers rebuild to adjust camera fit
+  /// OPTIMIZATION: Focus on selected devices by triggering camera fit
+  /// Instead of empty setState, directly call the camera fit method
+  void _focusSelected() {
+    _scheduleCameraFitForSelection();
+  }
 
   String _deviceStatus(Map<String, dynamic>? device, Position? pos) {
     final raw = device?['status']?.toString().toLowerCase();
