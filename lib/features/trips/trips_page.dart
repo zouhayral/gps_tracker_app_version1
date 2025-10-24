@@ -136,7 +136,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     final now = DateTime.now();
     setState(() {
       _activeFilter = TripFilter(
-        deviceIds: [], // Empty = all devices
+        deviceIds: const [], // Empty = all devices
         from: now.subtract(const Duration(days: 1)),
         to: now,
       );
@@ -203,7 +203,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
   // Active filter chip showing current selection
   Widget _buildActiveFilterChip(TripFilter filter) {
     final deviceCount = filter.isAllDevices ? 'All Devices' : '${filter.deviceIds.length} Device${filter.deviceIds.length > 1 ? 's' : ''}';
-    final dateRange = DateFormat('MMM d').format(filter.from) + ' - ' + DateFormat('MMM d').format(filter.to);
+    final dateRange = '${DateFormat('MMM d').format(filter.from)} - ${DateFormat('MMM d').format(filter.to)}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

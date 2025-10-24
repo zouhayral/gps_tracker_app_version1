@@ -409,8 +409,6 @@ class LifecycleAwareTripsNotifier
 
         final initialState = TripsState(
           trips: cached,
-          isLoading: false,
-          hasError: false,
           lastUpdated: DateTime.now(),
         );
 
@@ -431,8 +429,6 @@ class LifecycleAwareTripsNotifier
 
       return TripsState(
         trips: trips,
-        isLoading: false,
-        hasError: false,
         lastUpdated: DateTime.now(),
       );
     } catch (e, st) {
@@ -441,7 +437,6 @@ class LifecycleAwareTripsNotifier
       debugPrint(st.toString());
 
       return TripsState(
-        trips: const [],
         isLoading: false,
         hasError: true,
         errorMessage: e.toString(),
@@ -563,8 +558,6 @@ class LifecycleAwareTripsNotifier
           state = AsyncData(
             TripsState(
               trips: trips,
-              isLoading: false,
-              hasError: false,
               lastUpdated: DateTime.now(),
             ),
           );
@@ -574,7 +567,7 @@ class LifecycleAwareTripsNotifier
           state = AsyncData(previousState.copyWith(
             isLoading: false,
             lastUpdated: DateTime.now(),
-          ));
+          ),);
         }
       } catch (e) {
         sw.stop();
@@ -595,7 +588,6 @@ class LifecycleAwareTripsNotifier
         } else {
           state = AsyncData(
             TripsState(
-              trips: const [],
               isLoading: false,
               hasError: true,
               errorMessage: e.toString(),
@@ -627,7 +619,7 @@ class LifecycleAwareTripsNotifier
   /// Retry last failed fetch
   Future<void> retry() async {
     debugPrint('[TripsProvider] 🔄 Retrying failed fetch...');
-    await refresh(silent: false);
+    await refresh();
   }
 }
 

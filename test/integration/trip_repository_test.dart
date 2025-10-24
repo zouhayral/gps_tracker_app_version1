@@ -29,7 +29,7 @@ class _MockAdapter implements HttpClientAdapter {
 }
 
 class _FakeAuthService extends AuthService {
-  _FakeAuthService(Dio dio, CookieJar jar, Ref ref) : super(dio, jar, ref);
+  _FakeAuthService(super.dio, super.jar, super.ref);
 
   @override
   Future<void> rehydrateSessionCookie() async {
@@ -91,7 +91,7 @@ void main() {
         dioProvider.overrideWithValue(dio),
         authCookieJarProvider.overrideWithValue(jar),
         authServiceProvider.overrideWith((ref) => _FakeAuthService(dio, jar, ref)),
-      ]);
+      ],);
 
       final repo = container.read(tripRepositoryProvider);
       final from = DateTime.utc(2025, 10, 22, 10, 50, 9);
@@ -123,7 +123,7 @@ void main() {
         dioProvider.overrideWithValue(dio),
         authCookieJarProvider.overrideWithValue(jar),
         authServiceProvider.overrideWith((ref) => _FakeAuthService(dio, jar, ref)),
-      ]);
+      ],);
 
       final repo = container.read(tripRepositoryProvider);
       final now = DateTime.now().toUtc();
@@ -147,7 +147,7 @@ void main() {
         dioProvider.overrideWithValue(dio),
         authCookieJarProvider.overrideWithValue(jar),
         authServiceProvider.overrideWith((ref) => _FakeAuthService(dio, jar, ref)),
-      ]);
+      ],);
 
       final repo = container.read(tripRepositoryProvider);
       final now = DateTime.now().toUtc();
@@ -171,7 +171,7 @@ void main() {
         dioProvider.overrideWithValue(dio),
         authCookieJarProvider.overrideWithValue(jar),
         authServiceProvider.overrideWith((ref) => _FakeAuthService(dio, jar, ref)),
-      ]);
+      ],);
 
       final repo = container.read(tripRepositoryProvider);
       final now = DateTime.now().toUtc();

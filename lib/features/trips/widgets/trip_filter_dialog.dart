@@ -205,9 +205,9 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                             color: Theme.of(context).colorScheme.primary,
                           ),
                           const SizedBox(width: 12),
-                          Text(
+                          const Text(
                             'All Devices',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),

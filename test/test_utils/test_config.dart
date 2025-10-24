@@ -28,10 +28,10 @@ import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
 // ObjectBox imports to check availability
 import 'package:my_app_gps/objectbox.g.dart';
-import 'package:my_app_gps/services/websocket_manager.dart';
-import 'package:my_app_gps/services/websocket_manager_enhanced.dart' as ws_enhanced;
 import 'package:my_app_gps/services/notification/local_notification_service.dart'
   as local_notif;
+import 'package:my_app_gps/services/websocket_manager.dart';
+import 'package:my_app_gps/services/websocket_manager_enhanced.dart' as ws_enhanced;
 // Including this ensures native libs are bundled for Flutter tests when available.
 // ignore: unused_import
 import 'package:objectbox_flutter_libs/objectbox_flutter_libs.dart';

@@ -39,6 +39,11 @@ import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart'
 import 'package:my_app_gps/features/map/view/flutter_map_adapter.dart';
 import 'package:my_app_gps/features/map/view/map_debug_overlay.dart';
 import 'package:my_app_gps/features/map/view/map_page_lifecycle_mixin.dart';
+import 'package:my_app_gps/features/map/widgets/map_action_button.dart';
+import 'package:my_app_gps/features/map/widgets/map_bottom_sheet.dart';
+import 'package:my_app_gps/features/map/widgets/map_info_boxes.dart';
+import 'package:my_app_gps/features/map/widgets/map_overlays.dart';
+import 'package:my_app_gps/features/map/widgets/map_search_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
 import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
@@ -84,35 +89,6 @@ Map<int, Position> useDebouncedPositions(
     error: (_, __) {},
   );
   return latest;
-}
-
-// Simple rebuild badge for profiling; increments an internal counter each build.
-class _RebuildBadge extends StatefulWidget {
-  const _RebuildBadge({required this.label});
-  final String label;
-  @override
-  State<_RebuildBadge> createState() => _RebuildBadgeState();
-}
-
-class _RebuildBadgeState extends State<_RebuildBadge> {
-  int _count = 0;
-  @override
-  Widget build(BuildContext context) {
-    _count++;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Text(
-          '${widget.label}: $_count',
-          style: const TextStyle(color: Colors.white, fontSize: 12),
-        ),
-      ),
-    );
-  }
 }
 
 class MapPage extends ConsumerStatefulWidget {
@@ -194,8 +170,8 @@ class _MapPageState extends ConsumerState<MapPage>
 
   // Instant sheet has no controller; no fields required
   // 7B.2: Instant sheet control key + debounce
-  final GlobalKey<_InstantInfoSheetState> _sheetKey =
-      GlobalKey<_InstantInfoSheetState>();
+  final GlobalKey<MapBottomSheetState> _sheetKey =
+      GlobalKey<MapBottomSheetState>();
   Timer? _sheetDebounce;
   String? _sheetLastAction; // 'expand' | 'collapse'
   
@@ -1576,71 +1552,6 @@ class _MapPageState extends ConsumerState<MapPage>
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
-  /// CONNECTIVITY: Build WebSocket connection status banner
-  Widget _buildConnectivityBanner() {
-    return Positioned(
-      top: 60,
-      left: 16,
-      right: 16,
-      child: AnimatedOpacity(
-        opacity: _showConnectivityBanner ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 300),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Live updates paused • Reconnecting...',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() => _showConnectivityBanner = false);
-                },
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 28),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text(
-                  'Dismiss',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   /// TRIPS: Build data freshness indicator banner
   Widget _buildTripsRefreshBanner() {
     final now = DateTime.now();
@@ -2153,7 +2064,17 @@ class _MapPageState extends ConsumerState<MapPage>
                   const NotificationBanner(),
                   // CONNECTIVITY: WebSocket connection status banner
                   if (_showConnectivityBanner)
-                    _buildConnectivityBanner(),
+                    Positioned(
+                      top: 60,
+                      left: 16,
+                      right: 16,
+                      child: MapConnectivityBanner(
+                        visible: _showConnectivityBanner,
+                        onDismiss: () {
+                          setState(() => _showConnectivityBanner = false);
+                        },
+                      ),
+                    ),
                   // TRIPS: Data freshness indicator banner
                   if (_tripsLastRefreshTime != null)
                     _buildTripsRefreshBanner(),
@@ -2216,7 +2137,7 @@ class _MapPageState extends ConsumerState<MapPage>
                   const Positioned(
                     top: 56,
                     left: 16,
-                    child: _RebuildBadge(label: 'MapPage'),
+                    child: MapRebuildBadge(label: 'MapPage'),
                   ),
                 // Search + suggestions
                 Positioned(
@@ -2226,7 +2147,7 @@ class _MapPageState extends ConsumerState<MapPage>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _SearchBar(
+                      MapSearchBar(
                         controller: _searchCtrl,
                         focusNode: _focusNode,
                         editing: _editing,
@@ -2445,7 +2366,7 @@ class _MapPageState extends ConsumerState<MapPage>
                   right: 16,
                   child: Column(
                     children: [
-                      _ActionButton(
+                      MapActionButton(
                         icon: Icons.refresh,
                         tooltip: 'Refresh data',
                         isLoading: _isRefreshing,
@@ -2505,7 +2426,7 @@ class _MapPageState extends ConsumerState<MapPage>
                         },
                       ),
                       const SizedBox(height: 8),
-                      _ActionButton(
+                      MapActionButton(
                         icon: Icons.center_focus_strong,
                         tooltip: _selectedIds.isNotEmpty
                             ? 'Auto-zoom to selected'
@@ -2520,7 +2441,7 @@ class _MapPageState extends ConsumerState<MapPage>
                       Builder(
                         builder: (context) {
                           final activeLayer = ref.watch(mapTileSourceProvider);
-                          return _ActionButton(
+                          return MapActionButton(
                             icon: Icons.layers,
                             tooltip: 'Map layer: ${activeLayer.name}',
                             onTap: () {
@@ -2532,7 +2453,7 @@ class _MapPageState extends ConsumerState<MapPage>
                       // Open in Maps button (only shown when single device selected)
                       if (_selectedIds.length == 1) ...[
                         const SizedBox(height: 8),
-                        _ActionButton(
+                        MapActionButton(
                           icon: Icons.open_in_new,
                           tooltip: 'Open in Maps',
                           onTap: _openInMaps,
@@ -2546,7 +2467,7 @@ class _MapPageState extends ConsumerState<MapPage>
                   top: 0,
                   left: 0,
                   right: 0,
-                  child: _OfflineBanner(
+                  child: MapOfflineBanner(
                     networkState: ref.watch(networkStateProvider),
                     connectionStatus: ref.watch(connectionStatusProvider),
                   ),
@@ -2573,7 +2494,7 @@ class _MapPageState extends ConsumerState<MapPage>
                     );
                   },
                   child: _isSheetVisible
-                      ? _InstantInfoSheet(
+                      ? MapBottomSheet(
                           key: _sheetKey,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -2600,7 +2521,7 @@ class _MapPageState extends ConsumerState<MapPage>
                               child: _selectedIds.isEmpty
                                   ? const SizedBox.shrink()
                                   : (_selectedIds.length == 1
-                                      ? _InfoBox(
+                                      ? MapDeviceInfoBox(
                                           key: const ValueKey('single-info'),
                                           deviceId: _selectedIds.first,
                                           devices: devices,
@@ -2617,7 +2538,7 @@ class _MapPageState extends ConsumerState<MapPage>
                                           },
                                           onFocus: _focusSelected,
                                         )
-                                      : _MultiSelectionInfoBox(
+                                      : MapMultiSelectionInfoBox(
                                           key: const ValueKey('multi-info'),
                                           selectedIds: _selectedIds,
                                           devices: devices,
@@ -2835,850 +2756,3 @@ class _MapPageState extends ConsumerState<MapPage>
 
 // ---------------- UI COMPONENTS ----------------
 
-class _SearchBar extends StatelessWidget {
-  const _SearchBar({
-    required this.controller,
-    required this.onChanged,
-    required this.onClear,
-    required this.focusNode,
-    required this.editing,
-    required this.onRequestEdit,
-    required this.onCloseEditing,
-    required this.onSingleTap,
-    required this.onDoubleTap,
-    required this.onToggleSuggestions,
-    required this.suggestionsVisible,
-  });
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onClear;
-  final FocusNode focusNode;
-  final bool editing;
-  final VoidCallback onRequestEdit;
-  final VoidCallback onCloseEditing;
-  final VoidCallback onSingleTap;
-  final VoidCallback onDoubleTap;
-  final VoidCallback onToggleSuggestions;
-  final bool suggestionsVisible;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasText = controller.text.isNotEmpty;
-    final active = editing || focusNode.hasFocus;
-    final borderColor = active ? const Color(0xFFA6CD27) : Colors.black12;
-    return GestureDetector(
-      onTap: onSingleTap,
-      onDoubleTap: onDoubleTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: borderColor, width: active ? 1.5 : 1),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        child: Row(
-          children: [
-            Icon(Icons.search, color: Colors.grey[700], size: 22),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                readOnly: !editing,
-                onChanged: onChanged,
-                cursorColor: const Color(0xFF49454F),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  hintText: 'Search vehicle',
-                  border: InputBorder.none,
-                ),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: onToggleSuggestions,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  suggestionsVisible ? Icons.expand_less : Icons.expand_more,
-                  size: 20,
-                  color: Colors.black54,
-                ),
-              ),
-            ),
-            if (hasText)
-              InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: onClear,
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 20, color: Colors.black54),
-                ),
-              )
-            else
-              InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: () => editing ? onCloseEditing() : onRequestEdit(),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(
-                    editing ? Icons.keyboard_hide : Icons.keyboard,
-                    size: 20,
-                    color: Colors.black54,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.icon,
-    required this.tooltip,
-    this.onTap,
-    this.isLoading = false,
-  });
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-  final disabled = onTap == null || isLoading;
-    final bg = disabled ? Colors.white.withValues(alpha: 0.6) : Colors.white;
-    final fg = disabled ? Colors.black26 : Colors.black87;
-    return Material(
-      color: bg,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      elevation: 4,
-      child: InkWell(
-        onTap: disabled ? null : onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Tooltip(
-          message: tooltip,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: isLoading
-                ? SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(fg),
-                    ),
-                  )
-                : Icon(icon, size: 22, color: fg),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoBox extends StatelessWidget {
-  const _InfoBox({
-    required this.deviceId,
-    required this.devices,
-    required this.position,
-    required this.statusResolver,
-    required this.statusColorBuilder,
-    required this.onClose,
-    super.key,
-    this.onFocus,
-  });
-  final int deviceId;
-  final List<Map<String, dynamic>> devices;
-  final Position? position;
-  final String Function(Map<String, dynamic>?, Position?) statusResolver;
-  final Color Function(String) statusColorBuilder;
-  final VoidCallback onClose; // currently unused but reserved for close button
-  final VoidCallback? onFocus;
-  @override
-  Widget build(BuildContext context) {
-    assert(
-      debugCheckHasDirectionality(context),
-      '_InfoBox requires Directionality above in the tree',
-    );
-    String relativeAge(DateTime? dt) {
-      if (dt == null) return 'n/a';
-      final diff = DateTime.now().difference(dt);
-      if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      final d = diff.inDays;
-      if (d < 7) return '${d}d ago';
-      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-    }
-
-    var name = 'Device $deviceId';
-    for (final d in devices) {
-      if (d['id'] == deviceId) {
-        name = d['name']?.toString() ?? name;
-        break;
-      }
-    }
-    var deviceMap = const <String, dynamic>{};
-    for (final d in devices) {
-      if (d['id'] == deviceId) {
-        deviceMap = d;
-        break;
-      }
-    }
-    final status = statusResolver(deviceMap, position);
-    final statusColor = statusColorBuilder(status);
-    final engineAttr = position?.attributes['ignition'];
-    final engine = engineAttr is bool ? (engineAttr ? 'on' : 'off') : '_';
-    final speed = position?.speed.toStringAsFixed(0) ?? '--';
-    final distanceAttr = position?.attributes['distance'] ??
-        position?.attributes['totalDistance'];
-    String distance;
-    if (distanceAttr is num) {
-      final km = distanceAttr / 1000;
-      distance = km >= 0.1 ? km.toStringAsFixed(0) : '00';
-    } else {
-      distance = '--';
-    }
-    // Try to get coordinates from position, then fallback to device data
-    final String lastLocation;
-    final pos = position;
-    if (pos != null) {
-      final posAddress = pos.address;
-      if (posAddress != null && posAddress.isNotEmpty) {
-        lastLocation = posAddress;
-      } else {
-        lastLocation =
-            '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
-      }
-    } else {
-      // Fallback to device's stored lat/lon if no position
-      final devLat = deviceMap['latitude'];
-      final devLon = deviceMap['longitude'];
-      if (devLat != null && devLon != null) {
-        lastLocation = '$devLat, $devLon (stored)';
-      } else {
-        lastLocation = 'No location data available';
-      }
-    }
-    final deviceTime = position?.deviceTime.toLocal();
-    final lastUpdateDt = (deviceMap['lastUpdateDt'] is DateTime)
-        ? (deviceMap['lastUpdateDt'] as DateTime).toLocal()
-        : deviceTime;
-    final lastAge = relativeAge(lastUpdateDt);
-    return Material(
-      borderRadius: BorderRadius.circular(16),
-      color: Colors.white,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE0E0E0)),
-        ),
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    name,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Engine & Movement',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: .3,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  _InfoLine(
-                    icon: Icons.power_settings_new,
-                    label: 'Engine',
-                    value: engine,
-                    valueColor: engine == 'on' ? statusColor : null,
-                  ),
-                  _InfoLine(
-                    icon: Icons.speed,
-                    label: 'Speed',
-                    value: speed == '--' ? '-- km/h' : '$speed km/h',
-                  ),
-                  _InfoLine(
-                    icon: Icons.route,
-                    label: 'Distance',
-                    value: distance == '--' ? '-- km' : '$distance km',
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Last Location',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: .3,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  _InfoLine(
-                    icon: Icons.place_outlined,
-                    label: 'Coordinates',
-                    value: lastLocation,
-                    valueColor: lastLocation == 'No location data available'
-                        ? Colors.orange
-                        : null,
-                  ),
-                  _InfoLine(
-                    icon: Icons.update,
-                    label: 'Updated',
-                    value: lastAge,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MultiSelectionInfoBox extends StatelessWidget {
-  const _MultiSelectionInfoBox({
-    required this.selectedIds,
-    required this.devices,
-    required this.positions,
-    required this.statusResolver,
-    required this.statusColorBuilder,
-    required this.onClear,
-    super.key,
-    this.onFocus,
-  });
-  final Set<int> selectedIds;
-  final List<Map<String, dynamic>> devices;
-  final Map<int, Position> positions;
-  final String Function(Map<String, dynamic>?, Position?) statusResolver;
-  final Color Function(String) statusColorBuilder;
-  final VoidCallback onClear;
-  final VoidCallback? onFocus;
-  @override
-  Widget build(BuildContext context) {
-    assert(
-      debugCheckHasDirectionality(context),
-      '_MultiSelectionInfoBox requires Directionality above in the tree',
-    );
-    final selectedDevices = devices
-        .whereType<Map<String, dynamic>>()
-        .where((d) => selectedIds.contains(d['id']))
-        .toList();
-    var online = 0;
-    var offline = 0;
-    var unknown = 0;
-    for (final d in selectedDevices) {
-      final s = statusResolver(d, positions[d['id']]);
-      switch (s) {
-        case 'online':
-          online++;
-        case 'offline':
-          offline++;
-        default:
-          unknown++;
-      }
-    }
-    final total = selectedDevices.length;
-    final onlinePct = total == 0 ? 0 : (online / total * 100).round();
-    return Material(
-      borderRadius: BorderRadius.circular(16),
-      color: Colors.white,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE0E0E0)),
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Text(
-                  '$total devices selected',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                _StatusStat(
-                  label: 'Online',
-                  count: online,
-                  color: statusColorBuilder('online'),
-                ),
-                _StatusStat(
-                  label: 'Offline',
-                  count: offline,
-                  color: statusColorBuilder('offline'),
-                ),
-                _StatusStat(
-                  label: 'Unknown',
-                  count: unknown,
-                  color: statusColorBuilder('unknown'),
-                ),
-                Text(
-                  'Online: $onlinePct%',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (selectedDevices.isNotEmpty)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final d in selectedDevices.take(5))
-                    _InfoLine(
-                      icon: Icons.device_hub,
-                      label: d['name']?.toString() ?? 'Device',
-                      value: statusResolver(d, positions[d['id']]),
-                      valueColor: statusColorBuilder(
-                        statusResolver(d, positions[d['id']]),
-                      ),
-                    ),
-                  if (selectedDevices.length > 5)
-                    Text(
-                      '+ ${selectedDevices.length - 5} more...',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoLine extends StatelessWidget {
-  const _InfoLine({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-  @override
-  Widget build(BuildContext context) {
-    final base = Theme.of(context).textTheme.bodySmall;
-    final styleLabel = base?.copyWith(
-      fontWeight: FontWeight.w500,
-      color: Colors.grey[800],
-    );
-    final styleValue = base?.copyWith(
-      fontWeight: FontWeight.w700,
-      color: valueColor ?? Colors.black87,
-    );
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            alignment: Alignment.centerLeft,
-            child: Icon(icon, size: 18, color: valueColor ?? Colors.black87),
-          ),
-          const SizedBox(width: 2),
-          Text('$label: ', style: styleLabel),
-          Expanded(
-            child: Text(
-              value,
-              style: styleValue ?? base,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusStat extends StatelessWidget {
-  const _StatusStat({
-    required this.label,
-    required this.count,
-    required this.color,
-  });
-  final String label;
-  final int count;
-  final Color color;
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          '$label: $count',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-        ),
-      );
-}
-
-/// Offline banner widget that appears when network is unavailable
-/// Shows connection status (offline/reconnecting/unstable)
-class _OfflineBanner extends StatelessWidget {
-  const _OfflineBanner({
-    required this.networkState,
-    required this.connectionStatus,
-  });
-
-  final NetworkState networkState;
-  final ConnectionStatus connectionStatus;
-
-  @override
-  Widget build(BuildContext context) {
-    // Determine what to show based on network and connection status
-    final isOffline = networkState == NetworkState.offline;
-    final isReconnecting = connectionStatus == ConnectionStatus.reconnecting;
-    final isUnstable = connectionStatus == ConnectionStatus.unstable;
-
-    // Only show banner if offline, reconnecting, or unstable
-    if (!isOffline && !isReconnecting && !isUnstable) {
-      return const SizedBox.shrink();
-    }
-
-    // Determine banner properties
-    Color bgColor;
-    IconData icon;
-    String message;
-
-    if (isOffline) {
-      bgColor = Colors.red.shade700;
-      icon = Icons.cloud_off;
-      message = 'No network connection - Showing cached data';
-    } else if (isUnstable) {
-      bgColor = Colors.orange.shade700;
-      icon = Icons.warning;
-      message = 'Unstable connection - Reconnecting frequently';
-    } else {
-      // reconnecting
-      bgColor = Colors.orange;
-      icon = Icons.sync;
-      message = 'Reconnecting to server...';
-    }
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      color: bgColor,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: SafeArea(
-        bottom: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Marker performance overlay showing cache efficiency and processing time
-class _MarkerPerformanceOverlay extends StatefulWidget {
-  const _MarkerPerformanceOverlay();
-
-  @override
-  State<_MarkerPerformanceOverlay> createState() =>
-      _MarkerPerformanceOverlayState();
-}
-
-class _MarkerPerformanceOverlayState extends State<_MarkerPerformanceOverlay> {
-  Timer? _updateTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    // Update every 500ms
-    _updateTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _updateTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final stats = MarkerPerformanceMonitor.instance.getStats();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '⚡ Marker Performance',
-            style: TextStyle(
-              color: Colors.green[300],
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          _StatRow(
-            'Updates',
-            stats.totalUpdates.toString(),
-            Colors.white70,
-          ),
-          _StatRow(
-            'Avg Time',
-            '${stats.averageProcessingMs.toStringAsFixed(1)}ms',
-            stats.averageProcessingMs < 16
-                ? Colors.green[300]!
-                : Colors.orange[300]!,
-          ),
-          _StatRow(
-            'Reuse',
-            '${(stats.averageReuseRate * 100).toStringAsFixed(0)}%',
-            stats.averageReuseRate > 0.7
-                ? Colors.green[300]!
-                : Colors.orange[300]!,
-          ),
-          _StatRow(
-            'Created',
-            stats.totalCreated.toString(),
-            Colors.white70,
-          ),
-          _StatRow(
-            'Reused',
-            stats.totalReused.toString(),
-            Colors.green[300]!,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatRow extends StatelessWidget {
-  const _StatRow(this.label, this.value, this.color);
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          '$label: ',
-          style: const TextStyle(color: Colors.white70, fontSize: 11),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Instant-response info sheet: reacts to drag updates immediately and snaps on release.
-class _InstantInfoSheet extends StatefulWidget {
-  const _InstantInfoSheet({required this.child, super.key});
-  final Widget child;
-
-  @override
-  State<_InstantInfoSheet> createState() => _InstantInfoSheetState();
-}
-
-class _InstantInfoSheetState extends State<_InstantInfoSheet>
-    with SingleTickerProviderStateMixin {
-  double _fraction = 0.45; // between 0.05 and 0.45, start expanded when visible
-  double _dragStart = 0;
-  double _startFraction = 0;
-  bool _isDragging = false;
-  Duration _animDuration = const Duration(milliseconds: 200);
-  Curve _animCurve = Curves.easeOutCubic;
-
-  // Programmatic controls with spring-like animation
-  void expand() {
-    _animDuration = const Duration(milliseconds: 280);
-    _animCurve = Curves.easeOutBack;
-    HapticFeedback.selectionClick();
-    setState(() => _fraction = 0.45);
-  }
-
-  void collapse() {
-    _animDuration = const Duration(milliseconds: 280);
-    _animCurve = Curves.easeOutBack;
-    HapticFeedback.selectionClick();
-    setState(() => _fraction = 0.05);
-  }
-
-  void _onDragStart(DragStartDetails d) {
-    _dragStart = d.globalPosition.dy;
-    _startFraction = _fraction;
-    _isDragging = true;
-    // Instant reaction while dragging
-    _animDuration = Duration.zero;
-  }
-
-  void _onDragUpdate(DragUpdateDetails d) {
-    if (!_isDragging) return;
-    final delta = _dragStart - d.globalPosition.dy;
-    final height = MediaQuery.of(context).size.height;
-    final newFraction = (_startFraction + delta / height).clamp(0.05, 0.45);
-    setState(() => _fraction = newFraction);
-  }
-
-  void _onDragEnd(DragEndDetails d) {
-    _isDragging = false;
-    final velocity = d.primaryVelocity ?? 0;
-
-    double target;
-    if (velocity < -300) {
-      target = 0.45;
-    } else if (velocity > 300) {
-      target = 0.05;
-    } else {
-      target = (_fraction < 0.25) ? 0.05 : 0.45;
-    }
-
-    HapticFeedback.selectionClick();
-    // Smooth settle after drag ends
-    _animDuration = const Duration(milliseconds: 220);
-    _animCurve = Curves.easeOutCubic;
-    setState(() => _fraction = target);
-  }
-
-  void _onTap() {
-    final target = (_fraction < 0.25) ? 0.45 : 0.05;
-    HapticFeedback.selectionClick();
-    _animDuration = const Duration(milliseconds: 260);
-    _animCurve = Curves.easeOutBack;
-    setState(() => _fraction = target);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: GestureDetector(
-        onVerticalDragStart: _onDragStart,
-        onVerticalDragUpdate: _onDragUpdate,
-        onVerticalDragEnd: _onDragEnd,
-        onTap: _onTap,
-        behavior: HitTestBehavior.translucent,
-        child: AnimatedContainer(
-          duration: _animDuration,
-          curve: _animCurve,
-          height: screenHeight * _fraction,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: const Color(0xFFA6CD27), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 10,
-                offset: const Offset(0, -3),
-              ),
-            ],
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final available = constraints.biggest.height;
-              // Adapt the grab handle size/margins to avoid overflow on tiny heights
-              final handleHeight = available.clamp(0, double.infinity) * 0.15;
-              final safeHandleHeight = handleHeight.clamp(2.0, 8.0);
-              final handleVMargin = (available * 0.10).clamp(4.0, 10.0);
-              return Column(
-                children: [
-                  SizedBox(height: handleVMargin),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 56,
-                    height: safeHandleHeight,
-                    decoration: BoxDecoration(
-                      color: (_fraction > 0.25)
-                          ? const Color(0xFF2196F3)
-                          : Colors.grey.shade400,
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                  ),
-                  SizedBox(height: handleVMargin),
-                  // Ensure content never overflows: make it scrollable when space is tight
-                  Expanded(
-                    child: ClipRect(
-                      child: SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        child: widget.child,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}

@@ -17,8 +17,8 @@ import 'package:my_app_gps/features/map/data/positions_live_provider.dart';
 import 'package:my_app_gps/features/map/view/map_page.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/repositories/notifications_repository.dart';
-import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/device_service.dart';
+import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
 
 import 'test_utils/test_config.dart';

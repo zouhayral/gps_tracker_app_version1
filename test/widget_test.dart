@@ -36,7 +36,7 @@ void main() {
     );
     // Allow initial async auth check and first build frames to complete.
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
 
     // Expect either login welcome text or map navigation label.
     final loginFinder = find.text('welcome back');
