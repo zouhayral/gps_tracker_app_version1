@@ -9,6 +9,7 @@ import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
+import 'package:my_app_gps/core/utils/stream_memoizer.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/providers/connectivity_provider.dart';
@@ -162,6 +163,10 @@ class VehicleDataRepository {
   // Using StreamController with sync broadcast for immediate delivery of latest value
   final Map<int, StreamController<Position?>> _deviceStreams = {};
   final Map<int, Position?> _latestPositions = {};
+  
+  // === 🎯 PHASE 9: Stream memoization ===
+  // Prevents duplicate stream subscriptions for the same device
+  final _streamMemoizer = StreamMemoizer<Position?>();
 
   /// Resolve a friendly device name with safe fallbacks.
   /// Returns a user-visible string; never null.
@@ -973,28 +978,35 @@ class VehicleDataRepository {
   /// - 99% reduction in unnecessary broadcasts (only this device's subscribers notified)
   /// - Reactive composition with standard Dart streams
   /// - Automatic cleanup when stream is cancelled
+  /// - 🎯 PHASE 9: Memoized to prevent duplicate subscriptions
   Stream<Position?> positionStream(int deviceId) {
-    // Lazy-create stream controller for this device
-    final controller = _deviceStreams.putIfAbsent(
-      deviceId,
-      () => StreamController<Position?>.broadcast(
-        sync: true, // Synchronous delivery for immediate UI updates
-        onListen: () {
-          _log.debug('📡 Stream listener added for device $deviceId');
-        },
-        onCancel: () {
-          _log.debug('📡 Stream listener removed for device $deviceId');
-        },
-      ),
-    );
+    // 🎯 PHASE 9: Use StreamMemoizer to cache streams and prevent duplicates
+    return _streamMemoizer.memoize(
+      'device_$deviceId',
+      () {
+        // Lazy-create stream controller for this device
+        final controller = _deviceStreams.putIfAbsent(
+          deviceId,
+          () => StreamController<Position?>.broadcast(
+            sync: true, // Synchronous delivery for immediate UI updates
+            onListen: () {
+              _log.debug('📡 Stream listener added for device $deviceId');
+            },
+            onCancel: () {
+              _log.debug('📡 Stream listener removed for device $deviceId');
+            },
+          ),
+        );
 
-    // Return stream that starts with latest known position
-    return controller.stream.transform(
-      StreamTransformer<Position?, Position?>.fromHandlers(
-        handleData: (position, sink) {
-          sink.add(position);
-        },
-      ),
+        // Return stream that starts with latest known position
+        return controller.stream.transform(
+          StreamTransformer<Position?, Position?>.fromHandlers(
+            handleData: (position, sink) {
+              sink.add(position);
+            },
+          ),
+        );
+      },
     );
   }
 

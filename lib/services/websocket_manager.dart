@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
+import 'package:my_app_gps/core/utils/backoff_manager.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 
@@ -50,8 +51,12 @@ class WebSocketState {
 class WebSocketManager extends Notifier<WebSocketState> {
   static final _log = 'WebSocket'.logger;
   
-  static const _initialRetryDelay = Duration(seconds: 2);
-  static const _maxRetryDelay = Duration(seconds: 30);
+  // 🎯 PHASE 9: Use BackoffManager for exponential reconnection delays
+  final _backoff = BackoffManager(
+    initialDelay: const Duration(seconds: 1),
+    maxDelay: const Duration(seconds: 60),
+  );
+  
   // Toggle to enable very verbose heartbeat logs
   static bool verboseSocketLogs = false;
 
@@ -147,6 +152,9 @@ class WebSocketManager extends Notifier<WebSocketState> {
       _retryCount = 0;
       _lastSuccessfulConnect = DateTime.now();
       _lastEventAt = DateTime.now();
+      
+      // 🎯 PHASE 9: Reset backoff on successful connection
+      _backoff.reset();
 
       state = state.copyWith(
         status: WebSocketStatus.connected,
@@ -200,8 +208,8 @@ class WebSocketManager extends Notifier<WebSocketState> {
       error: error,
     );
 
-    // Exponential backoff with max delay
-    final delay = _calculateBackoffDelay(_retryCount);
+    // 🎯 PHASE 9: Use BackoffManager for exponential delay
+    final delay = _backoff.nextDelay();
     _log.warning('⏳ Retry #$_retryCount in ${delay.inSeconds}s', error: error);
 
     _reconnectTimer = Timer(delay, () {
@@ -211,23 +219,15 @@ class WebSocketManager extends Notifier<WebSocketState> {
     });
   }
 
-  /// Calculate exponential backoff delay
-  Duration _calculateBackoffDelay(int attempt) {
-    final seconds =
-        _initialRetryDelay.inSeconds * (1 << (attempt - 1).clamp(0, 5));
-    return Duration(
-        seconds: seconds.clamp(
-      _initialRetryDelay.inSeconds,
-      _maxRetryDelay.inSeconds,
-    ),);
-  }
-
   /// Manually trigger reconnection (call when app resumes or map page opens)
   Future<void> forceReconnect() async {
     _log.info('🔄 Force reconnect requested');
     _intentionalDisconnect = false;
     _retryCount = 0;
     _reconnectTimer?.cancel();
+    
+    // 🎯 PHASE 9: Reset backoff on manual reconnect
+    _backoff.reset();
 
     if (isConnected) {
       _log.debug('Already connected, skipping');
