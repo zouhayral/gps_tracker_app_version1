@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_app_gps/app/app_root.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/utils/memory_watchdog.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/map/fmtc_config.dart';
 import 'package:my_app_gps/map/tile_http_overrides.dart';
@@ -170,6 +171,20 @@ Future<void> main() async {
       ),
     );
   };
+
+  // === 🎯 PHASE 9 STEP 2: Memory monitoring (profile mode only) ===
+  if (kProfileMode) {
+    // Start memory watchdog for heap monitoring
+    MemoryWatchdog.instance.start();
+    // ignore: avoid_print
+    print('[MEM] MemoryWatchdog started (interval: 10s)');
+    
+    // Note: To enable repository diagnostics in logs, add this in AppRoot's initState:
+    // MemoryWatchdog.instance.metricsProvider = () {
+    //   final repo = ref.read(vehicleDataRepositoryProvider);
+    //   return repo.getStreamDiagnostics();
+    // };
+  }
 
   runApp(
     ProviderScope(

@@ -74,6 +74,43 @@ final vehicleDataRepositoryProvider = Provider<VehicleDataRepository>((ref) {
   return repo;
 });
 
+/// Lifecycle tracking wrapper for per-device position streams.
+/// 
+/// **Purpose:** Track listener count and last access time for idle stream cleanup.
+/// 
+/// **Lifecycle:**
+/// - Listener count incremented on subscription (onListen callback)
+/// - Listener count decremented on cancellation (onCancel callback)
+/// - Last access time refreshed on every position emission
+/// - Idle timeout: 5 minutes with 0 listeners
+/// - LRU eviction: When total streams exceed 2000
+/// 
+/// **Memory Impact:**
+/// Each _StreamEntry: ~1-5 KB overhead
+/// Target: <10 MB total for 2000 streams
+class _StreamEntry {
+  final StreamController<Position?> controller;
+  int listenerCount = 0;
+  DateTime lastAccess = DateTime.now();
+
+  _StreamEntry(this.controller);
+
+  void incrementListeners() {
+    listenerCount++;
+    lastAccess = DateTime.now();
+  }
+
+  void decrementListeners() {
+    listenerCount--;
+    lastAccess = DateTime.now();
+  }
+
+  void refreshAccess() => lastAccess = DateTime.now();
+
+  bool get isIdle => listenerCount == 0;
+  Duration get idleTime => DateTime.now().difference(lastAccess);
+}
+
 /// Centralized repository for vehicle data.
 ///
 /// Architecture:
@@ -161,12 +198,18 @@ class VehicleDataRepository {
   // Provides reactive stream API for provider integration
   // Eliminates need for providers to poll ValueNotifiers
   // Using StreamController with sync broadcast for immediate delivery of latest value
-  final Map<int, StreamController<Position?>> _deviceStreams = {};
+  final Map<int, _StreamEntry> _deviceStreams = {};
   final Map<int, Position?> _latestPositions = {};
   
-  // === 🎯 PHASE 9: Stream memoization ===
+  // === 🎯 PHASE 9: Stream memoization & lifecycle management ===
   // Prevents duplicate stream subscriptions for the same device
   final _streamMemoizer = StreamMemoizer<Position?>();
+  
+  // === 🎯 PHASE 9 STEP 2: Memory & lifecycle management ===
+  Timer? _streamCleanupTimer;
+  static const _kIdleTimeout = Duration(minutes: 5);
+  static const _kMaxStreams = 2000;
+  static const _kCleanupInterval = Duration(seconds: 60);
 
   /// Resolve a friendly device name with safe fallbacks.
   /// Returns a user-visible string; never null.
@@ -767,10 +810,11 @@ class VehicleDataRepository {
     _latestPositions[deviceId] = position;
     
     // Broadcast to stream if there are active listeners
-    final controller = _deviceStreams[deviceId];
-    if (controller != null && !controller.isClosed && controller.hasListener) {
-      controller.add(position);
-      _log.debug('📡 Position broadcast to stream for device $deviceId');
+    final entry = _deviceStreams[deviceId];
+    if (entry != null && !entry.controller.isClosed && entry.controller.hasListener) {
+      entry.controller.add(position);
+      entry.refreshAccess(); // 🎯 PHASE 9 STEP 2: Update last access time
+      _log.debug('📡 Position broadcast to stream for device $deviceId (listeners: ${entry.listenerCount})');
     }
   }
 
@@ -979,29 +1023,47 @@ class VehicleDataRepository {
   /// - Reactive composition with standard Dart streams
   /// - Automatic cleanup when stream is cancelled
   /// - 🎯 PHASE 9: Memoized to prevent duplicate subscriptions
+  /// - 🎯 PHASE 9 STEP 2: Lifecycle tracking with auto-cleanup
   Stream<Position?> positionStream(int deviceId) {
     // 🎯 PHASE 9: Use StreamMemoizer to cache streams and prevent duplicates
     return _streamMemoizer.memoize(
       'device_$deviceId',
       () {
-        // Lazy-create stream controller for this device
-        final controller = _deviceStreams.putIfAbsent(
+        // Lazy-create stream entry with lifecycle tracking for this device
+        final entry = _deviceStreams.putIfAbsent(
           deviceId,
-          () => StreamController<Position?>.broadcast(
-            sync: true, // Synchronous delivery for immediate UI updates
-            onListen: () {
-              _log.debug('📡 Stream listener added for device $deviceId');
-            },
-            onCancel: () {
-              _log.debug('📡 Stream listener removed for device $deviceId');
-            },
-          ),
+          () {
+            final controller = StreamController<Position?>.broadcast(
+              sync: true, // Synchronous delivery for immediate UI updates
+              onListen: () {
+                final entry = _deviceStreams[deviceId];
+                if (entry != null) {
+                  entry.incrementListeners();
+                  _log.debug('📡 Stream listener added for device $deviceId (count: ${entry.listenerCount})');
+                }
+              },
+              onCancel: () {
+                final entry = _deviceStreams[deviceId];
+                if (entry != null) {
+                  entry.decrementListeners();
+                  _log.debug('📡 Stream listener removed for device $deviceId (count: ${entry.listenerCount})');
+                }
+              },
+            );
+            return _StreamEntry(controller);
+          },
         );
 
+        // Start cleanup timer if not already running
+        _startStreamCleanupTimer();
+
         // Return stream that starts with latest known position
-        return controller.stream.transform(
+        return entry.controller.stream.transform(
           StreamTransformer<Position?, Position?>.fromHandlers(
             handleData: (position, sink) {
+              // Refresh access time on every emission
+              final e = _deviceStreams[deviceId];
+              e?.refreshAccess();
               sink.add(position);
             },
           ),
@@ -1036,6 +1098,97 @@ class VehicleDataRepository {
   /// Get cache statistics for monitoring
   Map<String, dynamic> get cacheStats => cache.stats;
 
+  // === 🎯 PHASE 9 STEP 2: Stream lifecycle management methods ===
+
+  /// Start periodic cleanup timer for idle streams
+  void _startStreamCleanupTimer() {
+    if (_streamCleanupTimer != null || testMode) return;
+    
+    _streamCleanupTimer = Timer.periodic(_kCleanupInterval, (_) {
+      _cleanupIdleStreams();
+      _capStreamsIfNeeded();
+    });
+    
+    _log.debug('🧹 Stream cleanup timer started (interval: ${_kCleanupInterval.inSeconds}s)');
+  }
+
+  /// Clean up idle streams (0 listeners + >5 min since last access)
+  void _cleanupIdleStreams() {
+    final toRemove = <int>[];
+    
+    for (final entry in _deviceStreams.entries) {
+      final deviceId = entry.key;
+      final streamEntry = entry.value;
+      
+      if (streamEntry.isIdle && streamEntry.idleTime > _kIdleTimeout) {
+        toRemove.add(deviceId);
+      }
+    }
+    
+    if (toRemove.isEmpty) {
+      _log.debug('🧹 No idle streams to clean up (active: ${_deviceStreams.length})');
+      return;
+    }
+    
+    for (final deviceId in toRemove) {
+      final entry = _deviceStreams[deviceId];
+      entry?.controller.close();
+      _deviceStreams.remove(deviceId);
+      _latestPositions.remove(deviceId);
+      _streamMemoizer.clear(); // Clear memoization cache to allow fresh stream creation
+    }
+    
+    _log.debug('🧹 Cleaned up ${toRemove.length} idle streams (remaining: ${_deviceStreams.length})');
+  }
+
+  /// Cap streams using LRU eviction when exceeding max limit
+  void _capStreamsIfNeeded() {
+    if (_deviceStreams.length <= _kMaxStreams) return;
+    
+    // Get all idle streams sorted by last access time (oldest first)
+    final idleStreams = _deviceStreams.entries
+        .where((e) => e.value.isIdle)
+        .toList()
+      ..sort((a, b) => a.value.lastAccess.compareTo(b.value.lastAccess));
+    
+    final toEvict = _deviceStreams.length - _kMaxStreams;
+    final evicted = <int>[];
+    
+    for (final entry in idleStreams.take(toEvict)) {
+      final deviceId = entry.key;
+      entry.value.controller.close();
+      _deviceStreams.remove(deviceId);
+      _latestPositions.remove(deviceId);
+      evicted.add(deviceId);
+    }
+    
+    if (evicted.isNotEmpty) {
+      _streamMemoizer.clear(); // Clear memoization cache
+      _log.debug('🔒 Evicted ${evicted.length} streams (LRU cap: $_kMaxStreams)');
+    }
+  }
+
+  /// Get stream lifecycle diagnostics
+  Map<String, dynamic> getStreamDiagnostics() {
+    final activeStreams = _deviceStreams.values.where((e) => !e.isIdle).length;
+    final idleStreams = _deviceStreams.values.where((e) => e.isIdle).length;
+    final totalListeners = _deviceStreams.values.fold<int>(
+      0,
+      (sum, entry) => sum + entry.listenerCount,
+    );
+    
+    return {
+      'totalStreams': _deviceStreams.length,
+      'activeStreams': activeStreams,
+      'idleStreams': idleStreams,
+      'totalListeners': totalListeners,
+      'positionsCached': _latestPositions.length,
+      'streamMemoizerStats': _streamMemoizer.getStats(),
+    };
+  }
+
+  // === End of Phase 9 Step 2 methods ===
+
   /// Dispose resources
   void dispose() {
     if (_isDisposed) {
@@ -1047,6 +1200,7 @@ class VehicleDataRepository {
     _socketSub?.cancel();
     _fallbackTimer?.cancel();
     _cleanupTimer?.cancel();
+    _streamCleanupTimer?.cancel(); // 🎯 PHASE 9 STEP 2: Cancel stream lifecycle timer
     _eventController.close();
     _recoveredEventsController.close();
 
@@ -1061,8 +1215,8 @@ class VehicleDataRepository {
     _notifiers.clear();
 
     // 🎯 PRIORITY 1: Close all per-device position streams
-    for (final controller in _deviceStreams.values) {
-      controller.close();
+    for (final entry in _deviceStreams.values) {
+      entry.controller.close();
     }
     _deviceStreams.clear();
     _latestPositions.clear();
