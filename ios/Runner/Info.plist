@@ -47,7 +47,17 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>location</string>
+		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app uses your location to detect geofence entry and exit events.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We use background location to continue monitoring geofences even when the app is closed.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Background location access is needed for reliable geofence alerts.</string>
+	<key>UIBackgroundTaskIdentifier</key>
+	<string>com.myappgps.geofence.background</string>
 </dict>
 </plist>

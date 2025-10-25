@@ -17,7 +17,7 @@ import 'package:flutter/foundation.dart';
 /// ```
 /// 
 /// **Output Example:**
-/// ```
+/// ```text
 /// [MEM] Heap: 52 MB | Growth: +2 MB | Streams: 150 | Trend: STABLE
 /// [MEM] Heap: 53 MB | Growth: +1 MB | Streams: 148 | Trend: STABLE
 /// [MEM] ⚠️ Heap: 85 MB | Growth: +32 MB | Streams: 2000 | Trend: RISING
@@ -114,7 +114,7 @@ class MemoryWatchdog {
     
     // This is a simplified estimation for demonstration
     // Replace with actual VM service calls in production
-    final baseHeap = 45;
+  const baseHeap = 45;
     final variance = (DateTime.now().millisecondsSinceEpoch % 10) - 5;
     
     return baseHeap + variance + (_heapHistory.length * 2);

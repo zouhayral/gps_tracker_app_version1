@@ -26,8 +26,13 @@ class NotificationTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     // Selectively listen only to isRead updates for this id
-    final isUnread = ref.watch(
-      notificationByIdProvider(event.id).select((e) => !(e?.isRead ?? event.isRead)),
+    final eventAsync = ref.watch(notificationByIdProvider(event.id));
+    final isUnread = eventAsync.maybeWhen(
+      data: (e) {
+        if (e == null) return !event.isRead;
+        return !e.isRead;
+      },
+      orElse: () => !event.isRead,
     );
     final priority = (event.attributes['priority']?.toString() ??
             event.severity?.toLowerCase() ??

@@ -2,12 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:my_app_gps/app/app_router.dart';
+import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
-import 'package:my_app_gps/repositories/notifications_repository.dart';
 
 /// Bottom, swipe-to-dismiss banner that appears when a new notification event arrives.
 ///
@@ -35,11 +34,10 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
   void initState() {
     super.initState();
     // Listen to enriched events from NotificationsRepository
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // Attach once to the stream
-      final repo =
-          ref.read<NotificationsRepository>(notificationsRepositoryProvider);
+      // Attach once to the stream - await repository initialization
+      final repo = await ref.read(notificationsRepositoryProvider.future);
       _sub = repo.watchNewEvents().listen(_handleEvent);
     });
   }
@@ -74,7 +72,7 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
 
   void _onViewPressed() {
     if (!mounted) return;
-    context.go(AppRoutes.alerts);
+    context.safeGo(AppRoutes.alerts);
   }
 
   @override
@@ -216,3 +214,4 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
 
   String _priorityLabel(Event e) => _priorityChip(e).$1;
 }
+

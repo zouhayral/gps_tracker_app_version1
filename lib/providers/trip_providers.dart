@@ -412,8 +412,8 @@ class LifecycleAwareTripsNotifier
           lastUpdated: DateTime.now(),
         );
 
-        // Schedule background refresh
-        Future.microtask(() => _backgroundRefresh(query));
+  // Schedule background refresh
+  unawaited(Future.microtask(() => _backgroundRefresh(query)));
 
         return initialState;
       }
@@ -524,7 +524,7 @@ class LifecycleAwareTripsNotifier
     // Store current state as fallback
     final previousState = state.valueOrNull;
 
-    _ongoingFetch = Future(() async {
+  final future = Future(() async {
       try {
         // Update state to loading (unless silent)
         if (!silent) {
@@ -596,9 +596,9 @@ class LifecycleAwareTripsNotifier
         _isFetching = false;
         _ongoingFetch = null;
       }
-    });
+  });
 
-    return _ongoingFetch;
+  return _ongoingFetch = future;
   }
 
   /// Compare trips lists for equality (by id and basic properties)

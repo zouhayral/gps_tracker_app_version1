@@ -219,14 +219,14 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(
-                          color: _isAllDevicesSelected
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+              color: _isAllDevicesSelected
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                         ),
                       ),
-                      tileColor: _isAllDevicesSelected
-                          ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3)
-                          : null,
+            tileColor: _isAllDevicesSelected
+              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+              : null,
                     ),
                     const SizedBox(height: 12),
 
@@ -240,7 +240,7 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                             child: Text(
                               'OR SELECT SPECIFIC',
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                                     fontWeight: FontWeight.w600,
                                   ),
                             ),
@@ -283,14 +283,14 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(
-                                color: _selectedDeviceIds.contains(deviceId)
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                color: _selectedDeviceIds.contains(deviceId)
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                               ),
                             ),
-                            tileColor: _selectedDeviceIds.contains(deviceId)
-                                ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3)
-                                : null,
+              tileColor: _selectedDeviceIds.contains(deviceId)
+                ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+                : null,
                           ),
                         );
                       }),

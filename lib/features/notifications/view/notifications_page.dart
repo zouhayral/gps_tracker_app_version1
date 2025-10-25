@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/features/notifications/view/notification_action_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
@@ -288,7 +289,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => context.safePop<void>(),
                 child: const Text('Close'),
               ),
             ),

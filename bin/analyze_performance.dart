@@ -3,11 +3,12 @@
 /// Run this script to analyze widget rebuild performance
 /// 
 /// Usage:
-/// ```
+/// ```bash
 /// flutter run --profile lib/main.dart
 /// # Then in another terminal:
 /// flutter attach
 /// ```
+library analyze_performance;
 
 void main() {
   print('');

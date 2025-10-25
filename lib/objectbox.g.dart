@@ -17,6 +17,7 @@ import 'package:objectbox_flutter_libs/objectbox_flutter_libs.dart';
 import 'core/database/entities/device_entity.dart';
 import 'core/database/entities/event_entity.dart';
 import 'core/database/entities/geofence_entity.dart';
+import 'core/database/entities/geofence_event_entity.dart';
 import 'core/database/entities/position_entity.dart';
 import 'core/database/entities/telemetry_record.dart';
 import 'core/database/entities/trip_entity.dart';
@@ -561,6 +562,107 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(8, 2812116548088571599),
+    name: 'GeofenceEventEntity',
+    lastPropertyId: const obx_int.IdUid(14, 977598808898050017),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 5599896190694552469),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 4544566412133152019),
+        name: 'eventId',
+        type: 9,
+        flags: 2080,
+        indexId: const obx_int.IdUid(23, 3522846638005654641),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 4711695511786423042),
+        name: 'geofenceId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(24, 1190289486820908649),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 5223236274107866436),
+        name: 'geofenceName',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 1534819153410869465),
+        name: 'deviceId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(25, 9072304262820360254),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 8048649176167872176),
+        name: 'deviceName',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 446349630743250001),
+        name: 'eventType',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(26, 8226846714138550195),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 4824446704761616405),
+        name: 'eventTimeMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(27, 7918326653101692442),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 4995367106724555691),
+        name: 'latitude',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 6358916211217176216),
+        name: 'longitude',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 1115133075660118746),
+        name: 'dwellDurationMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(12, 914238883197184394),
+        name: 'status',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(28, 638326360943675639),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(13, 2370860904449539118),
+        name: 'syncStatus',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(29, 3034522310017026784),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(14, 977598808898050017),
+        name: 'attributesJson',
+        type: 9,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -601,8 +703,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(7, 3941204868590047628),
-    lastIndexId: const obx_int.IdUid(22, 1600730073326815966),
+    lastEntityId: const obx_int.IdUid(8, 2812116548088571599),
+    lastIndexId: const obx_int.IdUid(29, 3034522310017026784),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -1271,12 +1373,6 @@ obx_int.ModelDefinition getObjectBoxModel() {
       objectFromFB: (obx.Store store, ByteData fbData) {
         final buffer = fb.BufferContext(fbData);
         final rootOffset = buffer.derefObject(0);
-        final idParam = const fb.Int64Reader().vTableGet(
-          buffer,
-          rootOffset,
-          4,
-          0,
-        );
         final monthKeyParam = const fb.StringReader(
           asciiOptimization: true,
         ).vTableGet(buffer, rootOffset, 6, '');
@@ -1304,17 +1400,138 @@ obx_int.ModelDefinition getObjectBoxModel() {
           14,
           0,
         );
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
         final createdAtParam = DateTime.fromMillisecondsSinceEpoch(
           const fb.Int64Reader().vTableGet(buffer, rootOffset, 16, 0),
         );
         final object = TripSnapshot(
-          id: idParam,
           monthKey: monthKeyParam,
           tripCount: tripCountParam,
           totalDistanceKm: totalDistanceKmParam,
           totalDurationHrs: totalDurationHrsParam,
           avgSpeedKph: avgSpeedKphParam,
+          id: idParam,
           createdAt: createdAtParam,
+        );
+
+        return object;
+      },
+    ),
+    GeofenceEventEntity: obx_int.EntityDefinition<GeofenceEventEntity>(
+      model: _entities[7],
+      toOneRelations: (GeofenceEventEntity object) => [],
+      toManyRelations: (GeofenceEventEntity object) => {},
+      getId: (GeofenceEventEntity object) => object.id,
+      setId: (GeofenceEventEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (GeofenceEventEntity object, fb.Builder fbb) {
+        final eventIdOffset = fbb.writeString(object.eventId);
+        final geofenceIdOffset = fbb.writeString(object.geofenceId);
+        final geofenceNameOffset = fbb.writeString(object.geofenceName);
+        final deviceIdOffset = fbb.writeString(object.deviceId);
+        final deviceNameOffset = fbb.writeString(object.deviceName);
+        final eventTypeOffset = fbb.writeString(object.eventType);
+        final statusOffset = fbb.writeString(object.status);
+        final syncStatusOffset = fbb.writeString(object.syncStatus);
+        final attributesJsonOffset = fbb.writeString(object.attributesJson);
+        fbb.startTable(15);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, eventIdOffset);
+        fbb.addOffset(2, geofenceIdOffset);
+        fbb.addOffset(3, geofenceNameOffset);
+        fbb.addOffset(4, deviceIdOffset);
+        fbb.addOffset(5, deviceNameOffset);
+        fbb.addOffset(6, eventTypeOffset);
+        fbb.addInt64(7, object.eventTimeMs);
+        fbb.addFloat64(8, object.latitude);
+        fbb.addFloat64(9, object.longitude);
+        fbb.addInt64(10, object.dwellDurationMs);
+        fbb.addOffset(11, statusOffset);
+        fbb.addOffset(12, syncStatusOffset);
+        fbb.addOffset(13, attributesJsonOffset);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final eventIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final geofenceIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final geofenceNameParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 10, '');
+        final deviceIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 12, '');
+        final deviceNameParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 14, '');
+        final eventTypeParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 16, '');
+        final eventTimeMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          18,
+          0,
+        );
+        final latitudeParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          20,
+          0,
+        );
+        final longitudeParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          22,
+          0,
+        );
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final statusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 26, '');
+        final syncStatusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 28, '');
+        final dwellDurationMsParam = const fb.Int64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          24,
+        );
+        final attributesJsonParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 30, '');
+        final object = GeofenceEventEntity(
+          eventId: eventIdParam,
+          geofenceId: geofenceIdParam,
+          geofenceName: geofenceNameParam,
+          deviceId: deviceIdParam,
+          deviceName: deviceNameParam,
+          eventType: eventTypeParam,
+          eventTimeMs: eventTimeMsParam,
+          latitude: latitudeParam,
+          longitude: longitudeParam,
+          id: idParam,
+          status: statusParam,
+          syncStatus: syncStatusParam,
+          dwellDurationMs: dwellDurationMsParam,
+          attributesJson: attributesJsonParam,
         );
 
         return object;
@@ -1713,5 +1930,78 @@ class TripSnapshot_ {
   /// See [TripSnapshot.createdAt].
   static final createdAt = obx.QueryDateProperty<TripSnapshot>(
     _entities[6].properties[6],
+  );
+}
+
+/// [GeofenceEventEntity] entity fields to define ObjectBox queries.
+class GeofenceEventEntity_ {
+  /// See [GeofenceEventEntity.id].
+  static final id = obx.QueryIntegerProperty<GeofenceEventEntity>(
+    _entities[7].properties[0],
+  );
+
+  /// See [GeofenceEventEntity.eventId].
+  static final eventId = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[1],
+  );
+
+  /// See [GeofenceEventEntity.geofenceId].
+  static final geofenceId = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[2],
+  );
+
+  /// See [GeofenceEventEntity.geofenceName].
+  static final geofenceName = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[3],
+  );
+
+  /// See [GeofenceEventEntity.deviceId].
+  static final deviceId = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[4],
+  );
+
+  /// See [GeofenceEventEntity.deviceName].
+  static final deviceName = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[5],
+  );
+
+  /// See [GeofenceEventEntity.eventType].
+  static final eventType = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[6],
+  );
+
+  /// See [GeofenceEventEntity.eventTimeMs].
+  static final eventTimeMs = obx.QueryIntegerProperty<GeofenceEventEntity>(
+    _entities[7].properties[7],
+  );
+
+  /// See [GeofenceEventEntity.latitude].
+  static final latitude = obx.QueryDoubleProperty<GeofenceEventEntity>(
+    _entities[7].properties[8],
+  );
+
+  /// See [GeofenceEventEntity.longitude].
+  static final longitude = obx.QueryDoubleProperty<GeofenceEventEntity>(
+    _entities[7].properties[9],
+  );
+
+  /// See [GeofenceEventEntity.dwellDurationMs].
+  static final dwellDurationMs = obx.QueryIntegerProperty<GeofenceEventEntity>(
+    _entities[7].properties[10],
+  );
+
+  /// See [GeofenceEventEntity.status].
+  static final status = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[11],
+  );
+
+  /// See [GeofenceEventEntity.syncStatus].
+  static final syncStatus = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[12],
+  );
+
+  /// See [GeofenceEventEntity.attributesJson].
+  static final attributesJson = obx.QueryStringProperty<GeofenceEventEntity>(
+    _entities[7].properties[13],
   );
 }
