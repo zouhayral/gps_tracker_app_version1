@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_lambdas, require_trailing_commas, unnecessary_brace_in_string_interps
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -67,9 +69,7 @@ class PerformanceAnalyzer {
     debugPrint('');
 
     // Auto-stop after duration
-    _reportTimer = Timer(duration, () {
-      stopAnalysis();
-    });
+    _reportTimer = Timer(duration, stopAnalysis);
   }
 
   /// Stop analysis and print comprehensive report
@@ -136,7 +136,7 @@ class PerformanceAnalyzer {
         rasterMs: rasterMs,
         totalMs: totalMs,
         timestamp: DateTime.now(),
-      ));
+      ),);
 
       // Track jank
       if (totalMs > 16) {
@@ -346,12 +346,12 @@ class PerformanceAnalyzer {
 
     // Check MapPage rebuilds
     if (_mapPageFullRebuilds > 10) {
-      recommendations.add('⚠️ MapPage: ${_mapPageFullRebuilds} full rebuilds - Add const widgets');
+      recommendations.add('⚠️ MapPage: $_mapPageFullRebuilds full rebuilds - Add const widgets');
     }
 
     // Check MarkerLayer
     if (_markerLayerRebuilds > 20) {
-      recommendations.add('⚠️ MarkerLayer: ${_markerLayerRebuilds} rebuilds - Use RepaintBoundary');
+      recommendations.add('⚠️ MarkerLayer: $_markerLayerRebuilds rebuilds - Use RepaintBoundary');
     }
 
     // Check excessive widgets

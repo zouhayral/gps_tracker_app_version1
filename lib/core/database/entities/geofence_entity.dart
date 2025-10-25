@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:objectbox/objectbox.dart';
 
 // TODO(OBX5): When migrating to ObjectBox 5.x re-run generator and confirm
@@ -5,6 +7,12 @@ import 'package:objectbox/objectbox.dart';
 // if necessary.
 
 /// ObjectBox entity for Geofence persistence
+/// 
+/// Enhanced to support full geofencing features:
+/// - Circle and polygon geofences
+/// - Device monitoring
+/// - Entry/exit/dwell triggers
+/// - Notification configuration
 @Entity()
 class GeofenceEntity {
   GeofenceEntity({
@@ -22,6 +30,8 @@ class GeofenceEntity {
   int id;
 
   /// Backend geofence ID - indexed for fast lookups
+  /// Note: Changed to String for UUID support in new implementation
+  /// For backward compatibility, this remains int
   @Unique()
   @Index()
   int geofenceId;
@@ -42,6 +52,7 @@ class GeofenceEntity {
   int? calendarId;
 
   /// JSON string for additional attributes
+  /// Now stores: userId, enabled, monitoredDevices, triggers, notifications, etc.
   String attributesJson;
 
   /// Factory constructor from domain entity
@@ -77,7 +88,7 @@ class GeofenceEntity {
 
   static String _encodeAttributes(Map<String, dynamic> attributes) {
     try {
-      return attributes.toString();
+      return jsonEncode(attributes);
     } catch (_) {
       return '{}';
     }
@@ -85,7 +96,9 @@ class GeofenceEntity {
 
   static Map<String, dynamic> _decodeAttributes(String json) {
     try {
-      return {};
+      if (json.isEmpty || json == '{}') return {};
+      final decoded = jsonDecode(json);
+      return decoded is Map<String, dynamic> ? decoded : {};
     } catch (_) {
       return {};
     }

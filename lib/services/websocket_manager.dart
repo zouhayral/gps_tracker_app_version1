@@ -52,10 +52,7 @@ class WebSocketManager extends Notifier<WebSocketState> {
   static final _log = 'WebSocket'.logger;
   
   // 🎯 PHASE 9: Use BackoffManager for exponential reconnection delays
-  final _backoff = BackoffManager(
-    initialDelay: const Duration(seconds: 1),
-    maxDelay: const Duration(seconds: 60),
-  );
+  final _backoff = BackoffManager();
   
   // Toggle to enable very verbose heartbeat logs
   static bool verboseSocketLogs = false;
@@ -72,6 +69,7 @@ class WebSocketManager extends Notifier<WebSocketState> {
   DateTime? _lastSuccessfulConnect;
   DateTime? _lastEventAt;
   bool _socketAvailable = true;
+  DateTime? _lastResumeTime; // Track last resume call for debouncing
 
   late final TraccarSocketService _socketService;
 
@@ -146,7 +144,7 @@ class WebSocketManager extends Notifier<WebSocketState> {
             _scheduleReconnect('Connection closed');
           }
         },
-        cancelOnError: false,
+        
       );
 
       _retryCount = 0;
@@ -249,6 +247,17 @@ class WebSocketManager extends Notifier<WebSocketState> {
 
   /// Resume connection (call when app comes to foreground)
   Future<void> resume() async {
+    // Debounce: prevent redundant resume calls within 300ms
+    final now = DateTime.now();
+    if (_lastResumeTime != null) {
+      final timeSinceLastResume = now.difference(_lastResumeTime!);
+      if (timeSinceLastResume < const Duration(milliseconds: 300)) {
+        _log.debug('⏭️ Resume debounced (${timeSinceLastResume.inMilliseconds}ms since last call)');
+        return;
+      }
+    }
+    _lastResumeTime = now;
+
     _log.debug('▶️ Resuming connection');
     _intentionalDisconnect = false;
 

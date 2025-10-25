@@ -33,4 +33,5 @@ final tripAutoRefreshRegistrarProvider =
     subscription.close();
   });
 });
+// EOF
 

@@ -558,7 +558,12 @@ class _MapPageState extends ConsumerState<MapPage>
     }
 
     final selInfo = _selectedIds.isEmpty ? 'none' : _selectedIds.join(',');
-    _log.debug('Found ${positions.length} positions for marker update (selected: $selInfo)');
+    _log.debug(
+      '🎯 Marker Update Triggered: ${positions.length} positions '
+      '(_lastPositions: ${_lastPositions.length}, '
+      'lastKnown: ${lastKnown?.length ?? 0}), '
+      '${devices.length} devices, selected: $selInfo',
+    );
 
     // Process markers asynchronously
     _processMarkersAsync(
@@ -1262,6 +1267,14 @@ class _MapPageState extends ConsumerState<MapPage>
             diffResult.markers.isNotEmpty;
         if (isFirstNonEmpty || diffResult.modified > 0) {
           _markersNotifier.forceUpdate(diffResult.markers);
+          if (kDebugMode) {
+            debugPrint(
+              '[MapPage] ✅ Markers successfully placed: '
+              '${diffResult.markers.length} markers from '
+              '${effectivePositions.length} positions '
+              '(devices: ${devices.length})',
+            );
+          }
         } else {
           _markersNotifier.value = diffResult.markers;
         }
@@ -2766,4 +2779,7 @@ class _MapPageState extends ConsumerState<MapPage>
 
 
 // ---------------- UI COMPONENTS ----------------
+
+// EOF
+
 

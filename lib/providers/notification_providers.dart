@@ -16,19 +16,15 @@ import 'package:my_app_gps/services/event_service.dart';
 /// This is a singleton provider that manages the notification state
 /// across the entire app. It's not autoDispose to maintain the
 /// WebSocket connection and cache.
+/// 
+/// Uses FutureProvider to properly await DAO initialization.
 final notificationsRepositoryProvider =
-    Provider<NotificationsRepository>((ref) {
+    FutureProvider<NotificationsRepository>((ref) async {
   final eventService = ref.watch(eventServiceProvider);
-  final eventsDao = ref.watch(eventsDaoProvider).valueOrNull;
-  final devicesDao = ref.watch(devicesDaoProvider).valueOrNull;
-
-  // If DAOs are not ready yet, we need to handle this gracefully
-  if (eventsDao == null) {
-    throw StateError('EventsDao not initialized yet');
-  }
-  if (devicesDao == null) {
-    throw StateError('DevicesDao not initialized yet');
-  }
+  
+  // Properly await DAO initialization
+  final eventsDao = await ref.watch(eventsDaoProvider.future);
+  final devicesDao = await ref.watch(devicesDaoProvider.future);
 
   final repository = NotificationsRepository(
     eventService: eventService,
@@ -39,6 +35,10 @@ final notificationsRepositoryProvider =
 
   // Dispose when provider is no longer needed
   ref.onDispose(repository.dispose);
+
+  if (kDebugMode) {
+    debugPrint('[NotificationsRepository] ✅ Initialized successfully');
+  }
 
   return repository;
 });
@@ -52,9 +52,15 @@ final notificationsRepositoryProvider =
 /// - New events arrive via WebSocket
 ///
 /// Use this for UI widgets that need to reactively display notifications.
-final notificationsStreamProvider = StreamProvider<List<Event>>((ref) {
-  final repository = ref.watch(notificationsRepositoryProvider);
-  return repository.watchEvents();
+final notificationsStreamProvider = StreamProvider<List<Event>>((ref) async* {
+  // Await repository initialization
+  final repository = await ref.watch(notificationsRepositoryProvider.future);
+  
+  if (kDebugMode) {
+    debugPrint('[notificationsStreamProvider] Repository ready, starting stream');
+  }
+  
+  yield* repository.watchEvents();
 });
 
 /// Search query for notifications screen (raw, immediate input)
@@ -94,12 +100,12 @@ final debouncedQueryProvider = StreamProvider.autoDispose<String>((ref) async* {
 /// are still loading to avoid blocking the UI.
 final filteredNotificationsProvider =
     FutureProvider.autoDispose<List<Event>>((ref) async {
-  // Base events stream (may be loading); fall back to current cache if needed
-  final repo = ref.watch(notificationsRepositoryProvider);
+  // Await repository initialization
+  final repo = await ref.watch(notificationsRepositoryProvider.future);
   final baseAsync = ref.watch(notificationsStreamProvider);
   final baseEvents = baseAsync.maybeWhen(
     data: (events) => events,
-    orElse: repo.getCurrentEvents,
+    orElse: () => repo.getCurrentEvents(),
   );
 
   // Debounced search query
@@ -172,20 +178,30 @@ final pagedNotificationsProvider = Provider.autoDispose<List<Event>>((ref) {
   final page = ref.watch(notificationsPageProvider);
   final effective = filteredAsync.maybeWhen(
     data: (list) => list,
-    orElse: () => ref.watch(notificationsRepositoryProvider).getCurrentEvents(),
+    orElse: () async {
+      final repo = await ref.watch(notificationsRepositoryProvider.future);
+      return repo.getCurrentEvents();
+    },
   );
-  final end = (page * kNotificationsPageSize).clamp(0, effective.length);
-  return effective.sublist(0, end);
+  
+  // Handle async case - if effective is Future, wait for it
+  if (effective is Future<List<Event>>) {
+    return const <Event>[];
+  }
+  
+  final list = effective as List<Event>;
+  final end = (page * kNotificationsPageSize).clamp(0, list.length);
+  return list.sublist(0, end);
 });
 
 /// Per-notification provider by id to enable selective listening in item widgets.
 final notificationByIdProvider =
-    Provider.autoDispose.family<Event?, String>((ref, id) {
-  final repo = ref.watch(notificationsRepositoryProvider);
+    FutureProvider.autoDispose.family<Event?, String>((ref, id) async {
+  final repo = await ref.watch(notificationsRepositoryProvider.future);
   final listAsync = ref.watch(notificationsStreamProvider);
   final list = listAsync.maybeWhen(
     data: (v) => v,
-    orElse: repo.getCurrentEvents,
+    orElse: () => repo.getCurrentEvents(),
   );
   for (final e in list) {
     if (e.id == id) return e;
@@ -259,7 +275,7 @@ final refreshNotificationsProvider =
 /// show only unread items.
 final unreadNotificationsProvider =
     FutureProvider.autoDispose<List<Event>>((ref) async {
-  final repository = ref.watch(notificationsRepositoryProvider);
+  final repository = await ref.watch(notificationsRepositoryProvider.future);
   return repository.getAllEvents(unreadOnly: true);
 });
 
@@ -274,7 +290,7 @@ final unreadNotificationsProvider =
 /// ```
 final deviceNotificationsProvider =
     FutureProvider.autoDispose.family<List<Event>, int>((ref, deviceId) async {
-  final repository = ref.watch(notificationsRepositoryProvider);
+  final repository = await ref.watch(notificationsRepositoryProvider.future);
   return repository.getAllEvents(deviceId: deviceId);
 });
 
@@ -288,7 +304,7 @@ final deviceNotificationsProvider =
 /// ```
 final typeNotificationsProvider =
     FutureProvider.autoDispose.family<List<Event>, String>((ref, type) async {
-  final repository = ref.watch(notificationsRepositoryProvider);
+  final repository = await ref.watch(notificationsRepositoryProvider.future);
   return repository.getAllEvents(type: type);
 });
 
@@ -303,22 +319,24 @@ final typeNotificationsProvider =
 /// ```
 final markEventAsReadProvider =
     StateNotifierProvider<MarkEventAsReadNotifier, AsyncValue<void>>((ref) {
-  final repository = ref.watch(notificationsRepositoryProvider);
-  return MarkEventAsReadNotifier(repository);
+  // Note: We can't await in StateNotifierProvider, so we pass the FutureProvider
+  // and the notifier will await it when needed
+  return MarkEventAsReadNotifier(ref);
 });
 
 /// Notifier for marking events as read
 class MarkEventAsReadNotifier extends StateNotifier<AsyncValue<void>> {
-  MarkEventAsReadNotifier(this._repository)
+  MarkEventAsReadNotifier(this._ref)
       : super(const AsyncValue.data(null));
 
-  final NotificationsRepository _repository;
+  final Ref _ref;
 
   /// Mark a single event as read
   Future<void> call(String eventId) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      await _repository.markAsRead(eventId);
+      final repository = await _ref.read(notificationsRepositoryProvider.future);
+      await repository.markAsRead(eventId);
     });
   }
 
@@ -326,7 +344,8 @@ class MarkEventAsReadNotifier extends StateNotifier<AsyncValue<void>> {
   Future<void> markMultiple(List<String> eventIds) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      await _repository.markMultipleAsRead(eventIds);
+      final repository = await _ref.read(notificationsRepositoryProvider.future);
+      await repository.markMultipleAsRead(eventIds);
     });
   }
 }
@@ -335,9 +354,9 @@ class MarkEventAsReadNotifier extends StateNotifier<AsyncValue<void>> {
 ///
 /// Convenience provider for "mark all as read" functionality.
 final markAllAsReadProvider = FutureProvider.autoDispose<void>((ref) async {
-  final repository = ref.watch(notificationsRepositoryProvider);
+  final repository = await ref.watch(notificationsRepositoryProvider.future);
   final events = await repository.getAllEvents(unreadOnly: true);
-  final eventIds = events.map((e) => e.id).toList();
+  final eventIds = events.map((Event e) => e.id).toList();
 
   if (eventIds.isNotEmpty) {
     await repository.markMultipleAsRead(eventIds);
@@ -347,7 +366,7 @@ final markAllAsReadProvider = FutureProvider.autoDispose<void>((ref) async {
 /// Provider for deleting a single notification by id
 final deleteNotificationProvider =
     FutureProvider.autoDispose.family<void, String>((ref, eventId) async {
-  final repository = ref.watch(notificationsRepositoryProvider);
+  final repository = await ref.watch(notificationsRepositoryProvider.future);
   await repository.deleteEvent(eventId);
 });
 
@@ -356,7 +375,7 @@ final deleteNotificationProvider =
 /// Use with caution - this will delete all cached events from ObjectBox.
 final clearAllNotificationsProvider =
     FutureProvider.autoDispose<void>((ref) async {
-  final repository = ref.watch(notificationsRepositoryProvider);
+  final repository = await ref.watch(notificationsRepositoryProvider.future);
   await repository.clearAllEvents();
 });
 
@@ -375,7 +394,7 @@ final clearAllNotificationsProvider =
 /// ```
 final notificationStatsProvider =
     FutureProvider.autoDispose<Map<String, int>>((ref) async {
-  final repository = ref.watch(notificationsRepositoryProvider);
+  final repository = await ref.watch(notificationsRepositoryProvider.future);
   final events = await repository.getAllEvents();
 
   final stats = <String, int>{};
@@ -412,14 +431,16 @@ final notificationStatsProvider =
 
 /// Boot initializer to start NotificationsRepository only after DAOs are ready.
 ///
-/// This avoids throwing "EventsDao not initialized yet" if something tries to
-/// read the repository too early during app startup.
+/// This ensures proper initialization order during app startup.
 final notificationsBootInitializer = FutureProvider<void>((ref) async {
   // Await DAO readiness
   await ref.watch(eventsDaoProvider.future);
   await ref.watch(devicesDaoProvider.future);
 
   // Now initialize the repository (sets up websocket listeners etc.)
-  // ignore: unused_result
-  ref.read(notificationsRepositoryProvider);
+  await ref.read(notificationsRepositoryProvider.future);
+  
+  if (kDebugMode) {
+    debugPrint('[notificationsBootInitializer] ✅ Boot initialization complete');
+  }
 });

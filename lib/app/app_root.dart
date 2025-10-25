@@ -10,6 +10,7 @@ import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/repositories/trip_repository.dart';
+import 'package:my_app_gps/services/notification_service.dart';
 import 'package:my_app_gps/theme/app_theme.dart';
 
 /// Lifecycle observer to automatically clean up expired trip cache
@@ -58,6 +59,24 @@ class _AppRootState extends ConsumerState<AppRoot> {
       }
     });
     
+    // Initialize NotificationService with context for deep-link navigation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        try {
+          final notificationService = ref.read(notificationServiceProvider);
+          // Re-initialize with context for proper navigation from background
+          notificationService.init(context: context);
+          if (kDebugMode) {
+            debugPrint('[AppRoot] 🔔 NotificationService context initialized');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[AppRoot] ⚠️ Failed to initialize notification context: $e');
+          }
+        }
+      }
+    });
+    
     // Precache common marker images to avoid frame jank when markers first appear.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -94,7 +113,8 @@ class _AppRootState extends ConsumerState<AppRoot> {
       (raw) async {
         try {
           final event = Event.fromJson(raw);
-          await ref.read(notificationsRepositoryProvider).addEvent(event);
+          final notifRepo = await ref.read(notificationsRepositoryProvider.future);
+          await notifRepo.addEvent(event);
           if (kDebugMode) {
             debugPrint('[AppRoot] 📩 Forwarded ${event.type} → NotificationsRepository');
           }

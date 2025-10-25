@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:my_app_gps/app/app_router.dart';
+import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 
 class BottomNavShell extends ConsumerStatefulWidget {
@@ -51,15 +52,20 @@ class _BottomNavShellState extends ConsumerState<BottomNavShell> {
             ),
           ],
           onDestinationSelected: (i) {
+            // If there's a modal route on top (like fullscreen trip map), pop it first
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+            
             switch (i) {
               case 0:
-                context.go(AppRoutes.map);
+                context.safeGo(AppRoutes.map);
               case 1:
-                context.go(AppRoutes.trips);
+                context.safeGo(AppRoutes.trips);
               case 2:
-                context.go(AppRoutes.alerts);
+                context.safeGo(AppRoutes.alerts);
               case 3:
-                context.go(AppRoutes.settings);
+                context.safeGo(AppRoutes.settings);
             }
           },
         ),
@@ -67,3 +73,4 @@ class _BottomNavShellState extends ConsumerState<BottomNavShell> {
     );
   }
 }
+

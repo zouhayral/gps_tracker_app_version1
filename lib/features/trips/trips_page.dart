@@ -84,7 +84,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
             Icon(
               Icons.filter_list_outlined,
               size: 80,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 24),
             Text(
@@ -98,7 +98,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
               'Select devices and date range to view trips',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
             ),
             const SizedBox(height: 32),
@@ -211,7 +211,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
         color: Theme.of(context).colorScheme.primaryContainer,
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -375,13 +375,13 @@ class _TripsPageState extends ConsumerState<TripsPage> {
             Icon(
               Icons.route_outlined,
               size: 80,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
               'No trips found',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
             ),
             const SizedBox(height: 8),
@@ -389,7 +389,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
               'Try selecting a different date range or devices',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                   ),
             ),
           ],
@@ -489,7 +489,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -568,7 +568,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
         Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.7),
+                color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
               ),
         ),
       ],
@@ -584,13 +584,13 @@ class _TripsPageState extends ConsumerState<TripsPage> {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
         ),
         boxShadow: [
           BoxShadow(
-            color: isDarkMode
-                ? Colors.black26
-                : Colors.black.withOpacity(0.05),
+      color: isDarkMode
+        ? Colors.black26
+        : Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -682,7 +682,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
                     Icon(
                       Icons.arrow_forward_ios,
                       size: 16,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
                     ),
                   ],
                 ),
@@ -708,7 +708,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
                       child: Icon(
                         Icons.arrow_forward,
                         size: 16,
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                       ),
                     ),
                     Text(
@@ -735,7 +735,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
                     Container(
                       width: 1,
                       height: 40,
-                      color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
                     ),
                     Expanded(
                       child: _buildTripStat(
@@ -748,7 +748,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
                     Container(
                       width: 1,
                       height: 40,
-                      color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
                     ),
                     Expanded(
                       child: _buildTripStat(
@@ -792,7 +792,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
         Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
           textAlign: TextAlign.center,
         ),

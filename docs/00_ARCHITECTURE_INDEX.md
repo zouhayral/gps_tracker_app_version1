@@ -16,6 +16,7 @@ This folder contains comprehensive architectural documentation generated on **Oc
 | **[ARCHITECTURE_ANALYSIS.md](./ARCHITECTURE_ANALYSIS.md)** | Full | Complete deep-dive analysis | 30 min |
 | **[ARCHITECTURE_VISUAL_DIAGRAMS.md](./ARCHITECTURE_VISUAL_DIAGRAMS.md)** | Visual | Data flow diagrams | 15 min |
 | **[NOTIFICATION_SYSTEM_IMPLEMENTATION.md](./NOTIFICATION_SYSTEM_IMPLEMENTATION.md)** | Guide | Step-by-step implementation | 20 min |
+| **[BIG_PICTURE_ARCHITECTURE.md](./BIG_PICTURE_ARCHITECTURE.md)** | Overview | End-to-end system overview (Firebase + SQLite + Riverpod) | 12 min |
 
 ---
 

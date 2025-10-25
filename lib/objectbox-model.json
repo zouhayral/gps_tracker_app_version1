@@ -479,10 +479,103 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "8:2812116548088571599",
+      "lastPropertyId": "14:977598808898050017",
+      "name": "GeofenceEventEntity",
+      "properties": [
+        {
+          "id": "1:5599896190694552469",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4544566412133152019",
+          "name": "eventId",
+          "indexId": "23:3522846638005654641",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:4711695511786423042",
+          "name": "geofenceId",
+          "indexId": "24:1190289486820908649",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:5223236274107866436",
+          "name": "geofenceName",
+          "type": 9
+        },
+        {
+          "id": "5:1534819153410869465",
+          "name": "deviceId",
+          "indexId": "25:9072304262820360254",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:8048649176167872176",
+          "name": "deviceName",
+          "type": 9
+        },
+        {
+          "id": "7:446349630743250001",
+          "name": "eventType",
+          "indexId": "26:8226846714138550195",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "8:4824446704761616405",
+          "name": "eventTimeMs",
+          "indexId": "27:7918326653101692442",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "9:4995367106724555691",
+          "name": "latitude",
+          "type": 8
+        },
+        {
+          "id": "10:6358916211217176216",
+          "name": "longitude",
+          "type": 8
+        },
+        {
+          "id": "11:1115133075660118746",
+          "name": "dwellDurationMs",
+          "type": 6
+        },
+        {
+          "id": "12:914238883197184394",
+          "name": "status",
+          "indexId": "28:638326360943675639",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "13:2370860904449539118",
+          "name": "syncStatus",
+          "indexId": "29:3034522310017026784",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "14:977598808898050017",
+          "name": "attributesJson",
+          "type": 9
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "7:3941204868590047628",
-  "lastIndexId": "22:1600730073326815966",
+  "lastEntityId": "8:2812116548088571599",
+  "lastIndexId": "29:3034522310017026784",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:my_app_gps/core/logging/rebuild_logger.dart';
+import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
@@ -159,8 +159,9 @@ class _DeviceTile extends ConsumerWidget {
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
         // Navigate to map with this device preselected and centered
-        context.go('/map?device=$id');
+        context.safeGo('/map?device=$id');
       },
     );
   }
 }
+

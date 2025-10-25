@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 
 /// Bottom, swipe-to-dismiss banner that appears after reconnect backfill,
 /// showing how many notifications were recovered.
@@ -72,7 +72,7 @@ class _RecoveredEventsBannerState extends ConsumerState<RecoveredEventsBanner> {
 
   void _onView() {
     if (!mounted) return;
-    context.go(AppRoutes.alerts);
+    context.safeGo(AppRoutes.alerts);
   }
 
   @override
@@ -152,3 +152,4 @@ class _RecoveredEventsBannerState extends ConsumerState<RecoveredEventsBanner> {
     super.dispose();
   }
 }
+

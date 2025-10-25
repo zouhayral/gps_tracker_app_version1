@@ -270,7 +270,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                           left: 8,
                           top: 8,
                           child: Material(
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                             shape: const CircleBorder(),
                             child: InkWell(
                               customBorder: const CircleBorder(),
@@ -295,7 +295,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
+                              color: Colors.black.withValues(alpha: 0.5),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -309,7 +309,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                           right: 8,
                           top: 8,
                           child: Material(
-                            color: accent.withOpacity(0.92),
+                            color: accent.withValues(alpha: 0.92),
                             clipBehavior: Clip.antiAlias,
                             borderRadius: BorderRadius.circular(20),
                             child: InkWell(
@@ -364,7 +364,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                 child: SliderTheme(
                   data: SliderTheme.of(context).copyWith(
                         activeTrackColor: accent,
-                        inactiveTrackColor: accent.withOpacity(0.3),
+                        inactiveTrackColor: accent.withValues(alpha: 0.3),
                         thumbColor: accent,
                       ),
                   child: TripPlaybackControls(
@@ -543,7 +543,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
                   left: 12,
                   top: 12,
                   child: Material(
-                    color: Colors.white.withOpacity(0.95),
+                    color: Colors.white.withValues(alpha: 0.95),
                     shape: const CircleBorder(),
                     child: InkWell(
                       customBorder: const CircleBorder(),
@@ -560,7 +560,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
                   right: 12,
                   top: 12,
                   child: Material(
-                    color: accent.withOpacity(0.92),
+                    color: accent.withValues(alpha: 0.92),
                     clipBehavior: Clip.antiAlias,
                     borderRadius: BorderRadius.circular(20),
                     child: InkWell(

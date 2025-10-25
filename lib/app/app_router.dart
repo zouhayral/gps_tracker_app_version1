@@ -5,11 +5,17 @@ import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 import 'package:my_app_gps/features/auth/presentation/login_page.dart';
 import 'package:my_app_gps/features/dashboard/navigation/bottom_nav_shell.dart';
+import 'package:my_app_gps/features/geofencing/ui/geofence_detail_page.dart';
+import 'package:my_app_gps/features/geofencing/ui/geofence_form_page.dart';
+import 'package:my_app_gps/features/geofencing/ui/geofence_list_page.dart';
 import 'package:my_app_gps/features/map/view/map_page.dart';
 import 'package:my_app_gps/features/notifications/view/notifications_page.dart';
 import 'package:my_app_gps/features/settings/view/settings_page.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_page.dart';
 import 'package:my_app_gps/features/trips/view/trips_page.dart';
+
+// Global navigator key for background navigation (e.g., from notifications)
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // Route names / paths constants
 class AppRoutes {
@@ -19,6 +25,8 @@ class AppRoutes {
   static const alerts = '/alerts';
   static const settings = '/settings';
   static const telemetryHistory = '/telemetry-history';
+  static const geofences = '/geofences';
+  static const geofenceDetail = '/geofences';
 }
 
 // Riverpod provider exposing a configured GoRouter. It rebuilds when auth changes.
@@ -29,7 +37,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   );
 
   return GoRouter(
+    navigatorKey: navigatorKey,
     initialLocation: AppRoutes.map,
+    // Error boundary: redirect to map page on any navigation error
+    errorBuilder: (context, state) {
+      debugPrint('[Router] ❌ Navigation error: ${state.error}');
+      debugPrint('[Router] 🔄 Redirecting to map page');
+      return const MapPage();
+    },
     redirect: (context, state) {
       final loggingIn = state.fullPath == AppRoutes.login;
       if (!isLoggedIn && !loggingIn) return AppRoutes.login;
@@ -56,6 +71,51 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             );
           }
           return TelemetryHistoryPage(deviceId: deviceId);
+        },
+      ),
+      // Geofence list route (standalone, accessible from settings)
+      GoRoute(
+        path: AppRoutes.geofences,
+        name: 'geofences',
+        builder: (context, state) => const GeofenceListPage(),
+      ),
+      // Geofence create route (must come BEFORE detail route to match first)
+      GoRoute(
+        path: '${AppRoutes.geofences}/create',
+        name: 'geofence-create',
+        builder: (context, state) => const GeofenceFormPage(
+          mode: GeofenceFormMode.create,
+        ),
+      ),
+      // Geofence edit route
+      GoRoute(
+        path: '${AppRoutes.geofences}/:id/edit',
+        name: 'geofence-edit',
+        builder: (context, state) {
+          final id = state.pathParameters['id'];
+          if (id == null || id.isEmpty) {
+            return const Scaffold(
+              body: Center(child: Text('Missing geofence ID')),
+            );
+          }
+          return GeofenceFormPage(
+            mode: GeofenceFormMode.edit,
+            geofenceId: id,
+          );
+        },
+      ),
+      // Geofence detail route for deep-linking from notifications
+      GoRoute(
+        path: '${AppRoutes.geofenceDetail}/:id',
+        name: 'geofence-detail',
+        builder: (context, state) {
+          final id = state.pathParameters['id'];
+          if (id == null || id.isEmpty) {
+            return const Scaffold(
+              body: Center(child: Text('Missing geofence ID')),
+            );
+          }
+          return GeofenceDetailPage(geofenceId: id);
         },
       ),
       // Shell containing bottom navigation destinations
