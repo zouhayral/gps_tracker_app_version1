@@ -165,8 +165,8 @@ final isolatedMarkerNotifierProvider = Provider<IsolatedMarkerNotifier>((ref) {
         final deviceId = device['id'] as int?;
         if (deviceId == null) continue;
 
-        // Watch per-device position (cache-first, WebSocket updates)
-        final asyncPosition = ref.read(vehiclePositionProvider(deviceId));
+        // 🎯 PRIORITY 1: Use optimized per-device stream (read once per build)
+        final asyncPosition = ref.read(devicePositionStreamProvider(deviceId));
         final position = asyncPosition.valueOrNull;
         if (position != null) {
           positions[deviceId] = position;
