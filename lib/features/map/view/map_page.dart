@@ -258,9 +258,10 @@ class _MapPageState extends ConsumerState<MapPage>
 
       // OPTIMIZATION: Preload bitmap descriptors for instant marker icons
       // This eliminates the "loading" spinner delay on first marker render
+      // Now uses Flutter Material Icons instead of PNG assets
       unawaited(
         BitmapDescriptorCache.instance
-            .preloadAll(StandardMarkerIcons.assetPaths)
+            .preloadAll(null) // Uses default StandardMarkerIcons.configs
             .catchError((Object e) {
           _log.warning('Bitmap cache preload error (non-fatal)', error: e);
         }),
@@ -889,11 +890,11 @@ class _MapPageState extends ConsumerState<MapPage>
     final cachedMarkers = cacheStats['cached_markers'] as int? ?? 0;
     final snapshots = cacheStats['snapshots'] as int? ?? 0;
     final markerReuseRate = snapshots > 0 
-        ? ((cachedMarkers / snapshots * 100).clamp(0, 100)).toStringAsFixed(1)
+        ? (cachedMarkers / snapshots * 100).clamp(0, 100).toStringAsFixed(1)
         : '0.0';
     
     // Device cache stats (optional - skip if provider not available)
-    final deviceHitRate = '0.0%'; // Simplified for now
+    const deviceHitRate = '0.0%'; // Simplified for now
     
     // Calculate WS reconnect rate (per 30s interval)
     final wsReconnects = _wsReconnectCount;

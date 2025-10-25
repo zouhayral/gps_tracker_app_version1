@@ -88,12 +88,8 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/images/
-    - assets/icons/
-    # Explicit marker SVG assets (present in repository)
-    - assets/icons/marker_online.svg
-    - assets/icons/marker_offline.svg
-    - assets/icons/marker_disconnected.svg
-  # No PNG fallbacks included: only SVGs are used for smaller builds and vector clarity.
+    # Note: Marker icons now use Flutter Material Icons (no PNG/SVG files needed)
+    # This reduces app size and improves performance
 
   #   - images/a_dot_ham.jpeg
 

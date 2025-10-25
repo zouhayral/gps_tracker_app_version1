@@ -23,8 +23,6 @@ class AppLogger {
       methodCount: 0, // No stack trace for non-errors
       errorMethodCount: 5, // Show stack trace for errors
       lineLength: 80,
-      colors: true,
-      printEmojis: true,
       dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
     ),
     output: _LogOutput(),

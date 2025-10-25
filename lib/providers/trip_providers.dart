@@ -437,7 +437,6 @@ class LifecycleAwareTripsNotifier
       debugPrint(st.toString());
 
       return TripsState(
-        isLoading: false,
         hasError: true,
         errorMessage: e.toString(),
       );
@@ -588,7 +587,6 @@ class LifecycleAwareTripsNotifier
         } else {
           state = AsyncData(
             TripsState(
-              isLoading: false,
               hasError: true,
               errorMessage: e.toString(),
             ),

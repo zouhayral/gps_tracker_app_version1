@@ -1,64 +1,76 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
-/// MarkerAssets preloads and caches commonly used marker images/icons to
-/// prevent re-decoding on every marker rebuild.
+/// MarkerAssets provides commonly used marker icons using Flutter Material Icons.
+/// No external assets needed - icons are rendered programmatically.
 enum MarkerStatus { online, offline, disconnected }
 
 class MarkerAssets {
-  // Prefer SVGs for scalability; only SVGs are used to keep builds small.
-  static const String onlineSvg = 'assets/icons/marker_online.svg';
-  static const String offlineSvg = 'assets/icons/marker_offline.svg';
-  static const String disconnectedSvg = 'assets/icons/marker_disconnected.svg';
-  static Future<void> preload(BuildContext context) async {
-    // Precache SVGs using flutter_svg's precachePicture to reduce first-render jank.
-    if (!context.mounted) return;
-    Future<void> tryPrecacheSvg(String assetSvg) async {
-      try {
-        // Warm the asset bundle by loading bytes (this avoids the first-frame IO cost).
-        await rootBundle.load(assetSvg);
-      } catch (_) {
-        // Ignore missing SVGs; SvgPicture.asset will show an error placeholder.
-      }
-    }
+  // Use Flutter Material Icons instead of SVG assets
+  static const IconData onlineIcon = Icons.location_on;
+  static const IconData offlineIcon = Icons.location_off;
+  static const IconData disconnectedIcon = Icons.location_off_outlined;
 
-    await tryPrecacheSvg(onlineSvg);
-    await tryPrecacheSvg(offlineSvg);
-    await tryPrecacheSvg(disconnectedSvg);
+  static const Color onlineColor = Colors.green;
+  static const Color offlineColor = Colors.grey;
+  static const Color disconnectedColor = Colors.red;
+
+  /// Preload is no longer needed since Material Icons are built-in
+  static Future<void> preload(BuildContext context) async {
+    // No-op: Material Icons are always available
+    // Kept for backward compatibility
   }
 
-  /// Returns a widget rendering the online/offline marker, preferring SVG.
-  static Widget buildMarkerByStatus(
-      {required MarkerStatus status, double size = 28,}) {
+  /// Returns a widget rendering the online/offline marker using Material Icons
+  static Widget buildMarkerByStatus({
+    required MarkerStatus status,
+    double size = 28,
+  }) {
     switch (status) {
       case MarkerStatus.online:
-        return SvgPicture.asset(
-          onlineSvg,
-          width: size,
-          height: size,
-          // Minimal placeholder to avoid layout shift while SVG is decoding.
-          placeholderBuilder: (_) => const SizedBox.shrink(),
+        return Icon(
+          onlineIcon,
+          size: size,
+          color: onlineColor,
+          shadows: const [
+            Shadow(
+              color: Colors.black54,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
         );
       case MarkerStatus.offline:
-        return SvgPicture.asset(
-          offlineSvg,
-          width: size,
-          height: size,
-          placeholderBuilder: (_) => const SizedBox.shrink(),
+        return Icon(
+          offlineIcon,
+          size: size,
+          color: offlineColor,
+          shadows: const [
+            Shadow(
+              color: Colors.black54,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
         );
       case MarkerStatus.disconnected:
-        return SvgPicture.asset(
-          disconnectedSvg,
-          width: size,
-          height: size,
-          placeholderBuilder: (_) => const SizedBox.shrink(),
+        return Icon(
+          disconnectedIcon,
+          size: size,
+          color: disconnectedColor,
+          shadows: const [
+            Shadow(
+              color: Colors.black54,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
         );
     }
   }
 }
 
 /// Call this once after the first frame when a BuildContext is available.
+/// No longer needed but kept for backward compatibility.
 Future<void> precacheCommonMarkers(BuildContext context) async {
   await MarkerAssets.preload(context);
 }

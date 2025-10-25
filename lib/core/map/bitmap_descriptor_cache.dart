@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 
 /// Bitmap descriptor cache for marker icons
 ///
@@ -50,12 +50,12 @@ class BitmapDescriptorCache {
   /// to ensure icons are ready when markers are created.
   ///
   /// **Parameters:**
-  /// - `assetPaths`: List of asset paths to preload
+  /// - `iconConfigs`: List of icon configurations to preload (optional, uses default if null)
   /// - `targetSize`: Target size for icon rendering (default: 64x64)
   ///
   /// **Returns:** Future that completes when all icons are loaded
   Future<void> preloadAll(
-    List<String> assetPaths, {
+    List<IconConfig>? iconConfigs, {
     int targetSize = 64,
   }) async {
     // Return immediately if already preloaded
@@ -79,16 +79,19 @@ class BitmapDescriptorCache {
     try {
       final stopwatch = Stopwatch()..start();
 
+      // Use default icons if none provided
+      final configs = iconConfigs ?? StandardMarkerIcons.configs;
+
       if (kDebugMode) {
         debugPrint(
-          '[BitmapCache] Preloading ${assetPaths.length} icons (size: ${targetSize}x$targetSize)...',
+          '[BitmapCache] Preloading ${configs.length} icons (size: ${targetSize}x$targetSize)...',
         );
       }
 
       // Load all icons in parallel (off UI thread)
       final results = await Future.wait(
-        assetPaths.map(
-          (path) => _loadBitmapDescriptor(path, targetSize),
+        configs.map(
+          (config) => _loadIconDescriptor(config, targetSize),
         ),
       );
 
@@ -99,7 +102,7 @@ class BitmapDescriptorCache {
 
       if (kDebugMode) {
         debugPrint(
-          '[BitmapCache] ✅ Preloaded $loaded/${assetPaths.length} icons in ${stopwatch.elapsedMilliseconds}ms',
+          '[BitmapCache] ✅ Preloaded $loaded/${configs.length} icons in ${stopwatch.elapsedMilliseconds}ms',
         );
         _printCacheStats();
       }
@@ -116,41 +119,48 @@ class BitmapDescriptorCache {
     }
   }
 
-  /// Load a single bitmap descriptor asynchronously
+  /// Load a single icon descriptor from Flutter Material Icon
   ///
   /// This runs entirely off the UI thread for zero jank.
-  Future<ui.Image?> _loadBitmapDescriptor(
-    String assetPath,
+  Future<ui.Image?> _loadIconDescriptor(
+    IconConfig config,
     int targetSize,
   ) async {
     try {
-      // Load asset bytes
-      final data = await rootBundle.load(assetPath);
-      final bytes = data.buffer.asUint8List();
-
-      // Decode image off UI thread
-      final codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: targetSize,
-        targetHeight: targetSize,
+      // Create icon image from IconData
+      final pictureRecorder = ui.PictureRecorder();
+      final canvas = Canvas(pictureRecorder);
+      
+      // Draw the icon
+      final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
+      textPainter.text = TextSpan(
+        text: String.fromCharCode(config.icon.codePoint),
+        style: TextStyle(
+          fontSize: targetSize.toDouble(),
+          fontFamily: config.icon.fontFamily,
+          package: config.icon.fontPackage,
+          color: config.color,
+        ),
       );
-
-      // Get first frame
-      final frame = await codec.getNextFrame();
-      final image = frame.image;
+      
+      textPainter.layout();
+      textPainter.paint(canvas, Offset.zero);
+      
+      // Convert to image
+      final picture = pictureRecorder.endRecording();
+      final image = await picture.toImage(targetSize, targetSize);
 
       // Cache the descriptor
-      final key = _getKeyFromPath(assetPath);
-      _cache[key] = image;
+      _cache[config.key] = image;
 
       if (kDebugMode) {
-        debugPrint('[BitmapCache] ✓ Loaded $key from $assetPath');
+        debugPrint('[BitmapCache] ✓ Loaded ${config.key} from Flutter icon');
       }
 
       return image;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[BitmapCache] ✗ Failed to load $assetPath: $e');
+        debugPrint('[BitmapCache] ✗ Failed to load ${config.key}: $e');
       }
       return null;
     }
@@ -172,19 +182,9 @@ class BitmapDescriptorCache {
     return descriptor;
   }
 
-  /// Get descriptor by asset path
-  ui.Image? getDescriptorByPath(String assetPath) {
-    final key = _getKeyFromPath(assetPath);
+  /// Get descriptor by config key
+  ui.Image? getDescriptorByKey(String key) {
     return getDescriptor(key);
-  }
-
-  /// Extract key from asset path
-  /// Example: 'assets/icons/car_idle.png' -> 'car_idle'
-  String _getKeyFromPath(String assetPath) {
-    final parts = assetPath.split('/');
-    final filename = parts.last;
-    final key = filename.replaceAll(RegExp(r'\.(png|jpg|svg)$'), '');
-    return key;
   }
 
   /// Check if icons are preloaded and ready
@@ -232,57 +232,88 @@ class BitmapDescriptorCache {
   }
 }
 
-/// Predefined icon configurations for common marker types
-class MarkerIconConfig {
-  const MarkerIconConfig({
+/// Icon configuration for marker rendering
+class IconConfig {
+  const IconConfig({
     required this.key,
-    required this.assetPath,
+    required this.icon,
+    required this.color,
     this.targetSize = 64,
   });
 
   final String key;
-  final String assetPath;
+  final IconData icon;
+  final Color color;
   final int targetSize;
 }
 
-/// Standard marker icon configurations
+/// Standard marker icon configurations using Flutter Material Icons
 class StandardMarkerIcons {
-  static const List<MarkerIconConfig> configs = [
-    MarkerIconConfig(
+  static const List<IconConfig> configs = [
+    IconConfig(
       key: 'car_idle',
-      assetPath: 'assets/icons/car_idle.png',
+      icon: Icons.directions_car,
+      color: Colors.amber,
     ),
-    MarkerIconConfig(
+    IconConfig(
       key: 'car_moving',
-      assetPath: 'assets/icons/car_moving.png',
+      icon: Icons.directions_car,
+      color: Colors.orange,
     ),
-    MarkerIconConfig(
+    IconConfig(
       key: 'car_selected',
-      assetPath: 'assets/icons/car_selected.png',
+      icon: Icons.my_location,
+      color: Colors.blue,
     ),
-    MarkerIconConfig(
+    IconConfig(
       key: 'marker_online',
-      assetPath: 'assets/icons/online.png',
+      icon: Icons.location_on,
+      color: Colors.green,
     ),
-    MarkerIconConfig(
+    IconConfig(
       key: 'marker_offline',
-      assetPath: 'assets/icons/offline.png',
+      icon: Icons.location_off,
+      color: Colors.grey,
     ),
-    MarkerIconConfig(
+    IconConfig(
       key: 'marker_selected',
-      assetPath: 'assets/icons/selected.png',
+      icon: Icons.my_location,
+      color: Colors.blue,
     ),
-    MarkerIconConfig(
+    IconConfig(
       key: 'marker_moving',
-      assetPath: 'assets/icons/moving.png',
+      icon: Icons.directions_car,
+      color: Colors.orange,
     ),
-    MarkerIconConfig(
+    IconConfig(
       key: 'marker_stopped',
-      assetPath: 'assets/icons/stopped.png',
+      icon: Icons.pause_circle_filled,
+      color: Colors.red,
+    ),
+    IconConfig(
+      key: 'online',
+      icon: Icons.location_on,
+      color: Colors.green,
+    ),
+    IconConfig(
+      key: 'offline',
+      icon: Icons.location_off,
+      color: Colors.grey,
+    ),
+    IconConfig(
+      key: 'selected',
+      icon: Icons.my_location,
+      color: Colors.blue,
+    ),
+    IconConfig(
+      key: 'moving',
+      icon: Icons.directions_car,
+      color: Colors.orange,
+    ),
+    IconConfig(
+      key: 'stopped',
+      icon: Icons.pause_circle_filled,
+      color: Colors.red,
     ),
   ];
-
-  /// Get all asset paths for preloading
-  static List<String> get assetPaths =>
-      configs.map((c) => c.assetPath).toList();
 }

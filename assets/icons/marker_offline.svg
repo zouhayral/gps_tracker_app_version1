@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <!-- Outer ring: red stroke, transparent background -->
-  <circle cx="32" cy="32" r="30" fill="none" stroke="#ff3b30" stroke-width="4"/>
-  <!-- Center: white for contrast -->
-  <circle cx="32" cy="32" r="24" fill="#ffffff"/>
-  <!-- Upward arrow (flat, minimalist) -->
-  <polygon points="32,16 42,38 32,32 22,38" fill="#ff3b30"/>
-</svg>

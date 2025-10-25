@@ -30,7 +30,7 @@ class _BottomNavShellState extends ConsumerState<BottomNavShell> {
     return Scaffold(
       body: widget.child,
       bottomNavigationBar: Container(
-        color: const Color(0xFFE9F9B9),
+        color: const Color(0xFFE2F998),
         padding: const EdgeInsets.only(top: 5),
         child: NavigationBar(
           selectedIndex: currentIndex,

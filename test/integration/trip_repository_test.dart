@@ -3,9 +3,8 @@ import 'dart:convert';
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app_gps/repositories/trip_repository.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 

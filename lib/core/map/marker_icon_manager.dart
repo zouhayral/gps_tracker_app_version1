@@ -3,10 +3,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 /// Manages marker icon preloading and caching for optimal performance
 /// Reduces first-draw latency by loading all icon assets on initialization
+/// Uses Flutter Material Icons instead of PNG assets
 class MarkerIconManager {
   MarkerIconManager._();
 
@@ -16,7 +16,7 @@ class MarkerIconManager {
   bool _isInitialized = false;
   Completer<void>? _initCompleter;
 
-  /// Preload all marker icons
+  /// Preload all marker icons using Flutter Material Icons
   Future<void> preloadIcons() async {
     if (_isInitialized) return;
     if (_initCompleter != null) return _initCompleter!.future;
@@ -26,13 +26,13 @@ class MarkerIconManager {
     try {
       final stopwatch = Stopwatch()..start();
 
-      // Define icon configurations
+      // Define icon configurations with Flutter Material Icons
       const iconsToLoad = [
-        _IconConfig('marker_online', 'assets/icons/online.png', 64),
-        _IconConfig('marker_offline', 'assets/icons/offline.png', 64),
-        _IconConfig('marker_selected', 'assets/icons/selected.png', 64),
-        _IconConfig('marker_moving', 'assets/icons/moving.png', 64),
-        _IconConfig('marker_stopped', 'assets/icons/stopped.png', 64),
+        _IconConfig('marker_online', Icons.location_on, Colors.green, 64),
+        _IconConfig('marker_offline', Icons.location_off, Colors.grey, 64),
+        _IconConfig('marker_selected', Icons.my_location, Colors.blue, 64),
+        _IconConfig('marker_moving', Icons.directions_car, Colors.orange, 64),
+        _IconConfig('marker_stopped', Icons.pause_circle_filled, Colors.red, 64),
       ];
 
       // Load all icons in parallel
@@ -61,24 +61,39 @@ class MarkerIconManager {
     }
   }
 
-  /// Load a single icon
+  /// Load a single icon from Flutter Material Icon
   Future<ui.Image?> _loadIcon(_IconConfig config) async {
     try {
-      final data = await rootBundle.load(config.path);
-      final bytes = data.buffer.asUint8List();
-      final codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: config.size,
-        targetHeight: config.size,
+      // Create icon image from IconData
+      final pictureRecorder = ui.PictureRecorder();
+      final canvas = Canvas(pictureRecorder);
+      
+      // Draw the icon
+      final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
+      textPainter.text = TextSpan(
+        text: String.fromCharCode(config.icon.codePoint),
+        style: TextStyle(
+          fontSize: config.size.toDouble(),
+          fontFamily: config.icon.fontFamily,
+          package: config.icon.fontPackage,
+          color: config.color,
+        ),
       );
-      final frame = await codec.getNextFrame();
-      _iconCache[config.key] = frame.image;
+      
+      textPainter.layout();
+      textPainter.paint(canvas, Offset.zero);
+      
+      // Convert to image
+      final picture = pictureRecorder.endRecording();
+      final image = await picture.toImage(config.size, config.size);
+      
+      _iconCache[config.key] = image;
 
       if (kDebugMode) {
         debugPrint('[MarkerIcons] ✓ Loaded ${config.key}');
       }
 
-      return frame.image;
+      return image;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[MarkerIcons] ✗ Failed to load ${config.key}: $e');
@@ -112,10 +127,11 @@ class MarkerIconManager {
 
 /// Configuration for an icon to load
 class _IconConfig {
-  const _IconConfig(this.key, this.path, this.size);
+  const _IconConfig(this.key, this.icon, this.color, this.size);
 
   final String key;
-  final String path;
+  final IconData icon;
+  final Color color;
   final int size;
 }
 

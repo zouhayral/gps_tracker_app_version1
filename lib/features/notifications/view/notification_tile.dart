@@ -196,7 +196,7 @@ class NotificationTile extends ConsumerWidget {
     switch (priority) {
       case 'high':
         return const _PriorityPalette(
-          background: Color(0xFFF1F8E9), // light green background like mock
+          background: Color(0xFFF5FFE2), // light yellow-green background
           border: Color(0xFFE0E6D6),
           iconBg: Color(0xFFFFEBEE),
           iconFg: Color(0xFFD32F2F),
@@ -205,7 +205,7 @@ class NotificationTile extends ConsumerWidget {
         );
       case 'medium':
         return const _PriorityPalette(
-          background: Color(0xFFF1F8E9),
+          background: Color(0xFFF5FFE2), // light yellow-green background
           border: Color(0xFFE0E6D6),
           iconBg: Color(0xFFFFF3E0),
           iconFg: Color(0xFFEF6C00),
@@ -214,7 +214,7 @@ class NotificationTile extends ConsumerWidget {
         );
       default:
         return const _PriorityPalette(
-          background: Color(0xFFF1F8E9),
+          background: Color(0xFFF5FFE2), // light yellow-green background
           border: Color(0xFFE0E6D6),
           iconBg: Color(0xFFEDE7F6),
           iconFg: Color(0xFF5E35B1),
