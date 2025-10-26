@@ -97,9 +97,8 @@ final permissionGuidanceProvider = Provider<String>((ref) {
 /// State notifier for managing permission request flow
 class PermissionStateNotifier extends StateNotifier<AsyncValue<LocationPermission>> {
   final GeofencePermissionService _service;
-  final Ref _ref;
 
-  PermissionStateNotifier(this._service, this._ref)
+  PermissionStateNotifier(this._service)
       : super(const AsyncValue.loading()) {
     // Initial permission check
     _checkPermission();
@@ -123,7 +122,7 @@ class PermissionStateNotifier extends StateNotifier<AsyncValue<LocationPermissio
       final granted = await _service.requestForegroundPermission();
       
       // Refresh permission state
-      await _checkPermission();
+      _checkPermission();
       
       return granted;
     } catch (e) {
@@ -137,7 +136,7 @@ class PermissionStateNotifier extends StateNotifier<AsyncValue<LocationPermissio
       final granted = await _service.requestBackgroundPermission();
       
       // Refresh permission state
-      await _checkPermission();
+      _checkPermission();
       
       return granted;
     } catch (e) {
@@ -183,7 +182,7 @@ class PermissionStateNotifier extends StateNotifier<AsyncValue<LocationPermissio
 final permissionStateProvider =
     StateNotifierProvider<PermissionStateNotifier, AsyncValue<LocationPermission>>((ref) {
   final service = ref.watch(geofencePermissionServiceProvider);
-  return PermissionStateNotifier(service, ref);
+  return PermissionStateNotifier(service);
 });
 
 /// Convenience methods provider for permission operations

@@ -85,14 +85,23 @@ class VehicleDataSnapshot {
     // Extract motion sensor
     final motion = attrs['motion'] is bool ? attrs['motion'] as bool : null;
 
-    // Extract distance metrics
-    final distanceAttr = attrs['distance'] ?? attrs['totalDistance'];
+    // Extract distance metrics - prioritize totalDistance as it's the cumulative value
+    // Check each attribute individually and only use if > 0
+    num? getPositiveNum(dynamic value) {
+      if (value is num && value > 0) return value;
+      return null;
+    }
+    
+    final distanceAttr = getPositiveNum(attrs['totalDistance']) ??
+        getPositiveNum(attrs['distance']) ??
+        getPositiveNum(attrs['odometer']);
     final distance =
-        distanceAttr is num ? distanceAttr.toDouble() / 1000 : null;
+        distanceAttr != null ? distanceAttr.toDouble() / 1000 : null;
 
-    final odometerAttr = attrs['odometer'];
+    final odometerAttr = getPositiveNum(attrs['odometer']) ??
+        getPositiveNum(attrs['totalDistance']);
     final odometer =
-        odometerAttr is num ? odometerAttr.toDouble() / 1000 : null;
+        odometerAttr != null ? odometerAttr.toDouble() / 1000 : null;
 
     final hoursAttr = attrs['hours'] ?? attrs['engineHours'];
     final hours = hoursAttr is num ? hoursAttr.toDouble() : null;
@@ -136,6 +145,9 @@ class VehicleDataSnapshot {
       );
       debugPrint(
         '[VehicleSnapshot]   speed: ${position.speed} km/h, motion: $motion',
+      );
+      debugPrint(
+        '[VehicleSnapshot]   distance: $distance km (from ${distanceAttr ?? 'null'}), odometer: $odometer km',
       );
       debugPrint(
         '[VehicleSnapshot]   battery: $batteryLevel%, power: $power V',

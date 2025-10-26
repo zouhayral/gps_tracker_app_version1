@@ -153,6 +153,11 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
           onPressed: () => _openFilterSheet(context),
         ),
         IconButton(
+          icon: const Icon(Icons.settings),
+          tooltip: 'Geofence Settings',
+          onPressed: () => context.safePush<void>('/geofences/settings'),
+        ),
+        IconButton(
           icon: const Icon(Icons.refresh),
           tooltip: 'Refresh',
           onPressed: () {

@@ -69,7 +69,7 @@ class GeofenceEvent {
       syncStatus: 'pending',
       createdAt: now,
       dwellDurationMs: null,
-      attributes: {},
+      attributes: {'priority': 'high'},
     );
   }
 
@@ -98,7 +98,7 @@ class GeofenceEvent {
       syncStatus: 'pending',
       createdAt: now,
       dwellDurationMs: null,
-      attributes: {},
+      attributes: {'priority': 'high'},
     );
   }
 
@@ -128,7 +128,7 @@ class GeofenceEvent {
       syncStatus: 'pending',
       createdAt: now,
       dwellDurationMs: dwellDurationMs,
-      attributes: {},
+      attributes: {'priority': 'default'},
     );
   }
 

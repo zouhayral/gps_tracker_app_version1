@@ -62,15 +62,58 @@ class MapDeviceInfoBox extends StatelessWidget {
     final engineAttr = position?.attributes['ignition'];
     final engine = engineAttr is bool ? (engineAttr ? 'on' : 'off') : '_';
     final speed = position?.speed.toStringAsFixed(0) ?? '--';
-    final distanceAttr = position?.attributes['distance'] ??
-        position?.attributes['totalDistance'];
+    
+    // Debug: Log all available data sources for distance
+    debugPrint('[MapInfoBox] Checking distance for device $deviceId ($name):');
+    debugPrint('[MapInfoBox]   Position attributes: ${position?.attributes}');
+    debugPrint('[MapInfoBox]   Device attributes: ${deviceMap['attributes']}');
+    debugPrint('[MapInfoBox]   Device odometer: ${deviceMap['odometer']}');
+    
+    // Try multiple sources for distance (in priority order):
+    // IMPORTANT: Check each attribute individually and skip if it's 0 or null
+    // Priority: totalDistance > distance > odometer (position) > device attributes > device odometer
+    final posAttrs = position?.attributes ?? {};
+    
+    // Helper to safely get numeric value > 0
+    num? getPositiveNum(dynamic value) {
+      if (value is num && value > 0) return value;
+      return null;
+    }
+    
+    final distanceAttr = getPositiveNum(posAttrs['totalDistance']) ??
+        getPositiveNum(posAttrs['distance']) ??
+        getPositiveNum(posAttrs['odometer']);
 
     String distance;
-    if (distanceAttr is num) {
+    if (distanceAttr != null) {
       final km = distanceAttr / 1000;
       distance = km >= 0.1 ? km.toStringAsFixed(0) : '00';
+      debugPrint('[MapInfoBox]   ✅ Found in position attributes: $distanceAttr m → $distance km');
     } else {
-      distance = '--';
+      // Check device-level attributes (Traccar stores totalDistance at device level)
+      final deviceAttributes = deviceMap['attributes'];
+      final deviceAttrDistance = deviceAttributes is Map
+          ? (getPositiveNum(deviceAttributes['totalDistance']) ??
+              getPositiveNum(deviceAttributes['distance']) ??
+              getPositiveNum(deviceAttributes['odometer']))
+          : null;
+
+      if (deviceAttrDistance != null) {
+        final km = deviceAttrDistance / 1000;
+        distance = km >= 0.1 ? km.toStringAsFixed(0) : '00';
+        debugPrint('[MapInfoBox]   ✅ Found in device attributes: $deviceAttrDistance m → $distance km');
+      } else {
+        // Check if device has odometer in main data
+        final deviceOdometer = getPositiveNum(deviceMap['odometer']);
+        if (deviceOdometer != null) {
+          final km = deviceOdometer / 1000;
+          distance = km >= 0.1 ? km.toStringAsFixed(0) : '00';
+          debugPrint('[MapInfoBox]   ✅ Found in device odometer: $deviceOdometer m → $distance km');
+        } else {
+          distance = '00';
+          debugPrint('[MapInfoBox]   ❌ No distance data found, showing: $distance km');
+        }
+      }
     }
 
     // Try to get coordinates from position, then fallback to device data

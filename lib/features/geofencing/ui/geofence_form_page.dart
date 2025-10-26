@@ -1035,23 +1035,6 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
     );
   }
 
-  /// Undo last map action
-  void _undoMapAction() {
-    if (_type == GeofenceType.polygon && _polygonVertices.isNotEmpty) {
-      setState(() {
-        _polygonVertices.removeLast();
-      });
-    }
-  }
-
-  /// Clear map
-  void _clearMap() {
-    setState(() {
-      _circleCenter = null;
-      _polygonVertices.clear();
-    });
-  }
-
   /// Use current location - shows dialog with options
   Future<void> _useCurrentLocation() async {
     // Show dialog with options

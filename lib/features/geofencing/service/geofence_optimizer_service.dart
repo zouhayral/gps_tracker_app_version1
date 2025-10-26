@@ -8,7 +8,7 @@ import '../models/geofence_optimizer_state.dart';
 
 /// Provider for GeofenceOptimizerService
 final geofenceOptimizerServiceProvider = Provider<GeofenceOptimizerService>((ref) {
-  return GeofenceOptimizerService(ref);
+  return GeofenceOptimizerService();
 });
 
 /// Service for optimizing geofence evaluations based on battery and motion.
@@ -29,7 +29,6 @@ final geofenceOptimizerServiceProvider = Provider<GeofenceOptimizerService>((ref
 /// - Reduced CPU wakeups when device idle
 /// - Automatic recovery when device moves or charges
 class GeofenceOptimizerService {
-  final Ref _ref;
   final _log = Logger();
   final _battery = Battery();
 
@@ -38,6 +37,9 @@ class GeofenceOptimizerService {
   StreamSubscription<BatteryState>? _batteryStateSub;
   Timer? _batteryCheckTimer;
   Timer? _stationaryCheckTimer;
+  
+  // Track last evaluation time per device
+  final Map<int, DateTime> _lastEvaluationTime = {};
 
   // Motion tracking
   final List<double> _recentMotionMagnitudes = [];
@@ -54,7 +56,7 @@ class GeofenceOptimizerService {
   static const Duration _batteryCheckInterval = Duration(minutes: 2);
   static const Duration _stationaryTimeout = Duration(minutes: 3);
 
-  GeofenceOptimizerService(this._ref);
+  GeofenceOptimizerService();
 
   /// Current optimizer state
   GeofenceOptimizerState get state => _state;
@@ -250,23 +252,18 @@ class GeofenceOptimizerService {
   /// Apply throttling based on current state
   void _applyThrottling() {
     Duration targetInterval;
-    String mode;
 
     if (_state.isLowBattery) {
       targetInterval = _idleInterval;
-      mode = 'battery saver';
     } else if (_state.isStationary) {
       targetInterval = _idleInterval;
-      mode = 'idle';
     } else {
       targetInterval = _activeInterval;
-      mode = 'active';
     }
 
     // Only apply if interval changed
     if (_state.currentIntervalSeconds != targetInterval.inSeconds) {
       _applyInterval(targetInterval);
-      _log.i('⚙️ Switched to $mode mode: ${targetInterval.inSeconds}s interval');
     }
   }
 
@@ -314,9 +311,6 @@ class GeofenceOptimizerService {
     
     return false;
   }
-  
-  // Track last evaluation time per device
-  final Map<int, DateTime> _lastEvaluationTime = {};
 
   /// Get current diagnostics
   Map<String, dynamic> get diagnostics => _state.diagnostics;

@@ -98,13 +98,10 @@ class GeofenceDetailPage extends ConsumerWidget {
             switch (value) {
               case 'duplicate':
                 _duplicateGeofence(context, ref, geofence);
-                break;
               case 'delete':
                 _confirmDelete(context, ref, geofence);
-                break;
               case 'share':
                 _shareGeofence(context, geofence);
-                break;
             }
           },
           itemBuilder: (context) => [
@@ -1090,18 +1087,6 @@ class GeofenceDetailPage extends ConsumerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Share feature coming soon'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  /// View geofence on full map
-  void _viewOnFullMap(BuildContext context, Geofence geofence) {
-    // TODO: Navigate to map page with geofence highlighted
-    // context.push('/map?highlight=$geofenceId');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Map view coming soon'),
         behavior: SnackBarBehavior.floating,
       ),
     );
