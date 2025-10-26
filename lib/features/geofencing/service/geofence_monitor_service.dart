@@ -1,14 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
-
 import 'package:my_app_gps/data/models/geofence.dart';
 import 'package:my_app_gps/data/models/geofence_event.dart';
-import 'package:my_app_gps/features/map/data/position_model.dart';
-import 'package:my_app_gps/data/repositories/geofence_repository.dart';
 import 'package:my_app_gps/data/repositories/geofence_event_repository.dart';
+import 'package:my_app_gps/data/repositories/geofence_repository.dart';
 import 'package:my_app_gps/features/geofencing/service/geofence_evaluator_service.dart';
 import 'package:my_app_gps/features/geofencing/service/geofence_state_cache.dart';
+import 'package:my_app_gps/features/map/data/position_model.dart';
 
 /// Continuously monitors device positions and evaluates geofence transitions.
 ///

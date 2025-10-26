@@ -1,11 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 
 import '../../../features/map/data/position_model.dart';
-import '../service/geofence_monitor_service.dart';
 import '../providers/geofence_providers.dart';
+import '../service/geofence_monitor_service.dart';
 
 /// Provider for GeofenceBackgroundService
 /// 

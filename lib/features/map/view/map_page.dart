@@ -474,6 +474,9 @@ class _MapPageState extends ConsumerState<MapPage>
     // Track which devices we've set up listeners for
     final listenedDeviceIds = <int>{};
     
+    // Track if initial fit has been triggered
+    bool hasTriggeredInitialFit = false;
+    
     // Helper to setup position listeners for a device
     void setupPositionListener(int deviceId) {
       if (listenedDeviceIds.contains(deviceId)) {
@@ -561,6 +564,24 @@ class _MapPageState extends ConsumerState<MapPage>
         }
         
         _scheduleMarkerUpdate(devices);
+        
+        // AUTO-FIT: Fit camera to online devices on initial load
+        if (!hasTriggeredInitialFit && _selectedIds.isEmpty) {
+          hasTriggeredInitialFit = true;
+          
+          // Schedule camera fit after markers are ready
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              // Wait a bit for positions to be loaded
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted && _lastPositions.isNotEmpty) {
+                  _fitToAllMarkers();
+                  _log.debug('[INIT] Auto-fitted camera to ${_lastPositions.length} online devices');
+                }
+              });
+            }
+          });
+        }
       }
     });
   }
@@ -931,6 +952,17 @@ class _MapPageState extends ConsumerState<MapPage>
     final devices = devicesAsync.asData?.value ?? [];
     if (devices.isNotEmpty) {
       _scheduleMarkerUpdate(devices);
+      
+      // AUTO-FIT: Fit camera to online devices when returning to map
+      if (_selectedIds.isEmpty) {
+        // Schedule camera fit after markers are updated
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && _lastPositions.isNotEmpty) {
+            _fitToAllMarkers();
+            _log.debug('[RESUME] Auto-fitted camera to ${_lastPositions.length} online devices');
+          }
+        });
+      }
     }
 
     // Request repository refresh for fresh data

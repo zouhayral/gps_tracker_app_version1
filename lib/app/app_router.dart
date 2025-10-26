@@ -14,6 +14,8 @@ import 'package:my_app_gps/features/notifications/view/notifications_page.dart';
 import 'package:my_app_gps/features/settings/view/settings_page.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_page.dart';
 import 'package:my_app_gps/features/trips/view/trips_page.dart';
+import 'package:my_app_gps/features/analytics/view/analytics_page.dart';
+import 'package:my_app_gps/core/utils/app_logger.dart';
 
 // Global navigator key for background navigation (e.g., from notifications)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -25,6 +27,10 @@ class AppRoutes {
   static const trips = '/trips';
   static const alerts = '/alerts';
   static const settings = '/settings';
+  
+  /// Route for the analytics reports and statistics page.
+  static const analytics = '/analytics';
+  
   static const telemetryHistory = '/telemetry-history';
   static const geofences = '/geofences';
   static const geofenceDetail = '/geofences';
@@ -79,6 +85,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.geofences,
         name: 'geofences',
         builder: (context, state) => const GeofenceListPage(),
+      ),
+      // Analytics route (standalone, accessible from settings)
+      GoRoute(
+        path: AppRoutes.analytics,
+        name: 'analytics',
+        builder: (context, state) {
+          AppLogger.debug('[Router] Navigated to AnalyticsPage');
+          return const AnalyticsPage();
+        },
       ),
       // Geofence settings route (accessible from geofence list)
       GoRoute(

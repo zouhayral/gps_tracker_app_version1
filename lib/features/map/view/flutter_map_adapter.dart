@@ -13,6 +13,7 @@ import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/map/core/map_adapter.dart';
 import 'package:my_app_gps/features/map/providers/map_state_providers.dart';
 import 'package:my_app_gps/features/map/view/map_marker.dart';
+import 'package:my_app_gps/features/map/widgets/geofence_overlay_layer.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/map/tile_network_client.dart';
 import 'package:my_app_gps/providers/connectivity_provider.dart';
@@ -690,6 +691,11 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
                 );
               },
             ),
+          
+          // Geofence overlay layer (circles and polygons)
+          // Renders between tiles and markers for proper layering
+          const GeofenceOverlayLayer(),
+          
           // Defensive: only build cluster layer when we have valid markers
           // OPTIMIZATION: Use ValueListenableBuilder to rebuild only markers, not entire map
           if (widget.markersNotifier != null)

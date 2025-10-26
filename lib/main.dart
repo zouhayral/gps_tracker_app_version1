@@ -8,14 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_app_gps/app/app_root.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
-import 'package:my_app_gps/core/database/objectbox_singleton.dart';
 import 'package:my_app_gps/core/database/dao/geofences_dao.dart';
+import 'package:my_app_gps/core/database/objectbox_singleton.dart';
 import 'package:my_app_gps/core/utils/memory_watchdog.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
-import 'package:my_app_gps/data/repositories/geofence_repository.dart'
-    hide geofenceRepositoryProvider;
 import 'package:my_app_gps/data/repositories/geofence_event_repository.dart'
     hide geofenceEventRepositoryProvider;
+import 'package:my_app_gps/data/repositories/geofence_repository.dart'
+    hide geofenceRepositoryProvider;
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
 import 'package:my_app_gps/features/geofencing/service/geofence_sync_worker.dart';
 import 'package:my_app_gps/map/fmtc_config.dart';

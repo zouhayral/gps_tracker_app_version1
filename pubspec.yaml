@@ -62,8 +62,10 @@ dependencies:
   objectbox_flutter_libs: ^4.3.1
   package_info_plus: ^9.0.0
   path_provider: any
+  pdf: ^3.11.1
   permission_handler: ^11.3.1
   sensors_plus: ^6.0.1
+  share_plus: ^10.0.0
   shared_preferences: ^2.2.3
   timezone: ^0.9.4
   url_launcher: ^6.3.0

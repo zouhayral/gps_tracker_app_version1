@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'dart:io' show Platform;
+
+import 'package:flutter/material.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 
 /// Education dialog shown when background location permission is denied.

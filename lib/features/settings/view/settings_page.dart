@@ -5,6 +5,7 @@ import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
+import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/services/traccar_connection_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -78,6 +79,31 @@ class SettingsPage extends ConsumerWidget {
                 secondary: const Icon(Icons.notifications),
                 activeTrackColor: Colors.lightGreen,
               );
+            },
+          ),
+          const Divider(height: 32),
+          // === Analytics & Reports Section ===
+          const ListTile(
+            title: Text(
+              'Analytics & Reports',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            dense: true,
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.analytics_outlined,
+              color: Color(0xFFb4e15c),
+            ),
+            title: const Text('Reports & Statistics'),
+            subtitle: const Text('View trips, speeds, and distances'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              AppLogger.debug('[Settings] Navigating to AnalyticsPage');
+              context.safePush<void>(AppRoutes.analytics);
             },
           ),
           const Divider(height: 32),

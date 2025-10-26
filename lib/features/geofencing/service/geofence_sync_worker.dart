@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:ui';
-import 'package:flutter/widgets.dart';
-import 'package:workmanager/workmanager.dart';
-import 'package:logger/logger.dart';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/widgets.dart';
+import 'package:logger/logger.dart';
+import 'package:workmanager/workmanager.dart';
 
 /// Task identifier for WorkManager
 const String geofenceSyncTaskKey = 'geofence_sync_task';

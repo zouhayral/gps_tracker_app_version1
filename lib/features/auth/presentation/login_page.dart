@@ -280,8 +280,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(
-                              0xFF8BC34A,
-                            ), // Green color like in image
+                              0xFFB4E15C,
+                            ), // Light green color
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
