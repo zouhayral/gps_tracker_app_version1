@@ -1,16 +1,19 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/data/models/geofence.dart';
 import 'package:my_app_gps/data/models/geofence_event.dart';
-import 'package:my_app_gps/data/repositories/geofence_repository.dart';
 import 'package:my_app_gps/data/repositories/geofence_event_repository.dart';
+import 'package:my_app_gps/data/repositories/geofence_repository.dart';
 import 'package:my_app_gps/features/geofencing/service/geofence_evaluator_service.dart';
-import 'package:my_app_gps/features/geofencing/service/geofence_state_cache.dart';
 import 'package:my_app_gps/features/geofencing/service/geofence_monitor_service.dart';
 import 'package:my_app_gps/features/geofencing/service/geofence_notification_bridge.dart';
+import 'package:my_app_gps/features/geofencing/service/geofence_state_cache.dart';
 import 'package:my_app_gps/services/notification_service.dart';
 
+export 'package:my_app_gps/data/repositories/geofence_event_repository.dart'
+    show geofenceEventRepositoryProvider;
 /// Riverpod providers for geofencing functionality.
 ///
 /// This file centralizes all geofence-related providers:
@@ -55,8 +58,6 @@ import 'package:my_app_gps/services/notification_service.dart';
 // Re-export repository providers for convenience
 export 'package:my_app_gps/data/repositories/geofence_repository.dart'
     show geofenceRepositoryProvider;
-export 'package:my_app_gps/data/repositories/geofence_event_repository.dart'
-    show geofenceEventRepositoryProvider;
 
 // =============================================================================
 // SERVICE PROVIDERS
@@ -764,6 +765,12 @@ final geofenceNotificationBridgeProvider =
   // Await repository initialization before creating bridge
   final eventRepo = await ref.watch(geofenceEventRepositoryProvider.future);
   
+  // Await monitor service initialization
+  final monitor = await ref.watch(geofenceMonitorServiceProvider.future);
+  
+  // Load geofences
+  final geofences = await ref.read(geofencesProvider.future);
+  
   // Create bridge instance
   final bridge = GeofenceNotificationBridge(
     eventRepo: eventRepo,
@@ -772,12 +779,22 @@ final geofenceNotificationBridgeProvider =
     // fcm: ref.read(firebaseMessagingProvider),
   );
 
+  // 🎯 CRITICAL: Attach bridge to monitor's event stream with geofences
+  await bridge.attach(monitor.events, geofences);
+  
+  if (kDebugMode) {
+    debugPrint('[GeofenceProviders] 🔔 Notification bridge attached with ${geofences.length} geofences');
+  }
+
   // Listen to geofence updates and propagate to bridge
   ref.listen<AsyncValue<List<Geofence>>>(
     geofencesProvider,
     (previous, next) {
       next.whenData((geofences) {
         bridge.updateGeofences(geofences);
+        if (kDebugMode) {
+          debugPrint('[GeofenceProviders] 🔄 Updated bridge with ${geofences.length} geofences');
+        }
       });
     },
   );
@@ -785,6 +802,9 @@ final geofenceNotificationBridgeProvider =
   // Cleanup on dispose
   ref.onDispose(() async {
     await bridge.detach();
+    if (kDebugMode) {
+      debugPrint('[GeofenceProviders] 🔕 Notification bridge detached');
+    }
   });
 
   return bridge;

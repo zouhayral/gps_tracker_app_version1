@@ -7,6 +7,7 @@ import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
+import 'package:my_app_gps/core/utils/adaptive_render.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/core/utils/stream_memoizer.dart';
@@ -210,6 +211,33 @@ class VehicleDataRepository {
   static const _kIdleTimeout = Duration(minutes: 5);
   static const _kMaxStreams = 2000;
   static const _kCleanupInterval = Duration(seconds: 60);
+
+  // === 🎯 STREAM BACKPRESSURE: Adaptive throttling based on LOD mode ===
+  // Per-device last emission time to enforce emit gap
+  final Map<int, DateTime> _lastEmit = {};
+  // Per-device pending updates (coalescing buffer - only keeps latest)
+  final Map<int, VehicleDataSnapshot> _pendingUpdates = {};
+  // Coalesced update count for stats
+  int _coalescedCount = 0;
+  // Optional LOD controller reference (set externally by MapPage)
+  AdaptiveLodController? _lodController;
+
+  /// Set the LOD controller for adaptive backpressure
+  /// Should be called by MapPage or other UI component that manages LOD
+  void setLodController(AdaptiveLodController? controller) {
+    _lodController = controller;
+    _log.debug('[Backpressure] LOD controller ${controller != null ? 'attached' : 'detached'}');
+  }
+
+  /// Get emit gap duration based on current LOD mode
+  Duration _emitGap() {
+    final mode = _lodController?.mode ?? RenderMode.high;
+    return switch (mode) {
+      RenderMode.high => const Duration(milliseconds: 33),   // ~30 Hz
+      RenderMode.medium => const Duration(milliseconds: 66), // ~15 Hz
+      RenderMode.low => const Duration(milliseconds: 120),   // ~8 Hz
+    };
+  }
 
   /// Resolve a friendly device name with safe fallbacks.
   /// Returns a user-visible string; never null.
@@ -741,7 +769,44 @@ class VehicleDataRepository {
   }
 
   /// Update cache and notify listeners for a device
+  /// 🎯 STREAM BACKPRESSURE: Implements adaptive throttling and coalescing
   void _updateDeviceSnapshot(VehicleDataSnapshot snapshot) {
+    final deviceId = snapshot.deviceId;
+    final now = DateTime.now();
+    final gap = _emitGap();
+    final lastEmit = _lastEmit[deviceId];
+
+    // Check if we're within throttle window
+    if (lastEmit != null && now.difference(lastEmit) < gap) {
+      // Coalesce: Store latest update, discard previous pending
+      final hadPending = _pendingUpdates.containsKey(deviceId);
+      _pendingUpdates[deviceId] = snapshot;
+      
+      if (hadPending) {
+        _coalescedCount++;
+        if (kDebugMode && _coalescedCount % 10 == 0) {
+          _log.debug('[Backpressure] Coalesced $_coalescedCount updates (device $deviceId)');
+        }
+      }
+
+      // Schedule delayed emission after gap expires
+      Future.delayed(gap, () {
+        final pending = _pendingUpdates.remove(deviceId);
+        if (pending != null && !_isDisposed) {
+          _emitSnapshot(pending);
+        }
+      });
+      
+      return; // Skip immediate emission
+    }
+
+    // Emit immediately if gap has passed
+    _emitSnapshot(snapshot);
+    _lastEmit[deviceId] = now;
+  }
+
+  /// Internal: Actually emit snapshot to notifiers and streams
+  void _emitSnapshot(VehicleDataSnapshot snapshot) {
     final existing = _notifiers[snapshot.deviceId]?.value;
     _log.debug('Updating snapshot for device=${snapshot.deviceId}');
     _log.debug('  incoming: $snapshot');
@@ -809,13 +874,17 @@ class VehicleDataRepository {
     // Update latest position cache
     _latestPositions[deviceId] = position;
     
-    // Broadcast to stream if there are active listeners
-    final entry = _deviceStreams[deviceId];
-    if (entry != null && !entry.controller.isClosed && entry.controller.hasListener) {
-      entry.controller.add(position);
-      entry.refreshAccess(); // 🎯 PHASE 9 STEP 2: Update last access time
-      _log.debug('📡 Position broadcast to stream for device $deviceId (listeners: ${entry.listenerCount})');
-    }
+    // 🎯 RENDER OPTIMIZATION: Defer stream broadcast to microtask queue
+    // This shifts emissions after current UI work completes, preventing frame jank
+    Future.microtask(() {
+      // Broadcast to stream if there are active listeners
+      final entry = _deviceStreams[deviceId];
+      if (entry != null && !entry.controller.isClosed && entry.controller.hasListener) {
+        entry.controller.add(position);
+        entry.refreshAccess(); // 🎯 PHASE 9 STEP 2: Update last access time
+        _log.debug('📡 Position broadcast to stream for device $deviceId (listeners: ${entry.listenerCount})');
+      }
+    });
   }
 
   /// Get or create a ValueNotifier for a device
@@ -1184,6 +1253,13 @@ class VehicleDataRepository {
       'totalListeners': totalListeners,
       'positionsCached': _latestPositions.length,
       'streamMemoizerStats': _streamMemoizer.getStats(),
+      // 🎯 STREAM BACKPRESSURE: Add backpressure stats
+      'backpressure': {
+        'coalescedCount': _coalescedCount,
+        'pendingUpdates': _pendingUpdates.length,
+        'emitGapMs': _emitGap().inMilliseconds,
+        'lodMode': _lodController?.mode.name ?? 'none',
+      },
     };
   }
 
@@ -1213,6 +1289,13 @@ class VehicleDataRepository {
       notifier.dispose();
     }
     _notifiers.clear();
+
+    // 🎯 STREAM BACKPRESSURE: Clear pending updates
+    _pendingUpdates.clear();
+    _lastEmit.clear();
+    if (kDebugMode && _coalescedCount > 0) {
+      _log.debug('[Backpressure] Total coalesced updates: $_coalescedCount');
+    }
 
     // 🎯 PRIORITY 1: Close all per-device position streams
     for (final entry in _deviceStreams.values) {

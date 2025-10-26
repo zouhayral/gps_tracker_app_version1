@@ -186,7 +186,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Used when session expires and user needs to login again
   Future<void> reAuthenticate(String password) async {
     final current = state;
-  String? email;
+    String? email;
 
     if (current is AuthSessionExpired) {
       email = current.email;

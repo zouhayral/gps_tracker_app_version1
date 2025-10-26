@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/data/models/event.dart';
 // Debug HUD disabled globally; overlay imports removed
+import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/repositories/trip_repository.dart';
@@ -24,10 +26,17 @@ class _TripRepositoryLifecycleObserver with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      tripRepository.cleanupExpiredCache();
-      if (kDebugMode) {
-        debugPrint('[TripRepository][LIFECYCLE] 🧹 Cleared expired trips on ${state.name}');
-      }
+      // 🎯 RENDER OPTIMIZATION: Schedule cleanup during idle time
+      // Uses post-frame callback with 5s delay to avoid frame drops
+      // This ensures cleanup never conflicts with active user interactions
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        Future<void>.delayed(const Duration(seconds: 5), () {
+          tripRepository.cleanupExpiredCache();
+          if (kDebugMode) {
+            debugPrint('[TripRepository][LIFECYCLE] 🧹 Cleared expired trips on ${state.name}');
+          }
+        });
+      });
     }
   }
 }
@@ -87,6 +96,23 @@ class _AppRootState extends ConsumerState<AppRoot> {
     // Kick off notifications boot initializer (await DAOs then init repo)
     // ignore: unused_result
     ref.read(notificationsBootInitializer);
+    
+    // 🎯 Initialize geofence notification bridge
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        try {
+          // Watch the provider to ensure it's initialized
+          ref.read(geofenceNotificationBridgeProvider);
+          if (kDebugMode) {
+            debugPrint('[AppRoot] 🔔 Geofence notification bridge initializing');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[AppRoot] ⚠️ Failed to initialize geofence notifications: $e');
+          }
+        }
+      }
+    });
   }
 
   @override

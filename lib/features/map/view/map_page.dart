@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 // import 'package:flutter/physics.dart';
 // import 'package:flutter_map/flutter_map.dart';
 // import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
@@ -24,7 +25,9 @@ import 'package:my_app_gps/core/map/marker_processing_isolate.dart';
 import 'package:my_app_gps/core/map/rebuild_profiler.dart';
 import 'package:my_app_gps/core/providers/connectivity_providers.dart';
 import 'package:my_app_gps/core/providers/vehicle_providers.dart';
+import 'package:my_app_gps/core/utils/adaptive_render.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
+import 'package:my_app_gps/core/utils/marker_decimation.dart';
 import 'package:my_app_gps/core/utils/throttled_value_notifier.dart';
 import 'package:my_app_gps/core/utils/timing.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
@@ -48,6 +51,8 @@ import 'package:my_app_gps/features/map/widgets/map_search_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
 import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
+import 'package:my_app_gps/perf/performance_debug_overlay.dart';
+import 'package:my_app_gps/perf/startup_prewarm.dart';
 import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
@@ -216,9 +221,37 @@ class _MapPageState extends ConsumerState<MapPage>
   int _wsReconnectCount = 0;
   DateTime? _lastPerfLog;
 
+  // ADAPTIVE RENDERING: FPS monitoring and LOD control
+  late final FpsMonitor _fpsMonitor;
+  late final AdaptiveLodController _lodController;
+  final CameraThrottle _cameraThrottle = CameraThrottle(); // Camera update throttling
+  bool _isFirstMapReady = false; // Track first map ready for prewarm
+  double _currentFps = 60.0; // Current FPS for debug overlay
+
   @override
   void initState() {
     super.initState();
+
+    // ADAPTIVE RENDERING: Initialize LOD controller and FPS monitoring
+    _lodController = AdaptiveLodController(LodConfig.standard);
+    _fpsMonitor = FpsMonitor(
+      window: const Duration(seconds: 2),
+      onFps: (fps) {
+        _currentFps = fps; // Update for debug overlay
+        _lodController.updateByFps(fps);
+        if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+          _log.debug('FPS: ${fps.toStringAsFixed(1)} | Mode: ${_lodController.mode.name}');
+        }
+      },
+    )..start();
+
+    // STREAM BACKPRESSURE: Attach LOD controller to repository for adaptive throttling
+    Future.microtask(() {
+      if (!mounted) return;
+      final repo = ref.read(vehicleDataRepositoryProvider);
+      repo.setLodController(_lodController);
+      _log.debug('[Backpressure] LOD controller attached to repository');
+    });
 
     // No sheet controller to initialize for InstantInfoSheet
 
@@ -271,6 +304,42 @@ class _MapPageState extends ConsumerState<MapPage>
       unawaited(
         MarkerIconManager.instance.preloadIcons().catchError((Object e) {
           _log.warning('Icon preload error (non-fatal)', error: e);
+        }),
+      );
+
+      // STARTUP PREWARM: Run prewarm sequence after first frame for instant startup
+      // Waits for map to be ready, then preloads marker icons and 1 ring of FMTC tiles
+      // Uses 4ms slices to avoid jank
+      unawaited(
+        Future.delayed(const Duration(milliseconds: 500), () async {
+          if (!mounted) return;
+          
+          final mapState = _mapKey.currentState;
+          if (mapState == null) return;
+
+          final center = mapState.mapController.camera.center;
+          final zoom = mapState.mapController.camera.zoom;
+
+          if (!_isFirstMapReady) {
+            _isFirstMapReady = true;
+            
+            await StartupPrewarm.run(
+              center: center,
+              zoom: zoom,
+              onComplete: () {
+                if (kDebugMode) {
+                  debugPrint('[MAP] 🚀 Startup prewarm complete');
+                }
+              },
+              onProgress: (completed, total) {
+                if (kDebugMode) {
+                  debugPrint('[MAP] 🚀 Prewarm progress: $completed/$total');
+                }
+              },
+            );
+          }
+        }).catchError((Object e) {
+          _log.warning('Startup prewarm error (non-fatal)', error: e);
         }),
       );
 
@@ -496,30 +565,32 @@ class _MapPageState extends ConsumerState<MapPage>
     });
   }
 
-  // OPTIMIZATION: Marker update throttling timer
-  Timer? _markerUpdateDebouncer;
+  // 🎯 RENDER OPTIMIZATION: Frame-safe marker update scheduling
   List<Map<String, dynamic>>? _pendingDevices;
+  int _frameCallbackId = 0; // Track frame callbacks to prevent stale executions
   
-  // OPTIMIZATION: Increased debounce from 300ms to 500ms
-  // Target: ~20 rebuilds per 10 seconds (was ~33 with 300ms)
-  // Calculation: 10000ms / 500ms = 20 updates
-  static const _kMarkerUpdateDebounce = Duration(milliseconds: 500);
-  
-  /// PERF PHASE 2: Schedule a debounced marker update
-  /// Collapses multiple rapid updates into a single rebuild frame (500ms window)
+  /// PERF PHASE 3: Schedule frame-safe marker update
+  /// Uses SchedulerBinding to defer updates to next frame boundary
+  /// Eliminates "Skipped XX frames" warnings from mid-frame marker rebuilds
   void _scheduleMarkerUpdate(List<Map<String, dynamic>> devices) {
     if (kDebugMode) {
-      debugPrint('[PERF] Scheduling marker update for ${devices.length} devices (500ms debounce)');
+      debugPrint('[PERF] Scheduling frame-safe marker update for ${devices.length} devices');
     }
     
     // Store pending devices for batching
     _pendingDevices = devices;
     
-    // Cancel existing timer and create new one
-    _markerUpdateDebouncer?.cancel();
-    _markerUpdateDebouncer = Timer(_kMarkerUpdateDebounce, () {
-      if (!mounted) {
-        debugPrint('[MAP][PERF] Marker update cancelled (widget disposed)');
+    // Increment callback ID to invalidate any pending frame callbacks
+    _frameCallbackId++;
+    final currentCallbackId = _frameCallbackId;
+    
+    // 🎯 Schedule marker update at next frame boundary
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      // Validate widget is still mounted and callback wasn't superseded
+      if (!mounted || currentCallbackId != _frameCallbackId) {
+        if (kDebugMode) {
+          debugPrint('[MAP][PERF] Frame callback skipped (disposed=${!mounted}, stale=${currentCallbackId != _frameCallbackId})');
+        }
         return;
       }
       
@@ -821,9 +892,9 @@ class _MapPageState extends ConsumerState<MapPage>
 
     _log.debug('[LIFECYCLE] Pausing: canceling timers');
 
-    // Cancel marker update debouncer
-    _markerUpdateDebouncer?.cancel();
+    // 🎯 RENDER OPTIMIZATION: Reset pending marker updates (frame callbacks auto-cancel on unmount)
     _pendingDevices = null;
+    _frameCallbackId++; // Invalidate any pending frame callbacks
 
     // Cancel camera fit debouncer
     _debouncedCameraFit?.cancel();
@@ -933,6 +1004,9 @@ class _MapPageState extends ConsumerState<MapPage>
 
   @override
   void dispose() {
+    // ADAPTIVE RENDERING: Stop FPS monitoring
+    _fpsMonitor.stop();
+    
     // TASK 7: Cancel performance diagnostics timer
     _perfDiagnosticsTimer?.cancel();
     
@@ -946,9 +1020,8 @@ class _MapPageState extends ConsumerState<MapPage>
     _motionController.globalTick.removeListener(_onMotionTick);
     _motionController.dispose();
 
-    // OPTIMIZATION: Cancel marker update debouncer to prevent updates after disposal
-    _markerUpdateDebouncer?.cancel();
-    _markerUpdateDebouncer = null;
+    // 🎯 RENDER OPTIMIZATION: Invalidate pending frame callbacks
+    _frameCallbackId++; // Prevents stale frame callbacks from executing
     _pendingDevices = null;
     
     // LIFECYCLE: Cleanup camera center notifier
@@ -1230,11 +1303,33 @@ class _MapPageState extends ConsumerState<MapPage>
         forceUpdate: forceFirstRender,
       );
 
+      // ADAPTIVE RENDERING: Apply marker decimation based on LOD mode
+      List<MapMarkerData> finalMarkers = diffResult.markers;
+      final int markerCap = _lodController.markerCap();
+      
+      if (markerCap > 0 && finalMarkers.length > markerCap) {
+        // Use distance-based clustering for spatial decimation
+        // This keeps markers that are at least 100m apart
+        finalMarkers = MarkerDecimator.decimateByDistance<MapMarkerData>(
+          markers: finalMarkers,
+          positionGetter: (marker) => marker.position,
+          maxCount: markerCap,
+          minDistanceMeters: 100,  // Minimum 100m separation
+        );
+        
+        if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+          _log.debug(
+            'LOD decimation: ${diffResult.markers.length} → ${finalMarkers.length} markers '
+            '(cap: $markerCap, mode: ${_lodController.mode.name})',
+          );
+        }
+      }
+
       stopwatch.stop();
 
-      // Record performance metrics
+      // Record performance metrics (use decimated count)
       MarkerPerformanceMonitor.instance.recordUpdate(
-        markerCount: diffResult.markers.length,
+        markerCount: finalMarkers.length,
         created: diffResult.created,
         reused: diffResult.reused,
         removed: diffResult.removed,
@@ -1250,7 +1345,7 @@ class _MapPageState extends ConsumerState<MapPage>
     if (diffResult.created > 0 ||
       diffResult.removed > 0 ||
       diffResult.modified > 0 ||
-      _markersNotifier.value.length != diffResult.markers.length) {
+      _markersNotifier.value.length != finalMarkers.length) {
         if (kDebugMode) {
           final hitRate = _cacheHitRate * 100;
           debugPrint('[MapPage] 📊 $diffResult');
@@ -1264,19 +1359,19 @@ class _MapPageState extends ConsumerState<MapPage>
           );
         }
         final isFirstNonEmpty = _markersNotifier.value.isEmpty &&
-            diffResult.markers.isNotEmpty;
+            finalMarkers.isNotEmpty;
         if (isFirstNonEmpty || diffResult.modified > 0) {
-          _markersNotifier.forceUpdate(diffResult.markers);
+          _markersNotifier.forceUpdate(finalMarkers);
           if (kDebugMode) {
             debugPrint(
               '[MapPage] ✅ Markers successfully placed: '
-              '${diffResult.markers.length} markers from '
+              '${finalMarkers.length} markers from '
               '${effectivePositions.length} positions '
               '(devices: ${devices.length})',
             );
           }
         } else {
-          _markersNotifier.value = diffResult.markers;
+          _markersNotifier.value = finalMarkers;
         }
       } else if (kDebugMode && diffResult.reused > 0) {
         debugPrint(
@@ -1684,11 +1779,24 @@ class _MapPageState extends ConsumerState<MapPage>
         final lonDiff = (currentCenter.longitude - previousCenter.longitude).abs();
         
         if (latDiff > _kCameraMovementThreshold || lonDiff > _kCameraMovementThreshold) {
+          // CAMERA THROTTLING: Check if update should proceed based on LOD mode
+          if (!_cameraThrottle.shouldUpdate(_lodController.mode)) {
+            _cameraThrottle.recordSkip();
+            if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
+              debugPrint('[CameraThrottle] Update skipped (mode: ${_lodController.mode.name})');
+            }
+            return false;
+          }
+
           _cameraCenterNotifier.value = currentCenter;
+          _cameraThrottle.recordUpdate();
+          
           if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
             final distanceMeters = ((latDiff + lonDiff) * 111000).toStringAsFixed(0);
+            final stats = _cameraThrottle.getStats();
             debugPrint(
-              '[MAP][PERF] Rebuild triggered (camera moved ~${distanceMeters}m)',
+              '[MAP][PERF] Rebuild triggered (camera moved ~${distanceMeters}m) | '
+              'Throttle: ${stats['totalUpdates']} updates, ${stats['skippedCount']} skipped',
             );
           }
           return true;
@@ -2049,6 +2157,16 @@ class _MapPageState extends ConsumerState<MapPage>
                     bottom: 12,
                     child: ClusterHud(),
                   ),
+
+                  // PERFORMANCE DEBUG OVERLAY (debug-only, shows FPS/LOD/throttle stats)
+                  if (kDebugMode && MapDebugFlags.enablePerfMetrics)
+                    PerformanceDebugOverlay(
+                      fps: _currentFps,
+                      lodMode: _lodController.mode,
+                      cameraThrottle: _cameraThrottle,
+                      showPrewarmStatus: true,
+                    ),
+
                   // FMTC Diagnostics Overlay (debug-only, tap-to-toggle)
                   ValueListenableBuilder<bool>(
                     valueListenable: MapDebugFlags.showFmtcOverlay,
