@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_app_gps/providers/notification_providers.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// NotificationActionBar provides a single "Mark all read" action.
 /// All filter controls have been removed as per the latest requirements.
@@ -10,20 +11,21 @@ class NotificationActionBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context)!;
     return Container(
       color: const Color(0xFFF5FFE2),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildMarkAllReadChip(context, ref),
+          _buildMarkAllReadChip(context, ref, t),
           const SizedBox(width: 12),
-          _buildDeleteAllChip(context, ref),
+          _buildDeleteAllChip(context, ref, t),
         ],
       ),
     );
   }
 
-  Widget _buildMarkAllReadChip(BuildContext context, WidgetRef ref) {
+  Widget _buildMarkAllReadChip(BuildContext context, WidgetRef ref, AppLocalizations t) {
     final theme = Theme.of(context);
     
     return InkWell(
@@ -51,7 +53,7 @@ class NotificationActionBar extends ConsumerWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              'Mark all',
+              t.markAll,
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.onSurface,
                 fontWeight: FontWeight.w500,
@@ -63,24 +65,24 @@ class NotificationActionBar extends ConsumerWidget {
     );
   }
 
-  Widget _buildDeleteAllChip(BuildContext context, WidgetRef ref) {
+  Widget _buildDeleteAllChip(BuildContext context, WidgetRef ref, AppLocalizations t) {
     final theme = Theme.of(context);
     return InkWell(
       onTap: () async {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Delete all notifications?'),
-            content: const Text('This will permanently remove all notifications from this device.'),
+            title: Text(t.deleteAllNotifications),
+            content: Text(t.deleteAllNotificationsConfirm),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel'),
+                child: Text(t.cancel),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
                 style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-                child: const Text('Delete all'),
+                child: Text(t.deleteAll),
               ),
             ],
           ),
@@ -89,7 +91,7 @@ class NotificationActionBar extends ConsumerWidget {
           await ref.read(clearAllNotificationsProvider.future);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('All notifications deleted')),
+              SnackBar(content: Text(t.allNotificationsDeleted)),
             );
           }
         }
@@ -114,7 +116,7 @@ class NotificationActionBar extends ConsumerWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              'Delete all',
+              t.deleteAll,
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.onSurface,
                 fontWeight: FontWeight.w500,

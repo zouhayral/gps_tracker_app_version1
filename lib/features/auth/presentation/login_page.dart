@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -25,6 +26,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    
     // Watch auth state for different scenarios
     final authState = ref.watch(authNotifierProvider);
 
@@ -96,7 +99,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Session Expired',
+                              t?.sessionExpired ?? 'Session Expired',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -105,7 +108,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Please enter your password to continue',
+                              t?.pleaseEnterPasswordToContinue ?? 'Please enter your password to continue',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: Colors.orange.shade800,
@@ -144,7 +147,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Validating your session...',
+                          t?.validatingSession ?? 'Validating your session...',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.blue.shade900,
@@ -157,18 +160,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
 
               // Welcome text
-              const Text(
-                'welcome back',
-                style: TextStyle(
+              Text(
+                t?.welcomeBack ?? 'welcome back',
+                style: const TextStyle(
                   fontSize: 36,
                   color: Colors.black87,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 40),
-              const Text(
-                'Enter your account',
-                style: TextStyle(
+              Text(
+                t?.enterYourAccount ?? 'Enter your account',
+                style: const TextStyle(
                   fontSize: 18,
                   color: Colors.black54,
                   fontWeight: FontWeight.w400,
@@ -202,20 +205,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ),
                         child: TextFormField(
                           controller: _emailController,
-                          decoration: const InputDecoration(
-                            prefixIcon: Icon(
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(
                               Icons.email_outlined,
                               color: Colors.grey,
                             ),
-                            hintText: 'Email or Username',
+                            hintText: t?.emailOrUsername ?? 'Email or Username',
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                               horizontal: 20,
                               vertical: 16,
                             ),
                           ),
                           validator: (v) => v == null || v.isEmpty
-                              ? 'Enter email or username'
+                              ? t?.enterEmailOrUsername ?? 'Enter email or username'
                               : null,
                         ),
                       ),
@@ -248,7 +251,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 });
                               },
                             ),
-                            hintText: 'Password',
+                            hintText: t?.password ?? 'Password',
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 20,
@@ -256,7 +259,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             ),
                           ),
                           validator: (v) =>
-                              v == null || v.isEmpty ? 'Enter password' : null,
+                              v == null || v.isEmpty ? t?.enterPassword ?? 'Enter password' : null,
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -296,9 +299,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text(
-                                  'login',
-                                  style: TextStyle(
+                              : Text(
+                                  t?.login ?? 'login',
+                                  style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.white,
@@ -340,7 +343,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Image not found',
+                                t?.imageNotFound ?? 'Image not found',
                                 style: TextStyle(
                                   color: Colors.grey[600],
                                   fontSize: 14,

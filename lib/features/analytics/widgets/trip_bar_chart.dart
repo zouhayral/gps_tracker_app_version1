@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// A bar chart widget for visualizing trip counts over time periods.
 ///
@@ -38,6 +39,7 @@ class _TripBarChartState extends State<TripBarChart> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
     final effectiveBarColor = widget.barColor ?? colorScheme.primary;
 
@@ -47,7 +49,7 @@ class _TripBarChartState extends State<TripBarChart> {
         height: widget.height,
         child: Center(
           child: Text(
-            'No data available',
+            t.noData,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.grey[600],
                 ),
@@ -76,7 +78,7 @@ class _TripBarChartState extends State<TripBarChart> {
       child: Padding(
         padding: const EdgeInsets.only(right: 16, top: 16, bottom: 8),
         child: BarChart(
-          _buildChartData(effectiveBarColor),
+          _buildChartData(effectiveBarColor, t),
           swapAnimationDuration: const Duration(milliseconds: 800),
           swapAnimationCurve: Curves.easeOut,
         ),
@@ -84,7 +86,7 @@ class _TripBarChartState extends State<TripBarChart> {
     );
   }
 
-  BarChartData _buildChartData(Color barColor) {
+  BarChartData _buildChartData(Color barColor, AppLocalizations t) {
     // Calculate max value for Y axis
     final maxCount = widget.tripCounts.reduce((a, b) => a > b ? a : b);
     final yMax = (maxCount * 1.2).ceilToDouble(); // Add 20% padding
@@ -92,8 +94,8 @@ class _TripBarChartState extends State<TripBarChart> {
     return BarChartData(
       maxY: yMax,
       minY: 0,
-      barTouchData: _buildTouchData(barColor),
-      titlesData: _buildTitlesData(),
+      barTouchData: _buildTouchData(barColor, t),
+      titlesData: _buildTitlesData(t),
       borderData: FlBorderData(
         show: true,
         border: Border(
@@ -153,7 +155,7 @@ class _TripBarChartState extends State<TripBarChart> {
     );
   }
 
-  BarTouchData _buildTouchData(Color barColor) {
+  BarTouchData _buildTouchData(Color barColor, AppLocalizations t) {
     return BarTouchData(
       enabled: true,
       touchCallback: (FlTouchEvent event, BarTouchResponse? response) {
@@ -185,7 +187,7 @@ class _TripBarChartState extends State<TripBarChart> {
             ),
             children: [
               TextSpan(
-                text: count == 1 ? '$count trip' : '$count trips',
+                text: t.tripCount(count),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 11,
@@ -199,7 +201,7 @@ class _TripBarChartState extends State<TripBarChart> {
     );
   }
 
-  FlTitlesData _buildTitlesData() {
+  FlTitlesData _buildTitlesData(AppLocalizations t) {
     // Determine if we should skip labels (for daily with 24 hours)
     final shouldSkipLabels = widget.labels.length > 12;
     final skipInterval = shouldSkipLabels ? 3 : 1; // Show every 3rd label if too many
@@ -208,7 +210,7 @@ class _TripBarChartState extends State<TripBarChart> {
       show: true,
       bottomTitles: AxisTitles(
         axisNameWidget: Text(
-          'Period',
+          t.period,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 fontWeight: FontWeight.w500,
               ),
@@ -244,7 +246,7 @@ class _TripBarChartState extends State<TripBarChart> {
       ),
       leftTitles: AxisTitles(
         axisNameWidget: Text(
-          'Number of Trips',
+          t.numberOfTrips,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 fontWeight: FontWeight.w500,
                 fontSize: 11,
@@ -323,6 +325,7 @@ class TripBarChartCompact extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
     final effectiveBarColor = barColor ?? colorScheme.primary;
 
@@ -332,7 +335,7 @@ class TripBarChartCompact extends StatelessWidget {
         height: height,
         child: Center(
           child: Text(
-            'No data',
+            t.noData,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.grey[600],
                 ),

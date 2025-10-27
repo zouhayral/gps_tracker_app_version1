@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:my_app_gps/features/trips/models/trip_filter.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// Dialog for selecting trip filter options (devices and date range)
 class TripFilterDialog extends StatefulWidget {
@@ -101,6 +102,8 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
@@ -124,7 +127,7 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Filter Trips',
+                    t?.filterTripsTitle ?? 'Filter Trips',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: Theme.of(context).colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.bold,
@@ -149,7 +152,7 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                   children: [
                     // Date Range Section
                     Text(
-                      'Date Range',
+                      t?.dateRange ?? 'Date Range',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -176,7 +179,7 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Devices',
+                          t?.devices ?? 'Devices',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -205,14 +208,16 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                             color: Theme.of(context).colorScheme.primary,
                           ),
                           const SizedBox(width: 12),
-                          const Text(
-                            'All Devices',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+                          Text(
+                            t?.allDevices ?? 'All Devices',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
                       subtitle: Text(
-                        '${widget.devices.length} devices available',
+                        t != null 
+                            ? t.devicesAvailable(widget.devices.length)
+                            : '${widget.devices.length} devices available',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
@@ -313,13 +318,13 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    child: Text(t?.cancel ?? 'Cancel'),
                   ),
                   const SizedBox(width: 12),
                   FilledButton.icon(
                     onPressed: _applyFilter,
                     icon: const Icon(Icons.check),
-                    label: const Text('Apply Filter'),
+                    label: Text(t?.applyFilter ?? 'Apply Filter'),
                   ),
                 ],
               ),

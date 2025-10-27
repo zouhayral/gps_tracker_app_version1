@@ -2,6 +2,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:my_app_gps/l10n/app_localizations.dart';
+
 /// A line chart widget for visualizing speed variations over time.
 ///
 /// Displays speed data as a smooth curved line with gradient fill,
@@ -39,6 +41,7 @@ class _SpeedChartState extends State<SpeedChart> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
     final effectiveLineColor = widget.lineColor ?? colorScheme.primary;
 
@@ -48,7 +51,7 @@ class _SpeedChartState extends State<SpeedChart> {
         height: widget.height,
         child: Center(
           child: Text(
-            'No data available',
+            t.noData,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.grey[600],
                 ),
@@ -77,7 +80,7 @@ class _SpeedChartState extends State<SpeedChart> {
       child: Padding(
         padding: const EdgeInsets.only(right: 16, top: 16, bottom: 8),
         child: LineChart(
-          _buildChartData(effectiveLineColor),
+          _buildChartData(effectiveLineColor, t),
           duration: const Duration(milliseconds: 800),
           curve: Curves.easeInOut,
         ),
@@ -85,7 +88,7 @@ class _SpeedChartState extends State<SpeedChart> {
     );
   }
 
-  LineChartData _buildChartData(Color lineColor) {
+  LineChartData _buildChartData(Color lineColor, AppLocalizations t) {
     // Calculate min/max for Y axis
     final maxSpeed = widget.speedData.reduce((a, b) => a > b ? a : b);
     final minSpeed = widget.speedData.reduce((a, b) => a < b ? a : b);
@@ -98,7 +101,7 @@ class _SpeedChartState extends State<SpeedChart> {
     return LineChartData(
       lineTouchData: _buildTouchData(lineColor),
       gridData: _buildGridData(),
-      titlesData: _buildTitlesData(),
+      titlesData: _buildTitlesData(t),
       borderData: FlBorderData(
         show: true,
         border: Border(
@@ -217,12 +220,12 @@ class _SpeedChartState extends State<SpeedChart> {
     );
   }
 
-  FlTitlesData _buildTitlesData() {
+  FlTitlesData _buildTitlesData(AppLocalizations t) {
     return FlTitlesData(
       show: true,
       bottomTitles: AxisTitles(
         axisNameWidget: Text(
-          'Time',
+          t.time,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 fontWeight: FontWeight.w500,
               ),
@@ -252,7 +255,7 @@ class _SpeedChartState extends State<SpeedChart> {
       ),
       leftTitles: AxisTitles(
         axisNameWidget: Text(
-          'Speed (km/h)',
+          t.speed,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 fontWeight: FontWeight.w500,
               ),

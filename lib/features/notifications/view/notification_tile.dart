@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// NotificationTile displays a single event notification.
 ///
@@ -65,15 +66,15 @@ class NotificationTile extends ConsumerWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              _titleForEvent(),
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.onSurface,
-                              ),
+                        Expanded(
+                          child: Text(
+                            _titleForEvent(context),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface,
                             ),
                           ),
+                        ),
                           _PriorityBadge(label: priority, color: colors.badgeBg, textColor: colors.badgeFg),
                         ],
                       ),
@@ -89,7 +90,7 @@ class NotificationTile extends ConsumerWidget {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              event.deviceName ?? 'Unknown Device',
+                              event.deviceName ?? AppLocalizations.of(context)!.unknownDevice,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodyMedium?.copyWith(
@@ -173,22 +174,35 @@ class NotificationTile extends ConsumerWidget {
     return '${diff.inDays} d';
   }
 
-  String _titleForEvent() {
+  String _titleForEvent(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     // Map known types to user-friendly titles similar to the mock
-    final t = event.type.toLowerCase();
-    switch (t) {
+    final type = event.type.toLowerCase();
+    switch (type) {
       case 'deviceoffline':
       case 'device offline':
-        return 'device off line';
+        return t.deviceOffline;
       case 'geofenceexit':
       case 'geofence exit':
-        return 'Geo-fence exit';
+        return t.geofenceExit;
       case 'geofenceenter':
-        return 'Geo-fence enter';
+        return t.geofenceEnter;
       case 'ignitionon':
-        return 'Ignition on';
+        return t.ignitionOn;
       case 'ignitionoff':
-        return 'Ignition off';
+        return t.ignitionOff;
+      case 'deviceonline':
+        return t.deviceOnline;
+      case 'alarm':
+        return t.alarm;
+      case 'overspeed':
+        return t.overspeed;
+      case 'maintenance':
+        return t.maintenanceDue;
+      case 'devicemoving':
+        return t.deviceMoving;
+      case 'devicestopped':
+        return t.deviceStopped;
       default:
         return event.type;
     }

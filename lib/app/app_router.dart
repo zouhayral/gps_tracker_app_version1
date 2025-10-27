@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:my_app_gps/core/utils/app_logger.dart';
+import 'package:my_app_gps/features/analytics/view/analytics_page.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 import 'package:my_app_gps/features/auth/presentation/login_page.dart';
@@ -11,11 +13,10 @@ import 'package:my_app_gps/features/geofencing/ui/geofence_list_page.dart';
 import 'package:my_app_gps/features/geofencing/ui/geofence_settings_page.dart';
 import 'package:my_app_gps/features/map/view/map_page.dart';
 import 'package:my_app_gps/features/notifications/view/notifications_page.dart';
+import 'package:my_app_gps/features/settings/view/locale_test_page.dart';
 import 'package:my_app_gps/features/settings/view/settings_page.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_page.dart';
 import 'package:my_app_gps/features/trips/view/trips_page.dart';
-import 'package:my_app_gps/features/analytics/view/analytics_page.dart';
-import 'package:my_app_gps/core/utils/app_logger.dart';
 
 // Global navigator key for background navigation (e.g., from notifications)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -27,6 +28,7 @@ class AppRoutes {
   static const trips = '/trips';
   static const alerts = '/alerts';
   static const settings = '/settings';
+  static const localeTest = '/locale-test';
   
   /// Route for the analytics reports and statistics page.
   static const analytics = '/analytics';
@@ -85,6 +87,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.geofences,
         name: 'geofences',
         builder: (context, state) => const GeofenceListPage(),
+      ),
+      // Locale test route (for verifying localization setup)
+      GoRoute(
+        path: AppRoutes.localeTest,
+        name: 'locale-test',
+        builder: (context, state) => const LocaleTestPage(),
       ),
       // Analytics route (standalone, accessible from settings)
       GoRoute(

@@ -9,6 +9,7 @@ import 'package:my_app_gps/features/notifications/view/notification_banner.dart'
 import 'package:my_app_gps/features/notifications/view/notification_tile.dart';
 import 'package:my_app_gps/features/notifications/view/recovered_banner.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// NotificationsPage displays a list of notification events with live updates.
 ///
@@ -54,12 +55,13 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     // Show paged notifications list without search/filter bar
     final events = ref.watch(pagedNotificationsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(t.alertsTitle),
         actions: [
           // Unread count badge
           NotificationBadge(
@@ -100,6 +102,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     BuildContext context,
     List<Event> events,
   ) {
+    final t = AppLocalizations.of(context)!;
     if (events.isEmpty) {
       return _buildEmptyView(context);
     }
@@ -148,7 +151,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                   if (!context.mounted) {
                     return;
                   }
-                  _showEventDetails(context, event);
+                  _showEventDetails(context, event, t);
                 },
               ),
             ),
@@ -159,6 +162,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   Widget _buildSwipeBackground(BuildContext context, bool leftToRight) {
+    final t = AppLocalizations.of(context)!;
     const color = Colors.redAccent;
     final alignment =
         leftToRight ? Alignment.centerLeft : Alignment.centerRight;
@@ -173,12 +177,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       child: Row(
         mainAxisAlignment:
             leftToRight ? MainAxisAlignment.start : MainAxisAlignment.end,
-        children: const [
-          Icon(icon, color: Colors.white, size: 28),
-          SizedBox(width: 8),
+        children: [
+          const Icon(icon, color: Colors.white, size: 28),
+          const SizedBox(width: 8),
           Text(
-            'Delete',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            t.delete,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -186,6 +190,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   Widget _buildEmptyView(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -197,14 +202,14 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            'No notifications',
+            t.noAlerts,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
           ),
           const SizedBox(height: 8),
           Text(
-            'New events will appear here',
+            t.newEventsWillAppear,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.outline,
                 ),
@@ -222,7 +227,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     return formatter.format(timestamp);
   }
 
-  void _showEventDetails(BuildContext context, Event event) {
+  void _showEventDetails(BuildContext context, Event event, AppLocalizations t) {
     // Defensive: ensure any SnackBars are hidden when opening details
     ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     showModalBottomSheet<void>(
@@ -248,7 +253,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             const SizedBox(height: 16),
             if (event.message != null) ...[
               Text(
-                'Message',
+                t.message,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: Theme.of(context).colorScheme.outline,
                     ),
@@ -261,7 +266,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
               const SizedBox(height: 16),
             ],
             Text(
-              'Time',
+              t.time,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: Theme.of(context).colorScheme.outline,
                   ),
@@ -275,12 +280,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             Row(
               children: [
                 Text(
-                  'Device ID: ${event.deviceId}',
+                  '${t.deviceId}: ${event.deviceId}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const Spacer(),
                 Text(
-                  'Severity: ${event.severity ?? 'N/A'}',
+                  '${t.severity}: ${event.severity ?? 'N/A'}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -290,7 +295,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: () => context.safePop<void>(),
-                child: const Text('Close'),
+                child: Text(t.close),
               ),
             ),
           ],

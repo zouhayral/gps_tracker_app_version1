@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// Info box displaying detailed information for a single selected device
 /// Shows engine status, speed, distance, location, and last update time
@@ -25,6 +26,9 @@ class MapDeviceInfoBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get localization instance
+    final t = AppLocalizations.of(context)!;
+    
     assert(
       debugCheckHasDirectionality(context),
       'MapDeviceInfoBox requires Directionality above in the tree',
@@ -134,7 +138,7 @@ class MapDeviceInfoBox extends StatelessWidget {
       if (devLat != null && devLon != null) {
         lastLocation = '$devLat, $devLon (stored)';
       } else {
-        lastLocation = 'No location data available';
+        lastLocation = t.noLocationData;
       }
     }
 
@@ -170,7 +174,7 @@ class MapDeviceInfoBox extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Engine & Movement',
+                    t.engineAndMovement,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           letterSpacing: .3,
@@ -179,23 +183,23 @@ class MapDeviceInfoBox extends StatelessWidget {
                   const SizedBox(height: 4),
                   MapInfoLine(
                     icon: Icons.power_settings_new,
-                    label: 'Engine',
+                    label: t.engine,
                     value: engine,
                     valueColor: engine == 'on' ? statusColor : null,
                   ),
                   MapInfoLine(
                     icon: Icons.speed,
-                    label: 'Speed',
+                    label: t.speed,
                     value: speed == '--' ? '-- km/h' : '$speed km/h',
                   ),
                   MapInfoLine(
                     icon: Icons.route,
-                    label: 'Distance',
+                    label: t.distance,
                     value: distance == '--' ? '-- km' : '$distance km',
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Last Location',
+                    t.lastLocation,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           letterSpacing: .3,
@@ -204,15 +208,15 @@ class MapDeviceInfoBox extends StatelessWidget {
                   const SizedBox(height: 4),
                   MapInfoLine(
                     icon: Icons.place_outlined,
-                    label: 'Coordinates',
+                    label: t.coordinates,
                     value: lastLocation,
-                    valueColor: lastLocation == 'No location data available'
+                    valueColor: lastLocation == t.noLocationData
                         ? Colors.orange
                         : null,
                   ),
                   MapInfoLine(
                     icon: Icons.update,
-                    label: 'Updated',
+                    label: t.updated,
                     value: lastAge,
                   ),
                 ],
@@ -249,6 +253,9 @@ class MapMultiSelectionInfoBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get localization instance
+    final t = AppLocalizations.of(context)!;
+    
     assert(
       debugCheckHasDirectionality(context),
       'MapMultiSelectionInfoBox requires Directionality above in the tree',
@@ -294,7 +301,7 @@ class MapMultiSelectionInfoBox extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  '$total devices selected',
+                  '$total ${t.devicesSelected}',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
@@ -307,22 +314,22 @@ class MapMultiSelectionInfoBox extends StatelessWidget {
               runSpacing: 8,
               children: [
                 MapStatusStat(
-                  label: 'Online',
+                  label: t.online,
                   count: online,
                   color: statusColorBuilder('online'),
                 ),
                 MapStatusStat(
-                  label: 'Offline',
+                  label: t.offline,
                   count: offline,
                   color: statusColorBuilder('offline'),
                 ),
                 MapStatusStat(
-                  label: 'Unknown',
+                  label: t.unknown,
                   count: unknown,
                   color: statusColorBuilder('unknown'),
                 ),
                 Text(
-                  'Online: $onlinePct%',
+                  '${t.online}: $onlinePct%',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -335,7 +342,7 @@ class MapMultiSelectionInfoBox extends StatelessWidget {
                   for (final d in selectedDevices.take(5))
                     MapInfoLine(
                       icon: Icons.device_hub,
-                      label: d['name']?.toString() ?? 'Device',
+                      label: d['name']?.toString() ?? t.device,
                       value: statusResolver(d, positions[d['id']]),
                       valueColor: statusColorBuilder(
                         statusResolver(d, positions[d['id']]),
@@ -343,7 +350,7 @@ class MapMultiSelectionInfoBox extends StatelessWidget {
                     ),
                   if (selectedDevices.length > 5)
                     Text(
-                      '+ ${selectedDevices.length - 5} more...',
+                      '+ ${selectedDevices.length - 5} ${t.more}...',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                 ],

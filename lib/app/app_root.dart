@@ -9,7 +9,9 @@ import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/data/models/event.dart';
 // Debug HUD disabled globally; overlay imports removed
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
+import 'package:my_app_gps/features/localization/locale_provider.dart';
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/repositories/trip_repository.dart';
 import 'package:my_app_gps/services/notification_service.dart';
@@ -179,11 +181,17 @@ class _AppRootState extends ConsumerState<AppRoot> {
       'Directionality missing: AppRoot must be under a MaterialApp/Directionality',
     );
     final router = ref.watch(goRouterProvider);
+    final currentLocale = ref.watch(localeProvider);
+    
     final app = MaterialApp.router(
         title: 'GPS Tracker',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
         routerConfig: router,
+        // Localization configuration using generated AppLocalizations
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        locale: currentLocale,
         // No global NotificationToastListener here; pages can add locally
         builder: (context, child) => child ?? const SizedBox.shrink(),
       );

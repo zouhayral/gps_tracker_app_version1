@@ -57,6 +57,7 @@ import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 // Removed SmoothSheetController; using direct controller-driven logic
 // import 'package:my_app_gps/services/websocket_manager.dart';
 
@@ -847,10 +848,11 @@ class _MapPageState extends ConsumerState<MapPage>
     
     if (lat == null || lon == null || !_valid(lat, lon)) {
       if (mounted) {
+        final t = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No valid coordinates available for this device'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(t.noValidCoordinates),
+            duration: const Duration(seconds: 2),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -873,9 +875,10 @@ class _MapPageState extends ConsumerState<MapPage>
     } catch (e) {
       _log.error('Failed to launch map', error: e);
       if (mounted) {
+        final t = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to open maps: $e'),
+            content: Text('${t.failedToOpenMaps}: $e'),
             duration: const Duration(seconds: 3),
             backgroundColor: Colors.redAccent,
           ),
@@ -1995,6 +1998,9 @@ class _MapPageState extends ConsumerState<MapPage>
   }
 
   Widget _buildMapContent() {
+    // Get localization instance
+    final t = AppLocalizations.of(context)!;
+    
     // PERFORMANCE: Track rebuilds for validation (disabled by default)
     if (MapDebugFlags.showRebuildOverlay) {
       RebuildTracker.instance.trackRebuild('MapPage');
@@ -2157,7 +2163,7 @@ class _MapPageState extends ConsumerState<MapPage>
             final suggestions = _showSuggestions
                 ? [
                     if (query.isEmpty || 'all devices'.contains(q))
-                      {'__all__': true, 'name': 'All devices'},
+                      {'__all__': true, 'name': t.allDevices},
                     ...devices.where((d) {
                       final n = d['name']?.toString().toLowerCase() ?? '';
                       return query.isEmpty || n.contains(q);
@@ -2256,10 +2262,10 @@ class _MapPageState extends ConsumerState<MapPage>
                                 color: Colors.black.withValues(alpha: 0.7),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Row(
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  SizedBox(
+                                  const SizedBox(
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
@@ -2269,10 +2275,10 @@ class _MapPageState extends ConsumerState<MapPage>
                                       ),
                                     ),
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    'Loading map tiles...',
-                                    style: TextStyle(
+                                    t.loadingMapTiles,
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,
                                     ),
@@ -2397,7 +2403,7 @@ class _MapPageState extends ConsumerState<MapPage>
                                                   ListTileControlAffinity
                                                       .leading,
                                               title:
-                                                  Text('All devices ($total)'),
+                                                  Text('${t.allDevices} ($total)'),
                                               value: allSelected
                                                   ? true
                                                   : (someSelected
@@ -2459,8 +2465,8 @@ class _MapPageState extends ConsumerState<MapPage>
                                             last = posTime;
                                           }
                                           final subtitle = last == null
-                                              ? 'No update yet'
-                                              : 'Updated ${_formatRelativeAge(last)}';
+                                              ? t.noUpdateYet
+                                              : '${t.updated} ${_formatRelativeAge(last)}';
                                           return CheckboxListTile(
                                             key: ValueKey('sugg_${id ?? name}'),
                                             dense: true,
@@ -2522,7 +2528,7 @@ class _MapPageState extends ConsumerState<MapPage>
                     children: [
                       MapActionButton(
                         icon: Icons.refresh,
-                        tooltip: 'Refresh data',
+                        tooltip: t.refreshData,
                         isLoading: _isRefreshing,
                         onTap: () async {
                           if (_isRefreshing) return;
@@ -2555,10 +2561,10 @@ class _MapPageState extends ConsumerState<MapPage>
 
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Data refreshed successfully'),
-                                  duration: Duration(seconds: 2),
-                                  backgroundColor: Color(0xFFA6CD27),
+                                SnackBar(
+                                  content: Text(t.dataRefreshedSuccessfully),
+                                  duration: const Duration(seconds: 2),
+                                  backgroundColor: const Color(0xFFA6CD27),
                                 ),
                               );
                             }
@@ -2566,7 +2572,7 @@ class _MapPageState extends ConsumerState<MapPage>
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Refresh failed: $e'),
+                                  content: Text('${t.refreshFailed}: $e'),
                                   duration: const Duration(seconds: 3),
                                   backgroundColor: Colors.redAccent,
                                 ),
@@ -2600,7 +2606,7 @@ class _MapPageState extends ConsumerState<MapPage>
                           );
                           return MapActionButton(
                             icon: Icons.layers,
-                            tooltip: 'Map layer: ${activeLayer.name}',
+                            tooltip: '${t.mapLayer}: ${activeLayer.name}',
                             onTap: () {
                               _showLayerMenu(context, activeLayer);
                             },
@@ -2612,7 +2618,7 @@ class _MapPageState extends ConsumerState<MapPage>
                         const SizedBox(height: 8),
                         MapActionButton(
                           icon: Icons.open_in_new,
-                          tooltip: 'Open in Maps',
+                          tooltip: t.openInMaps,
                           onTap: _openInMaps,
                         ),
                       ],
@@ -2727,7 +2733,7 @@ class _MapPageState extends ConsumerState<MapPage>
           error: (e, st) => Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Failed to load devices for map: $e'),
+              child: Text('${t.failedToLoadDevices}: $e'),
             ),
           ),
         ),
@@ -2738,6 +2744,9 @@ class _MapPageState extends ConsumerState<MapPage>
   /// ASYNC OPTIMIZATION: Build map content using FleetMapTelemetryController
   /// This version uses AsyncNotifier for non-blocking device loading
   Widget _buildMapContentWithFMTC() {
+    // Get localization instance
+    final t = AppLocalizations.of(context)!;
+    
     // OPTIMIZATION: Watch the entire FMTC state (already optimized controller)
     final fmState = ref.watch(
       fleetMapTelemetryControllerProvider.select((state) => state),
@@ -2755,7 +2764,7 @@ class _MapPageState extends ConsumerState<MapPage>
                   const CircularProgressIndicator(),
                   const SizedBox(height: 16),
                   Text(
-                    'Loading fleet data...',
+                    t.loadingFleetData,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                 ],
@@ -2787,7 +2796,7 @@ class _MapPageState extends ConsumerState<MapPage>
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Failed to load fleet data',
+                      t.failedToLoadFleetData,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
@@ -2804,7 +2813,7 @@ class _MapPageState extends ConsumerState<MapPage>
                             .refreshDevices();
                       },
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
+                      label: Text(t.retry),
                     ),
                   ],
                 ),

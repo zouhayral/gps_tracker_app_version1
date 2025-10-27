@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:my_app_gps/features/analytics/controller/analytics_notifier.dart';
-import 'package:my_app_gps/features/analytics/controller/analytics_providers.dart';
-import 'package:my_app_gps/features/analytics/widgets/stat_card.dart';
-import 'package:my_app_gps/features/analytics/widgets/speed_chart.dart';
-import 'package:my_app_gps/features/analytics/widgets/trip_bar_chart.dart';
-import 'package:my_app_gps/features/analytics/models/analytics_report.dart';
-import 'package:my_app_gps/features/analytics/utils/analytics_pdf_generator.dart';
-import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
-import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+
+import 'package:my_app_gps/core/utils/app_logger.dart';
+import 'package:my_app_gps/features/analytics/controller/analytics_notifier.dart';
+import 'package:my_app_gps/features/analytics/controller/analytics_providers.dart';
+import 'package:my_app_gps/features/analytics/models/analytics_report.dart';
+import 'package:my_app_gps/features/analytics/utils/analytics_pdf_generator.dart';
+import 'package:my_app_gps/features/analytics/widgets/speed_chart.dart';
+import 'package:my_app_gps/features/analytics/widgets/stat_card.dart';
+import 'package:my_app_gps/features/analytics/widgets/trip_bar_chart.dart';
+import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// Main analytics dashboard page showing comprehensive tracker statistics.
 ///
@@ -127,6 +129,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Future<void> _handleExport() async {
+    final t = AppLocalizations.of(context)!;
     final state = ref.read(analyticsNotifierProvider);
     final periodLabel = ref.read(periodLabelProvider);
 
@@ -135,8 +138,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     if (report == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No data to export'),
+          SnackBar(
+            content: Text(t.noDataToExport),
             backgroundColor: Colors.orange,
           ),
         );
@@ -148,10 +151,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       // Show loading indicator
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Row(
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
@@ -159,17 +162,17 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
-                SizedBox(width: 16),
-                Text('Generating PDF...'),
+                const SizedBox(width: 16),
+                Text(t.generatingPdf),
               ],
             ),
-            duration: Duration(seconds: 10),
+            duration: const Duration(seconds: 10),
           ),
         );
       }
 
       // Generate PDF
-      final pdfFile = await AnalyticsPdfGenerator.generate(report, periodLabel);
+      final pdfFile = await AnalyticsPdfGenerator.generate(report, periodLabel, t);
 
       // Hide loading
       if (mounted) {
@@ -187,10 +190,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       if (mounted) {
         if (result.status == ShareResultStatus.success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Report shared successfully'),
+            SnackBar(
+              content: Text(t.reportSharedSuccessfully),
               backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
+              duration: const Duration(seconds: 2),
             ),
           );
         } else if (result.status == ShareResultStatus.dismissed) {
@@ -207,7 +210,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error sharing report: $e'),
+            content: Text('${t.errorSharingReport}: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -249,6 +252,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
 
     // Listen to period changes and reload
@@ -267,16 +271,16 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reports & Statistics'),
+        title: Text(t.reportsTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: t.refresh,
             onPressed: _handleRefresh,
           ),
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined),
-            tooltip: 'Export & Share Report',
+            tooltip: t.exportShareReport,
             onPressed: _handleExport,
           ),
         ],
@@ -301,6 +305,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildFilters(ColorScheme colorScheme) {
+    final t = AppLocalizations.of(context)!;
     final period = ref.watch(reportPeriodProvider);
     final periodLabel = ref.watch(periodLabelProvider);
     final deviceId = ref.watch(selectedDeviceIdProvider);
@@ -314,7 +319,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           children: [
             // Period Selector
             Text(
-              'Period',
+              t.period,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -323,26 +328,26 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SegmentedButton<String>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: 'daily',
-                    label: Text('Day', style: TextStyle(fontSize: 13)),
-                    icon: Icon(Icons.today, size: 16),
+                    label: Text(t.day, style: const TextStyle(fontSize: 13)),
+                    icon: const Icon(Icons.today, size: 16),
                   ),
                   ButtonSegment(
                     value: 'weekly',
-                    label: Text('Week', style: TextStyle(fontSize: 13)),
-                    icon: Icon(Icons.view_week, size: 16),
+                    label: Text(t.week, style: const TextStyle(fontSize: 13)),
+                    icon: const Icon(Icons.view_week, size: 16),
                   ),
                   ButtonSegment(
                     value: 'monthly',
-                    label: Text('Month', style: TextStyle(fontSize: 13)),
-                    icon: Icon(Icons.calendar_month, size: 16),
+                    label: Text(t.month, style: const TextStyle(fontSize: 13)),
+                    icon: const Icon(Icons.calendar_month, size: 16),
                   ),
                   ButtonSegment(
                     value: 'custom',
-                    label: Text('Custom', style: TextStyle(fontSize: 12)),
-                    icon: Icon(Icons.date_range, size: 16),
+                    label: Text(t.custom, style: const TextStyle(fontSize: 12)),
+                    icon: const Icon(Icons.date_range, size: 16),
                   ),
                 ],
                 selected: {period},
@@ -403,7 +408,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                     IconButton(
                       icon: const Icon(Icons.edit, size: 16),
                       onPressed: _selectCustomDateRange,
-                      tooltip: 'Edit period',
+                      tooltip: t.editPeriod,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -421,6 +426,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildDeviceSelector(BuildContext context, int? currentDeviceId) {
+    final t = AppLocalizations.of(context)!;
     final devicesAsync = ref.watch(devicesNotifierProvider);
 
     return devicesAsync.when(
@@ -437,8 +443,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               children: [
                 Icon(Icons.warning_amber, color: Colors.orange[700]),
                 const SizedBox(width: 12),
-                const Expanded(
-                  child: Text('No devices available'),
+                Expanded(
+                  child: Text(t.noDevicesAvailable),
                 ),
               ],
             ),
@@ -449,7 +455,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Device',
+              t.device,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -467,7 +473,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 ),
                 prefixIcon: const Icon(Icons.devices),
               ),
-              hint: const Text('Select a device'),
+              hint: Text(t.selectDevice),
               items: devices.map((device) {
                 final id = device['id'] as int?;
                 final name = device['name'] as String? ?? 'Device $id';
@@ -512,6 +518,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildBody() {
+    final t = AppLocalizations.of(context)!;
     final state = ref.watch(analyticsNotifierProvider);
     final deviceId = ref.watch(selectedDeviceIdProvider);
 
@@ -519,23 +526,23 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     if (deviceId == null) {
       return _buildEmptyState(
         icon: Icons.devices_other,
-        message: 'Please select a device',
-        subtitle: 'No device is currently selected',
+        message: t.pleaseSelectDevice,
+        subtitle: t.noDeviceSelected,
       );
     }
 
     return state.when(
-      loading: () => const SizedBox(
+      loading: () => SizedBox(
         height: 400,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(
+              const CircularProgressIndicator(
                 color: Color(0xFFb4e15c),
               ),
-              SizedBox(height: 16),
-              Text('Loading statistics...'),
+              const SizedBox(height: 16),
+              Text(t.loadingStatistics),
             ],
           ),
         ),
@@ -544,12 +551,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         AppLogger.error('Analytics error: $error', stackTrace: stackTrace);
         return _buildEmptyState(
           icon: Icons.error_outline,
-          message: 'Loading error',
+          message: t.loadingError,
           subtitle: error.toString(),
           action: ElevatedButton.icon(
             onPressed: _loadReport,
             icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
+            label: Text(t.retry),
           ),
         );
       },
@@ -557,8 +564,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         if (report == null) {
           return _buildEmptyState(
             icon: Icons.analytics_outlined,
-            message: 'No data available',
-            subtitle: 'No trips recorded for this period',
+            message: t.noData,
+            subtitle: t.noTripsRecorded,
           );
         }
         return _buildReportContent(report);
@@ -612,6 +619,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildReportContent(AnalyticsReport report) {
+    final t = AppLocalizations.of(context)!;
     final period = ref.watch(reportPeriodProvider);
     
     return Column(
@@ -635,25 +643,25 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               crossAxisSpacing: 16,
               children: [
                 StatCardVertical(
-                  title: 'Distance',
+                  title: t.distance,
                   value: '${report.totalDistanceKm.toStringAsFixed(1)} km',
                   icon: Icons.route,
                   color: const Color(0xFFb4e15c),
                 ),
                 StatCardVertical(
-                  title: 'Avg. Speed',
+                  title: t.avgSpeed,
                   value: '${report.avgSpeed.toStringAsFixed(1)} km/h',
                   icon: Icons.speed,
                   color: const Color(0xFF4A90E2),
                 ),
                 StatCardVertical(
-                  title: 'Max Speed',
+                  title: t.maxSpeed,
                   value: '${report.maxSpeed.toStringAsFixed(1)} km/h',
                   icon: Icons.flash_on,
                   color: const Color(0xFFFF9F43),
                 ),
                 StatCardVertical(
-                  title: 'Trips',
+                  title: t.trips,
                   value: report.tripCount.toString(),
                   icon: Icons.directions_car,
                   color: const Color(0xFF9B59B6),
@@ -667,7 +675,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         if (report.fuelUsed != null && report.fuelUsed! > 0) ...[
           const SizedBox(height: 16),
           StatCard(
-            title: 'Fuel Used',
+            title: t.fuelUsed,
             value: '${report.fuelUsed!.toStringAsFixed(2)} L',
             icon: Icons.local_gas_station,
             color: const Color(0xFFE74C3C),
@@ -680,7 +688,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
         // Speed Chart Section
         _buildChartSection(
-          title: 'Speed Evolution',
+          title: t.speedEvolution,
           icon: Icons.show_chart,
           child: SpeedChart(
             speedData: _generateSpeedData(period, report),
@@ -694,7 +702,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
         // Trip Bar Chart Section
         _buildChartSection(
-          title: 'Trip Distribution',
+          title: t.tripDistribution,
           icon: Icons.bar_chart,
           child: TripBarChart(
             tripCounts: _generateTripCounts(period, report),
@@ -747,6 +755,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildSummaryCard(AnalyticsReport report) {
+    final t = AppLocalizations.of(context)!;
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
     
     return Card(
@@ -765,7 +774,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Period Summary',
+                  t.periodSummary,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -774,19 +783,19 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             ),
             const SizedBox(height: 16),
             _buildInfoRow(
-              'Start',
+              t.start,
               dateFormat.format(report.startTime),
               Icons.play_arrow,
             ),
             const SizedBox(height: 8),
             _buildInfoRow(
-              'End',
+              t.end,
               dateFormat.format(report.endTime),
               Icons.stop,
             ),
             const SizedBox(height: 8),
             _buildInfoRow(
-              'Duration',
+              t.duration,
               _formatDuration(report.endTime.difference(report.startTime)),
               Icons.timer,
             ),

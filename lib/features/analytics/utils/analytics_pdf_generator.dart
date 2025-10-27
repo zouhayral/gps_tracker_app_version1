@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/features/analytics/models/analytics_report.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
 
@@ -23,46 +24,55 @@ class AnalyticsPdfGenerator {
   /// Generates a PDF report from the given [AnalyticsReport].
   ///
   /// The [periodLabel] is used in the filename and title (e.g., "Aujourd'hui", "Derniers 7 jours").
+  /// The [t] parameter provides localized strings for all labels in the report.
   ///
   /// Returns a [File] object pointing to the generated PDF in the temporary directory.
   ///
   /// Example:
   /// ```dart
   /// final report = AnalyticsReport(...);
-  /// final pdfFile = await AnalyticsPdfGenerator.generate(report, "Aujourd'hui");
+  /// final t = AppLocalizations.of(context)!;
+  /// final pdfFile = await AnalyticsPdfGenerator.generate(report, "Aujourd'hui", t);
   /// // Share or display the PDF
   /// ```
   static Future<File> generate(
     AnalyticsReport report,
     String periodLabel,
+    AppLocalizations t,
   ) async {
     AppLogger.debug('[PDF] Generating analytics report for: $periodLabel');
 
     final pdf = pw.Document();
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
     final now = DateTime.now();
+    
+    // Determine text direction based on locale
+    final textDirection = t.localeName == 'ar' 
+        ? pw.TextDirection.rtl 
+        : pw.TextDirection.ltr;
 
     // Build PDF content
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
+        textDirection: textDirection,
         build: (pw.Context context) {
           return [
             // Header Section
-            _buildHeader(periodLabel, dateFormat, report),
+            _buildHeader(periodLabel, dateFormat, report, t, textDirection),
             pw.SizedBox(height: 30),
 
             // Summary Statistics Table
-            _buildSummarySection(report),
+            _buildSummarySection(report, t, textDirection),
             pw.SizedBox(height: 30),
 
             // Period Details
-            _buildPeriodDetails(report, dateFormat),
+            _buildPeriodDetails(report, dateFormat, t, textDirection),
             pw.SizedBox(height: 30),
 
             // Charts Placeholder
-            _buildChartsPlaceholder(),
+            _buildChartsPlaceholder(t, textDirection),
             pw.SizedBox(height: 30),
 
             // Divider
@@ -70,7 +80,7 @@ class AnalyticsPdfGenerator {
             pw.SizedBox(height: 20),
 
             // Footer
-            _buildFooter(now, dateFormat),
+            _buildFooter(now, dateFormat, t, textDirection),
           ];
         },
       ),
@@ -98,6 +108,8 @@ class AnalyticsPdfGenerator {
     String periodLabel,
     DateFormat dateFormat,
     AnalyticsReport report,
+    AppLocalizations t,
+    pw.TextDirection textDirection,
   ) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(20),
@@ -109,20 +121,22 @@ class AnalyticsPdfGenerator {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            'GPS Report – $periodLabel',
+            '${t.reportsTitle} – $periodLabel',
             style: pw.TextStyle(
               fontSize: 24,
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.black,
             ),
+            textDirection: textDirection,
           ),
           pw.SizedBox(height: 8),
           pw.Text(
-            'Period: ${dateFormat.format(report.startTime)} - ${dateFormat.format(report.endTime)}',
+            '${t.period}: ${dateFormat.format(report.startTime)} - ${dateFormat.format(report.endTime)}',
             style: pw.TextStyle(
               fontSize: 12,
               color: _darkGray,
             ),
+            textDirection: textDirection,
           ),
         ],
       ),
@@ -130,17 +144,22 @@ class AnalyticsPdfGenerator {
   }
 
   /// Builds the summary statistics section with key metrics.
-  static pw.Widget _buildSummarySection(AnalyticsReport report) {
+  static pw.Widget _buildSummarySection(
+    AnalyticsReport report,
+    AppLocalizations t,
+    pw.TextDirection textDirection,
+  ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Main Statistics',
+          t.mainStatistics,
           style: pw.TextStyle(
             fontSize: 18,
             fontWeight: pw.FontWeight.bold,
             color: _darkGray,
           ),
+          textDirection: textDirection,
         ),
         pw.SizedBox(height: 16),
         pw.Table(
@@ -148,31 +167,37 @@ class AnalyticsPdfGenerator {
           children: [
             // Header row
             _buildTableRow(
-              'Metric',
-              'Value',
+              t.metric,
+              t.value,
               isHeader: true,
+              textDirection: textDirection,
             ),
             // Data rows
             _buildTableRow(
-              'Total Distance',
+              t.distance,
               '${report.totalDistanceKm.toStringAsFixed(2)} km',
+              textDirection: textDirection,
             ),
             _buildTableRow(
-              'Average Speed',
+              t.avgSpeed,
               '${report.avgSpeed.toStringAsFixed(1)} km/h',
+              textDirection: textDirection,
             ),
             _buildTableRow(
-              'Maximum Speed',
+              t.maxSpeed,
               '${report.maxSpeed.toStringAsFixed(1)} km/h',
+              textDirection: textDirection,
             ),
             _buildTableRow(
-              'Number of Trips',
+              t.trips,
               report.tripCount.toString(),
+              textDirection: textDirection,
             ),
             if (report.fuelUsed != null && report.fuelUsed! > 0)
               _buildTableRow(
-                'Fuel Used',
+                t.fuelUsed,
                 '${report.fuelUsed!.toStringAsFixed(2)} L',
+                textDirection: textDirection,
               ),
           ],
         ),
@@ -185,6 +210,7 @@ class AnalyticsPdfGenerator {
     String label,
     String value, {
     bool isHeader = false,
+    required pw.TextDirection textDirection,
   }) {
     final textStyle = pw.TextStyle(
       fontSize: isHeader ? 12 : 11,
@@ -199,7 +225,11 @@ class AnalyticsPdfGenerator {
       children: [
         pw.Padding(
           padding: const pw.EdgeInsets.all(12),
-          child: pw.Text(label, style: textStyle),
+          child: pw.Text(
+            label, 
+            style: textStyle,
+            textDirection: textDirection,
+          ),
         ),
         pw.Padding(
           padding: const pw.EdgeInsets.all(12),
@@ -209,6 +239,7 @@ class AnalyticsPdfGenerator {
               fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.bold,
             ),
             textAlign: pw.TextAlign.right,
+            textDirection: textDirection,
           ),
         ),
       ],
@@ -219,6 +250,8 @@ class AnalyticsPdfGenerator {
   static pw.Widget _buildPeriodDetails(
     AnalyticsReport report,
     DateFormat dateFormat,
+    AppLocalizations t,
+    pw.TextDirection textDirection,
   ) {
     final duration = report.endTime.difference(report.startTime);
     final durationText = _formatDuration(duration);
@@ -233,26 +266,31 @@ class AnalyticsPdfGenerator {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            'Period Details',
+            t.periodDetails,
             style: pw.TextStyle(
               fontSize: 14,
               fontWeight: pw.FontWeight.bold,
               color: _darkGray,
             ),
+            textDirection: textDirection,
           ),
           pw.SizedBox(height: 12),
-          _buildDetailRow('Start', dateFormat.format(report.startTime)),
+          _buildDetailRow(t.start, dateFormat.format(report.startTime), textDirection),
           pw.SizedBox(height: 6),
-          _buildDetailRow('End', dateFormat.format(report.endTime)),
+          _buildDetailRow(t.end, dateFormat.format(report.endTime), textDirection),
           pw.SizedBox(height: 6),
-          _buildDetailRow('Duration', durationText),
+          _buildDetailRow(t.duration, durationText, textDirection),
         ],
       ),
     );
   }
 
   /// Builds a detail row with label and value.
-  static pw.Widget _buildDetailRow(String label, String value) {
+  static pw.Widget _buildDetailRow(
+    String label, 
+    String value,
+    pw.TextDirection textDirection,
+  ) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
@@ -262,6 +300,7 @@ class AnalyticsPdfGenerator {
             fontSize: 11,
             color: _darkGray,
           ),
+          textDirection: textDirection,
         ),
         pw.Text(
           value,
@@ -270,13 +309,17 @@ class AnalyticsPdfGenerator {
             fontWeight: pw.FontWeight.bold,
             color: _darkGray,
           ),
+          textDirection: textDirection,
         ),
       ],
     );
   }
 
   /// Builds the charts placeholder section.
-  static pw.Widget _buildChartsPlaceholder() {
+  static pw.Widget _buildChartsPlaceholder(
+    AppLocalizations t,
+    pw.TextDirection textDirection,
+  ) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(20),
       decoration: pw.BoxDecoration(
@@ -292,21 +335,13 @@ class AnalyticsPdfGenerator {
           ),
           pw.SizedBox(height: 12),
           pw.Text(
-            'Charts not included',
+            t.chartsNotIncluded,
             style: pw.TextStyle(
               fontSize: 12,
               color: PdfColors.grey600,
               fontStyle: pw.FontStyle.italic,
             ),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(
-            'Speed and trip charts will be added in a future update',
-            style: pw.TextStyle(
-              fontSize: 10,
-              color: PdfColors.grey500,
-            ),
-            textAlign: pw.TextAlign.center,
+            textDirection: textDirection,
           ),
         ],
       ),
@@ -314,16 +349,22 @@ class AnalyticsPdfGenerator {
   }
 
   /// Builds the footer section with generation timestamp and app info.
-  static pw.Widget _buildFooter(DateTime now, DateFormat dateFormat) {
+  static pw.Widget _buildFooter(
+    DateTime now, 
+    DateFormat dateFormat,
+    AppLocalizations t,
+    pw.TextDirection textDirection,
+  ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         pw.Text(
-          'Generated on ${dateFormat.format(now)}',
+          '${t.generatedOn} ${dateFormat.format(now)}',
           style: pw.TextStyle(
             fontSize: 10,
             color: PdfColors.grey600,
           ),
+          textDirection: textDirection,
         ),
         pw.SizedBox(height: 6),
         pw.Text(

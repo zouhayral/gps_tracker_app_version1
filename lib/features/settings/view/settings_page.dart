@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
+import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
-import 'package:my_app_gps/core/utils/app_logger.dart';
+import 'package:my_app_gps/features/localization/locale_provider.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/services/traccar_connection_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persistent notification toggle provider (default ON)
 final notificationEnabledProvider = StateProvider<bool>((ref) {
@@ -24,6 +27,8 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context)!;
+    
     // Optimized with .select() to limit rebuilds to username/avatar changes
     final username = ref.watch(
       authNotifierProvider.select(
@@ -38,7 +43,7 @@ class SettingsPage extends ConsumerWidget {
     );
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(t.settingsTitle),
         actions: [
           NotificationBadge(
             onTap: () => context.safeGo(AppRoutes.alerts),
@@ -49,8 +54,8 @@ class SettingsPage extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           ListTile(
-            title: const Text('Account'),
-            subtitle: Text(username ?? 'Not signed in'),
+            title: Text(t.account),
+            subtitle: Text(username ?? t.notSignedIn),
             trailing: Icon(
               connected ? Icons.cloud_done : Icons.cloud_off,
               color: connected ? Colors.green : Colors.red,
@@ -72,10 +77,8 @@ class SettingsPage extends ConsumerWidget {
                   debugPrint(
                       '[Settings] Notifications ${value ? 'enabled' : 'disabled'}',);
                 },
-                title: const Text('Notifications'),
-                subtitle: const Text(
-                  'Turn off to stop receiving live alerts. You can still view them in the Alerts tab.',
-                ),
+                title: Text(t.notifications),
+                subtitle: Text(t.notificationsSubtitle),
                 secondary: const Icon(Icons.notifications),
                 activeTrackColor: Colors.lightGreen,
               );
@@ -83,10 +86,10 @@ class SettingsPage extends ConsumerWidget {
           ),
           const Divider(height: 32),
           // === Analytics & Reports Section ===
-          const ListTile(
+          ListTile(
             title: Text(
-              'Analytics & Reports',
-              style: TextStyle(
+              t.analyticsReports,
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -98,8 +101,8 @@ class SettingsPage extends ConsumerWidget {
               Icons.analytics_outlined,
               color: Color(0xFFb4e15c),
             ),
-            title: const Text('Reports & Statistics'),
-            subtitle: const Text('View trips, speeds, and distances'),
+            title: Text(t.reportsTitle),
+            subtitle: Text(t.reportsSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               AppLogger.debug('[Settings] Navigating to AnalyticsPage');
@@ -108,10 +111,10 @@ class SettingsPage extends ConsumerWidget {
           ),
           const Divider(height: 32),
           // === Geofence Management Section ===
-          const ListTile(
+          ListTile(
             title: Text(
-              'Geofences',
-              style: TextStyle(
+              t.geofences,
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -120,10 +123,83 @@ class SettingsPage extends ConsumerWidget {
           ),
           ListTile(
             leading: const Icon(Icons.fence_outlined),
-            title: const Text('Manage Geofences'),
-            subtitle: const Text('Create, edit, or configure geofence settings'),
+            title: Text(t.manageGeofences),
+            subtitle: Text(t.manageGeofencesSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.safePush<void>(AppRoutes.geofences),
+          ),
+          const Divider(height: 32),
+          // === Localization Test Section ===
+          ListTile(
+            title: Text(
+              t.languageDeveloperTools,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            dense: true,
+          ),
+          // Language Selector
+          Consumer(
+            builder: (context, ref, _) {
+              final currentLocale = ref.watch(localeProvider);
+              final localeName = ref.read(localeProvider.notifier).getLocaleName();
+              
+              return ListTile(
+                leading: const Icon(Icons.language, color: Colors.orange),
+                title: Text(t.language),
+                subtitle: Text('${t.currentLanguage}: $localeName'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final selectedLocale = await showDialog<Locale>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: Text(t.selectLanguage),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _LanguageOption(
+                            locale: const Locale('en'),
+                            name: 'English',
+                            currentLocale: currentLocale,
+                          ),
+                          const Divider(),
+                          _LanguageOption(
+                            locale: const Locale('fr'),
+                            name: 'Français',
+                            currentLocale: currentLocale,
+                          ),
+                          const Divider(),
+                          _LanguageOption(
+                            locale: const Locale('ar'),
+                            name: 'العربية',
+                            currentLocale: currentLocale,
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(t.cancel),
+                        ),
+                      ],
+                    ),
+                  );
+                  
+                  if (selectedLocale != null && selectedLocale != currentLocale) {
+                    await ref.read(localeProvider.notifier).setLocale(selectedLocale);
+                  }
+                },
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.language, color: Colors.blue),
+            title: Text(t.localeTest),
+            subtitle: Text(t.localeTestSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.safePush<void>(AppRoutes.localeTest),
           ),
           const Divider(height: 32),
           // === Logout Section ===
@@ -138,19 +214,53 @@ class SettingsPage extends ConsumerWidget {
               ),
             ),
             icon: const Icon(Icons.logout),
-            label: const Text('Logout'),
+            label: Text(t.logout),
             onPressed: () async {
               await ref.read(authNotifierProvider.notifier).logout();
               if (context.mounted) {
                 ScaffoldMessenger.of(
                   context,
-                ).showSnackBar(const SnackBar(content: Text('Logged out')));
+                ).showSnackBar(SnackBar(content: Text(t.loggedOut)));
               }
               // GoRouter redirect will take user to login automatically based on auth state.
             },
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Language option widget for the language selector dialog
+class _LanguageOption extends StatelessWidget {
+  const _LanguageOption({
+    required this.locale,
+    required this.name,
+    required this.currentLocale,
+  });
+
+  final Locale locale;
+  final String name;
+  final Locale currentLocale;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = locale.languageCode == currentLocale.languageCode;
+    
+    return ListTile(
+      leading: Radio<String>(
+        value: locale.languageCode,
+        groupValue: currentLocale.languageCode,
+        onChanged: (_) => Navigator.pop(context, locale),
+      ),
+      title: Text(
+        name,
+        style: TextStyle(
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Theme.of(context).primaryColor : null,
+        ),
+      ),
+      onTap: () => Navigator.pop(context, locale),
     );
   }
 }

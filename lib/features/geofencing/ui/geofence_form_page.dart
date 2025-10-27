@@ -8,6 +8,7 @@ import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
 import 'package:my_app_gps/features/geofencing/ui/widgets/geofence_map_widget.dart';
 import 'package:my_app_gps/services/positions_service.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// Page mode for geofence form
 enum GeofenceFormMode { create, edit }
@@ -190,12 +191,13 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           widget.mode == GeofenceFormMode.create
-              ? 'Create Geofence'
+              ? (t?.createGeofence ?? 'Create Geofence')
               : 'Edit Geofence',
         ),
         actions: [
@@ -230,7 +232,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
           ? const CircularProgressIndicator()
           : FloatingActionButton.extended(
               icon: const Icon(Icons.save),
-              label: const Text('Save'),
+              label: Text(t?.save ?? 'Save'),
               onPressed: _saveGeofence,
             ),
     );
@@ -238,6 +240,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
   /// Build basic info card
   Widget _buildBasicInfoCard(ThemeData theme) {
+    final t = AppLocalizations.of(context);
+    
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -251,7 +255,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
                 Icon(Icons.info, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Basic Information',
+                  t?.basicInformation ?? 'Basic Information',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -264,11 +268,11 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
             // Name field
             TextFormField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Name *',
+              decoration: InputDecoration(
+                labelText: '${t?.name ?? 'Name'} *',
                 hintText: 'e.g., Home, Office, School',
-                prefixIcon: Icon(Icons.label),
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.label),
+                border: const OutlineInputBorder(),
               ),
               maxLength: 50,
               validator: (value) {
@@ -287,11 +291,11 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
             // Description field (optional)
             TextFormField(
               controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description (optional)',
+              decoration: InputDecoration(
+                labelText: '${t?.description ?? 'Description'} (${t?.optional ?? 'optional'})',
                 hintText: 'Add notes about this geofence',
-                prefixIcon: Icon(Icons.description),
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.description),
+                border: const OutlineInputBorder(),
               ),
               maxLines: 3,
               maxLength: 200,
@@ -301,21 +305,21 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // Type selector
             Text(
-              'Type',
+              t?.type ?? 'Type',
               style: theme.textTheme.labelLarge,
             ),
             const SizedBox(height: 8),
             SegmentedButton<GeofenceType>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: GeofenceType.circle,
-                  label: Text('Circle'),
-                  icon: Icon(Icons.circle_outlined),
+                  label: Text(t?.circle ?? 'Circle'),
+                  icon: const Icon(Icons.circle_outlined),
                 ),
                 ButtonSegment(
                   value: GeofenceType.polygon,
-                  label: Text('Polygon'),
-                  icon: Icon(Icons.polyline),
+                  label: Text(t?.polygon ?? 'Polygon'),
+                  icon: const Icon(Icons.polyline),
                 ),
               ],
               selected: {_type},
@@ -337,6 +341,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
   /// Build map drawing card
   Widget _buildMapDrawingCard(ThemeData theme) {
+    final t = AppLocalizations.of(context);
+    
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Padding(
@@ -350,7 +356,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
                 Icon(Icons.map, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Draw Boundary',
+                  t?.drawBoundary ?? 'Draw Boundary',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -397,7 +403,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
             // Circle radius slider
             if (_type == GeofenceType.circle) ...[
               Text(
-                'Radius: ${_formatDistance(_circleRadius)}',
+                '${t?.radius ?? 'Radius'}: ${_formatDistance(_circleRadius)}',
                 style: theme.textTheme.labelLarge,
               ),
               Slider(
@@ -463,7 +469,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.my_location),
-                label: const Text('Use Current Location'),
+                label: Text(t?.useCurrentLocation ?? 'Use Current Location'),
                 onPressed: _useCurrentLocation,
               ),
             ),
@@ -475,6 +481,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
   /// Build triggers card
   Widget _buildTriggersCard(ThemeData theme) {
+    final t = AppLocalizations.of(context);
+    
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -488,7 +496,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
                 Icon(Icons.notifications_active, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Triggers',
+                  t?.triggers ?? 'Triggers',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -500,8 +508,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // On Enter toggle
             SwitchListTile(
-              title: const Text('On Enter'),
-              subtitle: const Text('Trigger when device enters this area'),
+              title: Text(t?.onEnter ?? 'On Enter'),
+              subtitle: Text(t?.triggerWhenDeviceEnters ?? 'Trigger when device enters this area'),
               value: _onEnter,
               onChanged: (value) {
                 setState(() {
@@ -513,8 +521,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // On Exit toggle
             SwitchListTile(
-              title: const Text('On Exit'),
-              subtitle: const Text('Trigger when device leaves this area'),
+              title: Text(t?.onExit ?? 'On Exit'),
+              subtitle: Text(t?.triggerWhenDeviceLeaves ?? 'Trigger when device leaves this area'),
               value: _onExit,
               onChanged: (value) {
                 setState(() {
@@ -526,11 +534,11 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // Dwell toggle
             SwitchListTile(
-              title: const Text('Dwell Time'),
+              title: Text(t?.dwellTime ?? 'Dwell Time'),
               subtitle: Text(
                 _enableDwell
                     ? 'Trigger after ${_dwellMinutes.toInt()} minutes'
-                    : 'Trigger when device stays in area',
+                    : t?.triggerWhenDeviceStays ?? 'Trigger when device stays in area',
               ),
               value: _enableDwell,
               onChanged: (value) {
@@ -596,6 +604,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
   /// Build devices card
   Widget _buildDevicesCard(ThemeData theme) {
+    final t = AppLocalizations.of(context);
     // Fetch actual devices from Traccar API
     final devicesAsync = ref.watch(devicesNotifierProvider);
 
@@ -612,7 +621,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
                 Icon(Icons.devices, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Monitored Devices',
+                  t?.monitoredDevices ?? 'Monitored Devices',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -624,8 +633,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // All devices toggle
             SwitchListTile(
-              title: const Text('All Devices'),
-              subtitle: const Text('Monitor all devices automatically'),
+              title: Text(t?.allDevicesLabel ?? 'All Devices'),
+              subtitle: Text(t?.monitorAllDevices ?? 'Monitor all devices automatically'),
               value: _allDevices,
               onChanged: (value) {
                 setState(() {
@@ -685,7 +694,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
                             Padding(
                               padding: const EdgeInsets.all(16),
                               child: Text(
-                                'Select at least one device or enable "All Devices"',
+                                t?.selectAtLeastOneDevice ?? 'Select at least one device or enable "All Devices"',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.error,
                                 ),
@@ -727,6 +736,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
   /// Build notifications card
   Widget _buildNotificationsCard(ThemeData theme) {
+    final t = AppLocalizations.of(context);
+    
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -740,7 +751,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
                 Icon(Icons.notifications, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Notifications',
+                  t?.notifications ?? 'Notifications',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -752,26 +763,26 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // Notification type
             Text(
-              'Type',
+              t?.type ?? 'Type',
               style: theme.textTheme.labelLarge,
             ),
             const SizedBox(height: 8),
             SegmentedButton<String>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: 'local',
-                  label: Text('Local'),
-                  icon: Icon(Icons.notifications),
+                  label: Text(t?.local ?? 'Local'),
+                  icon: const Icon(Icons.notifications),
                 ),
                 ButtonSegment(
                   value: 'push',
-                  label: Text('Push'),
-                  icon: Icon(Icons.cloud),
+                  label: Text(t?.push ?? 'Push'),
+                  icon: const Icon(Icons.cloud),
                 ),
                 ButtonSegment(
                   value: 'both',
-                  label: Text('Both'),
-                  icon: Icon(Icons.notifications_active),
+                  label: Text(t?.both ?? 'Both'),
+                  icon: const Icon(Icons.notifications_active),
                 ),
               ],
               selected: {_notificationType},
@@ -786,8 +797,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // Sound toggle
             SwitchListTile(
-              title: const Text('Sound'),
-              subtitle: const Text('Play notification sound'),
+              title: Text(t?.sound ?? 'Sound'),
+              subtitle: Text(t?.playNotificationSound ?? 'Play notification sound'),
               value: _soundEnabled,
               onChanged: (value) {
                 setState(() {
@@ -799,8 +810,8 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // Vibration toggle
             SwitchListTile(
-              title: const Text('Vibration'),
-              subtitle: const Text('Vibrate on notification'),
+              title: Text(t?.vibration ?? 'Vibration'),
+              subtitle: Text(t?.vibrateOnNotification ?? 'Vibrate on notification'),
               value: _vibrationEnabled,
               onChanged: (value) {
                 setState(() {
@@ -814,7 +825,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
             // Priority dropdown
             DropdownMenu<String>(
-              label: const Text('Priority'),
+              label: Text(t?.priority ?? 'Priority'),
               leadingIcon: const Icon(Icons.priority_high),
               initialSelection: _priority,
               onSelected: (value) {

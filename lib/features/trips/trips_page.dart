@@ -8,6 +8,7 @@ import 'package:my_app_gps/features/trips/trip_details_page.dart';
 import 'package:my_app_gps/features/trips/widgets/trip_filter_dialog.dart';
 import 'package:my_app_gps/providers/trip_auto_refresh_registrar.dart';
 import 'package:my_app_gps/providers/trip_providers.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 class TripsPage extends ConsumerStatefulWidget {
   const TripsPage({this.deviceId, super.key});
@@ -40,9 +41,19 @@ class _TripsPageState extends ConsumerState<TripsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    
+    // Safety check for localization
+    if (t == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Trips')),
+        body: const Center(child: Text('Loading...')),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Trips'),
+        title: Text(t.tripsTitle),
         actions: [
           // Filter button with badge indicator
           Stack(
@@ -75,6 +86,9 @@ class _TripsPageState extends ConsumerState<TripsPage> {
 
   // Welcome screen shown when no filter is active
   Widget _buildWelcomeScreen() {
+    final t = AppLocalizations.of(context);
+    if (t == null) return const SizedBox();
+    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -88,14 +102,14 @@ class _TripsPageState extends ConsumerState<TripsPage> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Filter Your Trips',
+              t.filterYourTrips,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 12),
             Text(
-              'Select devices and date range to view trips',
+              t.filterDescription,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
@@ -105,7 +119,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
             FilledButton.icon(
               onPressed: _showFilterDialog,
               icon: const Icon(Icons.filter_list),
-              label: const Text('Apply Filter'),
+              label: Text(t.applyFilter),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
@@ -117,7 +131,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
             OutlinedButton.icon(
               onPressed: _applyQuickFilter,
               icon: const Icon(Icons.flash_on),
-              label: const Text('Quick: All Devices (24h)'),
+              label: Text(t.quickAllDevices),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
@@ -367,6 +381,9 @@ class _TripsPageState extends ConsumerState<TripsPage> {
 
   // Build trips list with summary
   Widget _buildTripsList(List<Trip> trips, TripFilter filter) {
+    final t = AppLocalizations.of(context);
+    if (t == null) return const SizedBox();
+    
     if (trips.isEmpty) {
       return Center(
         child: Column(
@@ -379,7 +396,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              'No trips found',
+              t.noTripsFound,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
@@ -465,6 +482,9 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     List<Trip> trips,
     TripFilter filter,
   ) {
+    final t = AppLocalizations.of(context);
+    if (t == null) return const SizedBox();
+    
     final totalDistance = trips.fold<double>(
       0,
       (sum, trip) => sum + trip.distanceKm,
@@ -507,7 +527,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Trip Summary',
+                t.tripSummary,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
                       fontWeight: FontWeight.bold,
@@ -523,19 +543,19 @@ class _TripsPageState extends ConsumerState<TripsPage> {
                 context,
                 Icons.route,
                 '${trips.length}',
-                'Trips',
+                t.trips,
               ),
               _buildSummaryItem(
                 context,
                 Icons.straighten,
                 '${totalDistance.toStringAsFixed(1)} km',
-                'Distance',
+                t.distance,
               ),
               _buildSummaryItem(
                 context,
                 Icons.access_time,
                 _formatDuration(totalDuration),
-                'Duration',
+                t.duration,
               ),
             ],
           ),
@@ -576,6 +596,9 @@ class _TripsPageState extends ConsumerState<TripsPage> {
   }
 
   Widget _buildModernTripCard(BuildContext context, Trip trip, String deviceName) {
+    final t = AppLocalizations.of(context);
+    if (t == null) return const SizedBox();
+    
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
@@ -729,7 +752,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
                         context,
                         Icons.timer_outlined,
                         _formatDuration(trip.duration),
-                        'Duration',
+                        t.duration,
                       ),
                     ),
                     Container(
@@ -742,7 +765,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
                         context,
                         Icons.straighten,
                         trip.formattedDistanceKm,
-                        'Distance',
+                        t.distance,
                       ),
                     ),
                     Container(
@@ -755,7 +778,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
                         context,
                         Icons.speed,
                         trip.formattedAvgSpeed,
-                        'Avg Speed',
+                        t.avgSpeed,
                       ),
                     ),
                   ],

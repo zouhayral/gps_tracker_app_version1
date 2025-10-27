@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/data/models/geofence.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 /// Main page for viewing and managing geofences.
 ///
@@ -135,8 +136,10 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
       );
     }
 
+    final t = AppLocalizations.of(context);
+    
     return AppBar(
-      title: const Text('Geofences'),
+      title: Text(t?.geofences ?? 'Geofences'),
       actions: [
         IconButton(
           icon: const Icon(Icons.search),
@@ -280,13 +283,18 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
   Widget _buildNotificationBadges(BuildContext context, Geofence geofence) {
     final theme = Theme.of(context);
     final chips = <Widget>[];
+    final t = AppLocalizations.of(context);
 
     // Notification type chip
     if (geofence.notificationType != 'none') {
       chips.add(
         Chip(
           label: Text(
-            geofence.notificationType,
+            geofence.notificationType == 'local' 
+                ? (t?.local ?? geofence.notificationType)
+                : geofence.notificationType == 'push'
+                    ? (t?.push ?? geofence.notificationType)
+                    : (t?.both ?? geofence.notificationType),
             style: theme.textTheme.labelSmall,
           ),
           avatar: Icon(
@@ -307,7 +315,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
     if (geofence.onEnter) {
       chips.add(
         Chip(
-          label: Text('Entry', style: theme.textTheme.labelSmall),
+          label: Text(t?.entry ?? 'Entry', style: theme.textTheme.labelSmall),
           avatar: const Icon(Icons.login, size: 16),
           visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -318,7 +326,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
     if (geofence.onExit) {
       chips.add(
         Chip(
-          label: Text('Exit', style: theme.textTheme.labelSmall),
+          label: Text(t?.exit ?? 'Exit', style: theme.textTheme.labelSmall),
           avatar: const Icon(Icons.logout, size: 16),
           visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -470,9 +478,10 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
 
   /// Build floating action button
   Widget _buildFAB(BuildContext context) {
+    final t = AppLocalizations.of(context);
     return FloatingActionButton.extended(
       icon: const Icon(Icons.add),
-      label: const Text('Create'),
+      label: Text(t?.createGeofence ?? 'Create'),
       onPressed: () => context.safePush<void>('/geofences/create'),
     );
   }
@@ -485,6 +494,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final t = AppLocalizations.of(context);
 
     return SafeArea(
       child: BottomAppBar(
@@ -509,7 +519,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
               _buildStatItem(
                 context,
                 icon: Icons.fence,
-                label: 'Total',
+                label: t?.total ?? 'Total',
                 value: stats.total.toString(),
               ),
 
@@ -517,7 +527,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
               _buildStatItem(
                 context,
                 icon: Icons.check_circle,
-                label: 'Active',
+                label: t?.active ?? 'Active',
                 value: stats.active.toString(),
                 color: stats.active > 0 ? Colors.green : null,
               ),
@@ -526,7 +536,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
               _buildStatItem(
                 context,
                 icon: Icons.notification_important,
-                label: 'Alerts',
+                label: t?.alertsTitle ?? 'Alerts',
                 value: stats.unacknowledgedEvents.toString(),
                 color: stats.unacknowledgedEvents > 0 ? Colors.orange : null,
               ),
@@ -545,7 +555,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
                     ),
                     const SizedBox(height: 1), // Reduced spacing
                     Text(
-                      isMonitoring ? 'Active' : 'Paused',
+                      isMonitoring ? (t?.active ?? 'Active') : (t?.paused ?? 'Paused'),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: isMonitoring ? Colors.green : colorScheme.outline,
                       ),

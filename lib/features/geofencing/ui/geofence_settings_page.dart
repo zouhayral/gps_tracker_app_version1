@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
@@ -88,14 +89,15 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Geofence Settings'),
+        title: Text(t?.geofenceSettings ?? 'Geofence Settings'),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),
-            tooltip: 'About Geofence Settings',
+            tooltip: t?.aboutGeofenceSettings ?? 'About Geofence Settings',
             onPressed: () => _showAboutDialog(context),
           ),
         ],
@@ -119,7 +121,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Geofence Configuration',
+                          t?.geofenceConfiguration ?? 'Geofence Configuration',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -129,7 +131,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Configure how geofences work, including monitoring, notifications, and performance optimization.',
+                    t?.configureHowGeofencesWork ?? 'Configure how geofences work, including monitoring, notifications, and performance optimization.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -141,29 +143,29 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
           const SizedBox(height: 16),
 
           // === Enable Geofencing ===
-          _buildEnableGeofencingSection(context),
+          _buildEnableGeofencingSection(context, t),
           const Divider(height: 32),
 
           // === Background Access ===
-          _buildBackgroundAccessSection(context),
+          _buildBackgroundAccessSection(context, t),
           const Divider(height: 32),
 
           // === Adaptive Optimization ===
-          _buildAdaptiveOptimizationSection(context),
+          _buildAdaptiveOptimizationSection(context, t),
           const Divider(height: 32),
 
           // === Default Notification Type ===
-          _buildNotificationTypeSection(context),
+          _buildNotificationTypeSection(context, t),
           const Divider(height: 32),
 
           // === Evaluation Frequency ===
-          _buildEvaluationFrequencySection(context),
+          _buildEvaluationFrequencySection(context, t),
           const SizedBox(height: 24),
 
           // === Reset to Defaults Button ===
           OutlinedButton.icon(
             icon: const Icon(Icons.restore),
-            label: const Text('Reset to Defaults'),
+            label: Text(t?.resetToDefaults ?? 'Reset to Defaults'),
             onPressed: () => _resetToDefaults(context),
             style: OutlinedButton.styleFrom(
               foregroundColor: theme.colorScheme.error,
@@ -180,7 +182,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   // ==========================================================================
 
   /// Enable Geofencing section
-  Widget _buildEnableGeofencingSection(BuildContext context) {
+  Widget _buildEnableGeofencingSection(BuildContext context, AppLocalizations? t) {
     final monitorServiceAsync = ref.watch(geofenceMonitorServiceProvider);
     final authState = ref.watch(authNotifierProvider);
     final userId = authState is AuthAuthenticated ? authState.email : null;
@@ -208,9 +210,9 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   await controller.start(userId);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✅ Geofence monitoring started'),
-                        duration: Duration(seconds: 2),
+                      SnackBar(
+                        content: Text(t?.geofenceMonitoringStarted ?? '✅ Geofence monitoring started'),
+                        duration: const Duration(seconds: 2),
                       ),
                     );
                   }
@@ -218,8 +220,8 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   await controller.stop();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('⏸️ Geofence monitoring stopped'),
+                      SnackBar(
+                        content: Text(t?.geofenceMonitoringStopped ?? '⏸️ Geofence monitoring stopped'),
                         duration: Duration(seconds: 2),
                       ),
                     );
@@ -229,21 +231,22 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(
-                          '❌ Failed to ${value ? "start" : "stop"} monitoring: $e'),
+                      content: Text(value 
+                        ? (t?.failedToStartMonitoring ?? '❌ Failed to start monitoring: $e')
+                        : (t?.failedToStopMonitoring ?? '❌ Failed to stop monitoring: $e')),
                       duration: const Duration(seconds: 3),
                     ),
                   );
                 }
               }
             },
-      title: const Text('Enable Geofencing'),
+      title: Text(t?.enableGeofencing ?? 'Enable Geofencing'),
       subtitle: Text(
         userId == null
-            ? 'Sign in to enable geofence monitoring'
+            ? (t?.signInToEnableGeofenceMonitoring ?? 'Sign in to enable geofence monitoring')
             : isActive
-                ? 'Background geofence monitoring and notifications are active'
-                : 'Turn on to receive alerts when entering or exiting geofences',
+                ? (t?.backgroundGeofenceMonitoringActive ?? 'Background geofence monitoring and notifications are active')
+                : (t?.turnOnToReceiveAlerts ?? 'Turn on to receive alerts when entering or exiting geofences'),
       ),
       secondary: const Icon(Icons.my_location),
       activeTrackColor: Colors.lightGreen,
@@ -251,7 +254,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   }
 
   /// Background Access section
-  Widget _buildBackgroundAccessSection(BuildContext context) {
+  Widget _buildBackgroundAccessSection(BuildContext context, AppLocalizations? t) {
     final permActions = ref.read(permissionActionsProvider);
     final hasBackground = ref.watch(hasBackgroundPermissionProvider);
     final isPermanentlyDenied = ref.watch(isPermissionPermanentlyDeniedProvider);
@@ -265,11 +268,11 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                 : Icons.security_update_warning_rounded,
             color: hasBackground ? Colors.green : Colors.orange,
           ),
-          title: const Text('Background Access'),
+          title: Text(t?.backgroundAccess ?? 'Background Access'),
           subtitle: Text(
             hasBackground
-                ? 'Background geofence monitoring enabled'
-                : 'Disabled – app may miss events when closed',
+                ? (t?.backgroundGeofenceMonitoringEnabled ?? 'Background geofence monitoring enabled')
+                : (t?.disabledAppMayMissEvents ?? 'Disabled – app may miss events when closed'),
             style: TextStyle(
               color: hasBackground ? Colors.green.shade700 : Colors.orange.shade700,
             ),
@@ -297,9 +300,9 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   );
                 } else if (granted && mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('✅ Background access granted'),
-                      duration: Duration(seconds: 2),
+                    SnackBar(
+                      content: Text(t?.backgroundAccessGranted ?? '✅ Background access granted'),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }
@@ -307,8 +310,8 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                 // User toggled off background access
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('⚠️ Foreground-only mode activated'),
+                    SnackBar(
+                      content: Text(t?.foregroundOnlyModeActivated ?? '⚠️ Foreground-only mode activated'),
                       duration: Duration(seconds: 2),
                     ),
                   );
@@ -334,16 +337,16 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
               showDialog<void>(
                 context: context,
                 builder: (_) => AlertDialog(
-                  title: const Text('About Foreground Mode'),
-                  content: const Text(
-                    'In foreground-only mode, geofence monitoring works only while '
+                  title: Text(t?.aboutForegroundMode ?? 'About Foreground Mode'),
+                  content: Text(
+                    t?.inForegroundOnlyMode ?? 'In foreground-only mode, geofence monitoring works only while '
                     'the app is open. To receive alerts when the app is closed, '
                     'enable background location access.',
                   ),
                   actions: [
                     TextButton(
                       onPressed: () => context.safePop<void>(),
-                      child: const Text('Got it'),
+                      child: Text(t?.gotIt ?? 'Got it'),
                     ),
                   ],
                 ),
@@ -355,7 +358,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   }
 
   /// Adaptive Optimization section
-  Widget _buildAdaptiveOptimizationSection(BuildContext context) {
+  Widget _buildAdaptiveOptimizationSection(BuildContext context, AppLocalizations? t) {
     final optimizerActions = ref.read(optimizerActionsProvider);
     final isActive = ref.watch(isOptimizerActiveProvider);
     final mode = ref.watch(optimizationModeProvider);
@@ -373,22 +376,22 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
       case OptimizationMode.disabled:
         modeIcon = Icons.bolt_rounded;
         modeColor = Colors.grey;
-        modeText = 'Optimization disabled';
+        modeText = t?.optimizationDisabled ?? 'Optimization disabled';
         break;
       case OptimizationMode.active:
         modeIcon = Icons.bolt_rounded;
         modeColor = Colors.green;
-        modeText = 'Active mode (${currentInterval}s interval)';
+        modeText = '${t?.activeMode ?? 'Active mode'} (${currentInterval}s ${t?.interval ?? 'interval'})';
         break;
       case OptimizationMode.idle:
         modeIcon = Icons.snooze_rounded;
         modeColor = Colors.orange;
-        modeText = 'Idle mode (${currentInterval}s interval)';
+        modeText = '${t?.idleMode ?? 'Idle mode'} (${currentInterval}s ${t?.interval ?? 'interval'})';
         break;
       case OptimizationMode.batterySaver:
         modeIcon = Icons.battery_saver_rounded;
         modeColor = Colors.red;
-        modeText = 'Battery saver (${currentInterval}s interval)';
+        modeText = '${t?.batterySaver ?? 'Battery saver'} (${currentInterval}s ${t?.interval ?? 'interval'})';
         break;
     }
 
@@ -396,11 +399,11 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
       children: [
         ListTile(
           leading: Icon(modeIcon, color: modeColor),
-          title: const Text('Adaptive Optimization'),
+          title: Text(t?.adaptiveOptimization ?? 'Adaptive Optimization'),
           subtitle: Text(
             isActive
                 ? modeText
-                : 'Disabled - Fixed evaluation frequency',
+                : (t?.disabledFixedEvaluationFrequency ?? 'Disabled - Fixed evaluation frequency'),
             style: TextStyle(
               color: isActive ? modeColor : Colors.grey,
             ),
@@ -414,9 +417,9 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   await optimizerActions.start();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✅ Adaptive optimization enabled'),
-                        duration: Duration(seconds: 2),
+                      SnackBar(
+                        content: Text(t?.adaptiveOptimizationEnabled ?? '✅ Adaptive optimization enabled'),
+                        duration: const Duration(seconds: 2),
                       ),
                     );
                   }
@@ -424,7 +427,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('❌ Failed to start optimizer: $e'),
+                        content: Text('${t?.failedToStartOptimizer ?? '❌ Failed to start optimizer'}: $e'),
                         duration: const Duration(seconds: 3),
                       ),
                     );
@@ -434,8 +437,8 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                 await optimizerActions.stop();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('⏸️ Adaptive optimization disabled'),
+                    SnackBar(
+                      content: Text(t?.adaptiveOptimizationDisabled ?? '⏸️ Adaptive optimization disabled'),
                       duration: Duration(seconds: 2),
                     ),
                   );
@@ -464,7 +467,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                         size: 16, color: Colors.blue.shade700),
                     const SizedBox(width: 8),
                     Text(
-                      'Optimization Statistics',
+                      t?.optimizationStatistics ?? 'Optimization Statistics',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.blue.shade700,
@@ -496,7 +499,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   const SizedBox(height: 8),
                   _buildStatItem(
                     icon: Icons.eco_rounded,
-                    label: 'Savings: ${savingsPercent.toStringAsFixed(1)}%',
+                    label: '${t?.savings ?? 'Savings'}: ${savingsPercent.toStringAsFixed(1)}%',
                     color: Colors.green,
                   ),
                 ],
@@ -508,10 +511,10 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   }
 
   /// Default Notification Type section
-  Widget _buildNotificationTypeSection(BuildContext context) {
+  Widget _buildNotificationTypeSection(BuildContext context, AppLocalizations? t) {
     return ListTile(
       leading: const Icon(Icons.notifications_active_outlined),
-      title: const Text('Default Notification Type'),
+      title: Text(t?.defaultNotificationType ?? 'Default Notification Type'),
       subtitle: Text(_notificationType),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => _showNotificationTypePicker(context),
@@ -519,10 +522,10 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   }
 
   /// Evaluation Frequency section
-  Widget _buildEvaluationFrequencySection(BuildContext context) {
+  Widget _buildEvaluationFrequencySection(BuildContext context, AppLocalizations? t) {
     return ListTile(
       leading: const Icon(Icons.settings_suggest_outlined),
-      title: const Text('Evaluation Frequency'),
+      title: Text(t?.evaluationFrequency ?? 'Evaluation Frequency'),
       subtitle: Text(_evaluationMode),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => _showEvaluationFrequencyPicker(context),
