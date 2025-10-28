@@ -435,6 +435,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vehicleMoving => 'Vehicle moving';
 
   @override
+  String get vehicleStarted => 'Vehicle started';
+
+  @override
   String get unknownDevice => 'Unknown Device';
 
   @override

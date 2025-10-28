@@ -241,13 +241,10 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
               switch (value) {
                 case 'acknowledge_all':
                   _acknowledgeAll();
-                  break;
                 case 'archive_old':
                   _archiveOld();
-                  break;
                 case 'export':
                   _exportEvents();
-                  break;
               }
             },
           ),
@@ -280,10 +277,10 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant,
+        color: theme.colorScheme.surfaceContainerHighest,
         border: Border(
           bottom: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.2),
+                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -322,7 +319,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
         color: theme.colorScheme.surface,
         border: Border(
           bottom: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.2),
+                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -352,7 +349,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                     },
                   ),
                 );
-              }).toList(),
+              }),
 
             // Status chips
             if (_selectedStatuses.length < 3)
@@ -380,7 +377,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                     },
                   ),
                 );
-              }).toList(),
+              }),
 
             // Device chip
             if (_selectedDevice != null)
@@ -495,7 +492,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: eventTypeColor.withOpacity(0.2),
+                  color: eventTypeColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -530,7 +527,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.2),
+                            color: statusColor.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
@@ -763,7 +760,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
         color: theme.colorScheme.surface,
         border: Border(
           top: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.2),
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -986,14 +983,13 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                             ),
                             const SizedBox(height: 8),
                             DropdownButtonFormField<String>(
-                              value: _selectedDevice,
+                              initialValue: _selectedDevice,
                               decoration: const InputDecoration(
                                 border: OutlineInputBorder(),
                                 hintText: 'All Devices',
                               ),
                               items: const [
                                 DropdownMenuItem(
-                                  value: null,
                                   child: Text('All Devices'),
                                 ),
                                 DropdownMenuItem(
@@ -1193,7 +1189,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
           height: 300,
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
@@ -1316,18 +1312,18 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => context.safePop<void>(false),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => context.safePop<void>(true),
+            onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Acknowledge All'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed ?? false) {
       try {
         // Await repository initialization before bulk acknowledge
         final repo = await ref.read(geofenceEventRepositoryProvider.future);
@@ -1342,36 +1338,37 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
           ref.invalidate(geofenceEventsProvider);
           ref.invalidate(unacknowledgedEventsProvider);
           
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${eventIds.length} events acknowledged'),
-                backgroundColor: Colors.green,
-                duration: const Duration(seconds: 2),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('No pending events to acknowledge'),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        if (mounted) {
+          if (!context.mounted) return;
+          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: Theme.of(context).colorScheme.error,
+              content: Text('${eventIds.length} events acknowledged'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          if (!context.mounted) return;
+          // ignore: use_build_context_synchronously
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No pending events to acknowledge'),
               behavior: SnackBarBehavior.floating,
             ),
           );
         }
+      } catch (e) {
+        if (!context.mounted) return;
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            // ignore: use_build_context_synchronously
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -1387,19 +1384,19 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => context.safePop<void>(),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => context.safePop<void>(7),
+            onPressed: () => Navigator.of(context).pop(7),
             child: const Text('7 days'),
           ),
           TextButton(
-            onPressed: () => context.safePop<void>(30),
+            onPressed: () => Navigator.of(context).pop(30),
             child: const Text('30 days'),
           ),
           TextButton(
-            onPressed: () => context.safePop<void>(90),
+            onPressed: () => Navigator.of(context).pop(90),
             child: const Text('90 days'),
           ),
         ],
@@ -1416,26 +1413,27 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
         ref.invalidate(geofenceEventsProvider);
         ref.invalidate(unacknowledgedEventsProvider);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Events older than $days days archived'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+        if (!context.mounted) return;
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Events older than $days days archived'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+        if (!context.mounted) return;
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            // ignore: use_build_context_synchronously
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -1491,13 +1489,10 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
       switch (_sortBy) {
         case 'timestamp':
           comparison = a.timestamp.compareTo(b.timestamp);
-          break;
         case 'type':
           comparison = a.eventType.compareTo(b.eventType);
-          break;
         case 'status':
           comparison = a.status.compareTo(b.status);
-          break;
         default:
           comparison = 0;
       }

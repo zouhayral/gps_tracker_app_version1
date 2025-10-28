@@ -8,15 +8,16 @@ import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/dao/positions_dao.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
-import 'package:my_app_gps/core/database/entities/device_entity.dart';
-import 'package:my_app_gps/core/database/entities/event_entity.dart';
+import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/features/map/data/positions_last_known_provider.dart';
 import 'package:my_app_gps/features/map/data/positions_live_provider.dart';
 import 'package:my_app_gps/features/map/view/map_page.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/repositories/notifications_repository.dart';
+import 'package:my_app_gps/services/auth_service.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
@@ -59,9 +60,9 @@ void main() {
         return WebSocketManager();
       }),
       // Override TraccarSocketService to prevent actual WebSocket connections
-      traccarSocketServiceProvider.overrideWith((ref) {
-        throw UnimplementedError('Mock socket service');
-      }),
+        traccarSocketServiceProvider.overrideWith(
+          (ref) => _TraccarSocketServiceFake.withAuth(ref.read(authServiceProvider)),
+        ),
       // Provide a safe notifications repository to avoid early DAO reads in banner init
       notificationsRepositoryProvider.overrideWith((ref) {
         // Use a real EventService instance; we won't trigger network calls in this test
@@ -75,7 +76,7 @@ void main() {
         );
       }),
       // Avoid ObjectBox-backed DAOs in this widget test
-      telemetryDaoProvider.overrideWithValue(TelemetryDaoNoop()),
+      telemetryDaoProvider.overrideWithValue(_TelemetryDaoFake()),
       eventsDaoProvider.overrideWith((ref) async => _EventsDaoFake()),
       devicesDaoProvider.overrideWith((ref) async => _DevicesDaoFake()),
       // Devices list
@@ -96,15 +97,24 @@ void main() {
       container: container,
       child: const Directionality(
         textDirection: TextDirection.ltr,
-        child: MaterialApp(home: MapPage(preselectedIds: {1})),
+        child: MaterialApp(
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: MapPage(preselectedIds: {1}),
+        ),
       ),
     ),);
 
-    // Allow frames to settle
-    await tester.pumpAndSettle(const Duration(milliseconds: 200));
+    // Allow frames to settle; ensure any 500ms startup timers fire
+    await tester.pumpAndSettle(const Duration(seconds: 1));
 
     // Expect device name in the info panel (selected)
     expect(find.textContaining('Truck 1'), findsOneWidget);
+
+    // Clean up timers started by the notifications repository to avoid pending timers
+    final repo = await container.read(notificationsRepositoryProvider.future);
+    repo.dispose();
+    await tester.pump(const Duration(milliseconds: 50));
   });
 }
 
@@ -115,6 +125,27 @@ class _DaoNoop implements PositionsDaoBase {
   Future<Position?> latestByDevice(int deviceId) async => null;
   @override
   Future<void> upsert(Position p) async {}
+}
+
+class _TelemetryDaoFake implements TelemetryDaoBase {
+  @override
+  Future<List<TelemetrySample>> byDeviceInRange(
+    int deviceId,
+    DateTime start,
+    DateTime end,
+  ) async => <TelemetrySample>[];
+
+  @override
+  Future<int> countForDevice(int deviceId) async => 0;
+
+  @override
+  Future<void> deleteOlderThan(DateTime cutoff) async {}
+
+  @override
+  Future<void> put(TelemetrySample record) async {}
+
+  @override
+  Future<void> putMany(List<TelemetrySample> records) async {}
 }
 
 class _DevicesNotifierFixed extends DevicesNotifier {
@@ -145,28 +176,28 @@ class _EventsDaoFake implements EventsDaoBase {
   Future<void> deleteAll() async {}
 
   @override
-  Future<List<EventEntity>> getAll() async => <EventEntity>[];
+  Future<List<Event>> getAll() async => <Event>[];
 
   @override
-  Future<List<EventEntity>> getByDevice(int deviceId) async => <EventEntity>[];
+  Future<List<Event>> getByDevice(int deviceId) async => <Event>[];
 
   @override
-  Future<List<EventEntity>> getByDeviceAndType(int deviceId, String eventType) async => <EventEntity>[];
+  Future<List<Event>> getByDeviceAndType(int deviceId, String eventType) async => <Event>[];
 
   @override
-  Future<List<EventEntity>> getByDeviceInRange(int deviceId, DateTime startTime, DateTime endTime) async => <EventEntity>[];
+  Future<List<Event>> getByDeviceInRange(int deviceId, DateTime startTime, DateTime endTime) async => <Event>[];
 
   @override
-  Future<EventEntity?> getById(String eventId) async => null;
+  Future<Event?> getById(String eventId) async => null;
 
   @override
-  Future<List<EventEntity>> getByType(String eventType) async => <EventEntity>[];
+  Future<List<Event>> getByType(String eventType) async => <Event>[];
 
   @override
-  Future<void> upsert(EventEntity event) async {}
+  Future<void> upsert(Event event) async {}
 
   @override
-  Future<void> upsertMany(List<EventEntity> events) async {}
+  Future<void> upsertMany(List<Event> events) async {}
 }
 
 class _DevicesDaoFake implements DevicesDaoBase {
@@ -177,17 +208,37 @@ class _DevicesDaoFake implements DevicesDaoBase {
   Future<void> deleteAll() async {}
 
   @override
-  Future<List<DeviceEntity>> getAll() async => <DeviceEntity>[];
+  Future<List<DeviceRecord>> getAll() async => <DeviceRecord>[];
 
   @override
-  Future<DeviceEntity?> getById(int deviceId) async => null;
+  Future<DeviceRecord?> getById(int deviceId) async => null;
 
   @override
-  Future<List<DeviceEntity>> getByStatus(String status) async => <DeviceEntity>[];
+  Future<List<DeviceRecord>> getByStatus(String status) async => <DeviceRecord>[];
 
   @override
-  Future<void> upsert(DeviceEntity device) async {}
+  Future<void> upsert(DeviceRecord device) async {}
 
   @override
-  Future<void> upsertMany(List<DeviceEntity> devices) async {}
+  Future<void> upsertMany(List<DeviceRecord> devices) async {}
+}
+
+// A benign fake that exposes a connect() stream without performing any network I/O.
+class _TraccarSocketServiceFake extends TraccarSocketService {
+  _TraccarSocketServiceFake.withAuth(AuthService auth)
+      : super(baseUrl: 'http://localhost', auth: auth);
+
+  final _controller = StreamController<TraccarSocketMessage>.broadcast();
+
+  @override
+  Stream<TraccarSocketMessage> connect() {
+    // Optionally signal connected state, then remain idle.
+    // _controller.add(TraccarSocketMessage.connected());
+    return _controller.stream;
+  }
+
+  @override
+  Future<void> close() async {
+    await _controller.close();
+  }
 }

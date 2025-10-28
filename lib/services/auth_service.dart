@@ -5,9 +5,9 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:my_app_gps/core/network/dio_client.dart';
+import 'package:my_app_gps/core/storage/secure_storage.dart';
 // Platform-specific Dio creation and emulator adjustments
 import 'package:my_app_gps/services/platform_dio_stub.dart'
     if (dart.library.io) 'platform_dio_io.dart';
@@ -55,7 +55,7 @@ class AuthService {
   final Dio _dio;
   final CookieJar _cookieJar;
   final Ref _ref;
-  static const _secure = FlutterSecureStorage();
+  final _secure = createSecureStorage();
   static const _sessionKey = 'session_cookie_jsessionid';
 
   /// Attempts to log in; stores only the JSESSIONID value (not entire Set-Cookie headers)

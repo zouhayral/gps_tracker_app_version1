@@ -33,6 +33,9 @@ linter:
     # Turn off cascade_invocations rule project-wide because generated code often triggers it.
     cascade_invocations: false
     prefer_constructors_over_static_methods: true
+    # Relax style-only lints that surface as INFO and do not impact runtime behavior
+    flutter_style_todos: false
+    comment_references: false
 
 # Exclude generated files from analyzer to reduce noise from codegen artifacts
 analyzer:

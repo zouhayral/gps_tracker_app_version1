@@ -395,10 +395,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get severity => 'الخطورة';
 
   @override
-  String get ignitionOn => 'تشغيل المحرك';
+  String get ignitionOn => 'تم تشغيل الإشعال';
 
   @override
-  String get ignitionOff => 'إيقاف المحرك';
+  String get ignitionOff => 'تم إيقاف الإشعال';
 
   @override
   String get deviceOnline => 'الجهاز متصل';
@@ -428,10 +428,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get speedAlert => 'تنبيه السرعة';
 
   @override
-  String get vehicleStopped => 'المركبة متوقفة';
+  String get vehicleStopped => 'تم إيقاف المركبة';
 
   @override
   String get vehicleMoving => 'المركبة تتحرك';
+
+  @override
+  String get vehicleStarted => 'تم تشغيل المركبة';
 
   @override
   String get unknownDevice => 'جهاز غير معروف';

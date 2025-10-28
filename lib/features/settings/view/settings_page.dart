@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
@@ -12,6 +10,7 @@ import 'package:my_app_gps/features/localization/locale_provider.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/services/traccar_connection_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persistent notification toggle provider (default ON)
 final notificationEnabledProvider = StateProvider<bool>((ref) {
@@ -250,7 +249,9 @@ class _LanguageOption extends StatelessWidget {
     return ListTile(
       leading: Radio<String>(
         value: locale.languageCode,
+        // ignore: deprecated_member_use
         groupValue: currentLocale.languageCode,
+        // ignore: deprecated_member_use
         onChanged: (_) => Navigator.pop(context, locale),
       ),
       title: Text(

@@ -1,0 +1,14 @@
+{
+  "name": "gps-tracker-deployment-scripts",
+  "version": "1.0.0",
+  "description": "Deployment and smoke testing scripts for GPS Tracker app",
+  "private": true,
+  "scripts": {
+    "smoke-test": "node scripts/smoke-test.js",
+    "smoke-test:staging": "BASE_URL=https://your-project-staging.web.app node scripts/smoke-test.js",
+    "smoke-test:production": "BASE_URL=https://your-project.web.app node scripts/smoke-test.js"
+  },
+  "devDependencies": {
+    "puppeteer": "^22.0.0"
+  }
+}

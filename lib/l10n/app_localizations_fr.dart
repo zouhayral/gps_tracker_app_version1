@@ -401,10 +401,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get severity => 'Gravité';
 
   @override
-  String get ignitionOn => 'Contact activé';
+  String get ignitionOn => 'Contact mis';
 
   @override
-  String get ignitionOff => 'Contact désactivé';
+  String get ignitionOff => 'Contact coupé';
 
   @override
   String get deviceOnline => 'Appareil en ligne';
@@ -438,6 +438,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get vehicleMoving => 'Véhicule en mouvement';
+
+  @override
+  String get vehicleStarted => 'Véhicule démarré';
 
   @override
   String get unknownDevice => 'Appareil inconnu';

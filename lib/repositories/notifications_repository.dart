@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
-import 'package:my_app_gps/core/database/entities/event_entity.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
@@ -378,9 +377,8 @@ class NotificationsRepository {
   /// Load cached events from ObjectBox and emit to stream
   Future<void> _loadCachedEvents() async {
     try {
-      _log('📦 Loading cached events from ObjectBox');
-      final entities = await _eventsDao.getAll();
-      final events = entities.map(Event.fromEntity).toList();
+  _log('📦 Loading cached events from local storage');
+  final events = await _eventsDao.getAll();
 
       // Enrich with device names
       _cachedEvents = await _enrichEventsWithDeviceNames(events);
@@ -518,9 +516,8 @@ class NotificationsRepository {
       // Enrich events with device names (timestamps already local in Event.fromJson)
       final enrichedEvents = await _enrichEventsWithDeviceNames(newEvents);
 
-      // Persist to ObjectBox via EventService
-      final entities = enrichedEvents.map((e) => e.toEntity()).toList();
-      await _eventsDao.upsertMany(entities);
+  // Persist to local storage
+  await _eventsDao.upsertMany(enrichedEvents);
 
       // Update replay anchor with the latest event timestamp
       if (enrichedEvents.isNotEmpty) {
@@ -578,6 +575,10 @@ class NotificationsRepository {
   ///
   /// Only shows notifications for unread events with critical severity.
   /// Supports: overspeed, ignition on/off, device offline/online, geofence enter/exit
+  /// 
+  /// For backfilled events (reconnection): Shows notifications for events within
+  /// the last 2 hours (increased from 30 min), even if marked as read, to ensure 
+  /// users see all missed events after long disconnections
   Future<void> _showNotificationsForEvents(List<Event> events) async {
     try {
       final criticalTypes = [
@@ -591,10 +592,26 @@ class NotificationsRepository {
         'alarm',
       ];
 
+      // Extended time window for showing notifications on backfilled events
+      // 2 hours ensures users get notifications even after longer disconnections
+      final notificationWindow = DateTime.now().subtract(const Duration(hours: 2));
+
       // Filter events that should trigger notifications
       final notifiableEvents = events.where((event) {
-        return !event.isRead &&
-            criticalTypes.contains(event.type.toLowerCase());
+        // Must be a critical event type
+        if (!criticalTypes.contains(event.type.toLowerCase())) {
+          return false;
+        }
+        
+        // Recent events (within 2 hours) should show regardless of read status
+        // This ensures missed events during disconnection are shown
+        final isRecent = event.timestamp.isAfter(notificationWindow);
+        if (isRecent) {
+          return true; // Show notification for recent events
+        }
+        
+        // Older events only if unread
+        return !event.isRead;
       }).toList();
 
       if (notifiableEvents.isEmpty) {
@@ -602,10 +619,18 @@ class NotificationsRepository {
         return;
       }
 
-      _log('🔔 Showing ${notifiableEvents.length} notifications');
+      // Log breakdown of recent vs older events
+      final recentCount = notifiableEvents.where(
+        (e) => e.timestamp.isAfter(notificationWindow)
+      ).length;
+      _log('🔔 Showing ${notifiableEvents.length} notifications ($recentCount recent, ${notifiableEvents.length - recentCount} older unread)');
 
       // Show individual notifications (deviceName already enriched)
       for (final event in notifiableEvents) {
+        final isRecent = event.timestamp.isAfter(notificationWindow);
+        if (isRecent && event.isRead) {
+          _log('📤 Showing notification for backfilled event: ${event.type} (${event.deviceName})');
+        }
         await LocalNotificationService.tryShowEventNotification(event);
       }
 
@@ -625,14 +650,27 @@ class NotificationsRepository {
   Future<void> addEvent(Event event) async {
     try {
       _log('addEvent called for ${event.type}');
-      // Deduplicate by id
-      if (_recentEventIds.contains(event.id)) {
-        _log('🔁 Skipping duplicate addEvent ${event.id}');
+      
+      // For recent events (within last hour), bypass duplicate check to ensure
+      // backfilled events are properly processed and notifications are shown
+      final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
+      final isRecent = event.timestamp.isAfter(oneHourAgo);
+      
+      // Deduplicate by id (but allow recent events through for notifications)
+      if (_recentEventIds.contains(event.id) && !isRecent) {
+        _log('🔁 Skipping duplicate addEvent ${event.id} (older than 1h)');
         if (kDebugMode) {
           DevDiagnostics.instance.incrementDedupSkipped();
         }
         return;
       }
+      
+      // For recent events that are duplicates, still show notification but skip caching
+      final isDuplicate = _recentEventIds.contains(event.id);
+      if (isDuplicate && isRecent) {
+        _log('🔄 Processing recent duplicate event ${event.id} for notifications only');
+      }
+      
       _recentEventIds.add(event.id);
       _newEventsSinceLastPersist++;
       // Auto-persist after threshold
@@ -644,8 +682,15 @@ class NotificationsRepository {
       final enrichedList = await _enrichEventsWithDeviceNames([event]);
       final enriched = enrichedList.first;
 
-      // Persist to ObjectBox
-      await _eventsDao.upsertMany([enriched.toEntity()]);
+      // If this is a recent duplicate, only show notification, don't re-cache
+      if (isDuplicate && isRecent) {
+        _log('📤 Showing notification for recent duplicate event');
+        await _showNotificationsForEvents([enriched]);
+        return; // Skip caching and list emission
+      }
+
+  // Persist to local storage
+  await _eventsDao.upsertMany([enriched]);
 
       // Update replay anchor after successful persistence
       await _updateReplayAnchor(enriched.timestamp);
@@ -705,31 +750,25 @@ class NotificationsRepository {
 
       // Fetch from cache first
       if (deviceId != null || type != null) {
-        // Need to query ObjectBox for filtered results
-        List<dynamic> entities;
-
         if (deviceId != null && type != null) {
-          entities = await _eventsDao.getByDeviceAndType(deviceId, type);
+          events = await _eventsDao.getByDeviceAndType(deviceId, type);
         } else if (deviceId != null) {
-          entities = await _eventsDao.getByDevice(deviceId);
+          events = await _eventsDao.getByDevice(deviceId);
         } else if (type != null) {
-          entities = await _eventsDao.getByType(type);
+          events = await _eventsDao.getByType(type);
         } else {
-          entities = await _eventsDao.getAll();
+          events = await _eventsDao.getAll();
         }
-
-        events = entities.cast<EventEntity>().map(Event.fromEntity).toList();
       } else {
         // Use cached events when available; if empty (for example very early
         // during app startup before _loadCachedEvents() finishes), fall back to
-        // querying ObjectBox directly so callers like unread-only counts don't
+        // querying storage directly so callers like unread-only counts don't
         // temporarily see zero.
         if (_cachedEvents.isNotEmpty) {
           events = List.from(_cachedEvents);
         } else {
           _log('📦 In-memory cache empty → falling back to DAO.getAll()');
-          final entities = await _eventsDao.getAll();
-          events = entities.cast<EventEntity>().map(Event.fromEntity).toList();
+          events = await _eventsDao.getAll();
           // Note: We intentionally skip enrichment here for speed since most
           // callers (e.g., unread counts) don't require deviceName/priority.
           // Full enrichment is performed by _loadCachedEvents() and for
@@ -873,16 +912,65 @@ class NotificationsRepository {
         return _cachedEvents.first.timestamp;
       }
 
-      final entities = await _eventsDao.getAll();
-      if (entities.isEmpty) return null;
-      final latestMs = entities
-          .cast<EventEntity>()
-          .map((e) => e.eventTimeMs)
-          .reduce((a, b) => a > b ? a : b);
-      return DateTime.fromMillisecondsSinceEpoch(latestMs).toLocal();
+    final events = await _eventsDao.getAll();
+    if (events.isEmpty) return null;
+    final latest = events
+      .map((e) => e.timestamp)
+      .reduce((a, b) => a.isAfter(b) ? a : b);
+    return latest.toLocal();
     } catch (e) {
       _log('⚠️ Failed to get latest event timestamp: $e');
       return null;
+    }
+  }
+
+  /// Refresh events after reconnection
+  ///
+  /// Fetches events that occurred during disconnection and shows notifications
+  /// for critical events. This is triggered by the connectivity provider when
+  /// the phone reconnects to the internet.
+  Future<void> refreshAfterReconnect() async {
+    try {
+      _log('🔄 Refreshing events after reconnection');
+
+      // Get the timestamp of the last processed event (replay anchor)
+      final lastEventTime = _lastReplayAnchor ?? 
+                           await getLatestEventTimestamp() ?? 
+                           DateTime.now().subtract(const Duration(hours: 2));
+
+      // Fetch events since last anchor (with 5-minute safety margin)
+      final safeFrom = lastEventTime.subtract(const Duration(minutes: 5));
+      final to = DateTime.now();
+
+      _log('📆 Fetching missed events from $safeFrom to $to');
+
+      // Fetch events from API
+      final freshEvents = await _eventService.fetchEvents(
+        from: safeFrom,
+        to: to,
+      );
+
+      _log('✅ Fetched ${freshEvents.length} events after reconnection');
+
+      if (freshEvents.isEmpty) {
+        _log('⏭️ No missed events during disconnection');
+        return;
+      }
+
+      // Process each event through the normal pipeline to show notifications
+      for (final event in freshEvents) {
+        await addEvent(event);
+      }
+
+      // Reload cache to update UI
+      await _loadCachedEvents();
+
+      _log('✅ Reconnection refresh complete: ${freshEvents.length} events processed');
+    } catch (e) {
+      _log('❌ Failed to refresh after reconnect: $e');
+      if (kDebugMode) {
+        debugPrint('[NotificationsRepository] Reconnect refresh error: $e');
+      }
     }
   }
 

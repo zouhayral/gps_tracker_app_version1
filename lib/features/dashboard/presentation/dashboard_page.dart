@@ -15,6 +15,7 @@ class DashboardPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<DashboardPage> createState() => _DashboardPageState();
 }
+// end-of-file
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
   final _searchCtrl = TextEditingController();
@@ -164,4 +165,3 @@ class _DeviceTile extends ConsumerWidget {
     );
   }
 }
-

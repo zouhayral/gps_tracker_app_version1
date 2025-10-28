@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/geofence_optimizer_state.dart';
-import '../service/geofence_optimizer_service.dart';
+import 'package:my_app_gps/features/geofencing/models/geofence_optimizer_state.dart';
+import 'package:my_app_gps/features/geofencing/service/geofence_optimizer_service.dart';
 
 /// Provider for optimizer state stream
 ///

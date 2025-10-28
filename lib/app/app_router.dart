@@ -7,6 +7,7 @@ import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 import 'package:my_app_gps/features/auth/presentation/login_page.dart';
 import 'package:my_app_gps/features/dashboard/navigation/bottom_nav_shell.dart';
+import 'package:my_app_gps/features/geofencing/pages/geofence_diagnostics_page.dart';
 import 'package:my_app_gps/features/geofencing/ui/geofence_detail_page.dart';
 import 'package:my_app_gps/features/geofencing/ui/geofence_form_page.dart';
 import 'package:my_app_gps/features/geofencing/ui/geofence_list_page.dart';
@@ -108,6 +109,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '${AppRoutes.geofences}/settings',
         name: 'geofence-settings',
         builder: (context, state) => const GeofenceSettingsPage(),
+      ),
+      // Geofence diagnostics route (for debugging notifications)
+      GoRoute(
+        path: '${AppRoutes.geofences}/diagnostics',
+        name: 'geofence-diagnostics',
+        builder: (context, state) => const GeofenceDiagnosticsPage(),
       ),
       // Geofence create route (must come BEFORE detail route to match first)
       GoRoute(

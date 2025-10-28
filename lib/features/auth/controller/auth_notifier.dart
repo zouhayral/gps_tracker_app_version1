@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:my_app_gps/core/network/forced_cache_interceptor.dart';
 import 'package:my_app_gps/core/network/http_cache_interceptor.dart';
+import 'package:my_app_gps/core/storage/secure_storage.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/services/auth_service.dart';
@@ -22,12 +22,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   final AuthService _service;
   final Ref _ref;
-  static const _secure = FlutterSecureStorage();
+  final _secure = createSecureStorage();
   static const _lastEmailKey = 'last_email';
   static const _storedEmailKey = 'stored_email';
   // REMOVED: _storedPasswordKey - we no longer store passwords!
 
-  // Safe wrappers around FlutterSecureStorage to avoid plugin exceptions
+  // Safe wrappers around SecureStorage to avoid exceptions
   Future<String?> _readStoredEmailSafe() async {
     try {
       return await _secure.read(key: _storedEmailKey);

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/l10n/app_localizations.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// NotificationActionBar provides a single "Mark all read" action.
 /// All filter controls have been removed as per the latest requirements.

@@ -158,6 +158,7 @@
   "speedAlert": "Speed alert",
   "vehicleStopped": "Vehicle stopped",
   "vehicleMoving": "Vehicle moving",
+  "vehicleStarted": "Vehicle started",
   "unknownDevice": "Unknown Device",
   "alertDetails": "Alert Details",
   "triggeredAt": "Triggered at",

@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app_gps/core/data/vehicle_data_cache.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
-import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 import 'package:my_app_gps/services/device_service.dart';
 import 'package:my_app_gps/services/positions_service.dart';
@@ -20,21 +19,21 @@ class _FakeTelemetryDao implements TelemetryDaoBase {
   Future<void> deleteOlderThan(DateTime cutoff) async {}
 
   @override
-  Future<List<TelemetryRecord>> byDeviceInRange(
+  Future<List<TelemetrySample>> byDeviceInRange(
     int deviceId,
     DateTime start,
     DateTime end,
   ) async =>
-      <TelemetryRecord>[];
+      <TelemetrySample>[];
 
   @override
   Future<int> countForDevice(int deviceId) async => 0;
 
   @override
-  Future<void> put(TelemetryRecord record) async {}
+  Future<void> put(TelemetrySample record) async {}
 
   @override
-  Future<void> putMany(List<TelemetryRecord> records) async {}
+  Future<void> putMany(List<TelemetrySample> records) async {}
 }
 
 // Fake TraccarSocketService with no-op implementation

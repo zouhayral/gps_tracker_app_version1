@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart' as hive;
 import 'package:my_app_gps/core/database/dao/positions_dao.dart';
+import 'package:my_app_gps/core/database/dao/positions_dao_mobile.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/objectbox.g.dart';
 // ignore_for_file: unused_import

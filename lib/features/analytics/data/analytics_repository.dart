@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/network/traccar_api.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/analytics/models/analytics_report.dart';
+import 'package:my_app_gps/repositories/trip_repository.dart';
 
 /// Provider for AnalyticsRepository.
 final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
   final api = ref.watch(traccarApiProvider);
-  return AnalyticsRepository(api);
+  final tripRepo = ref.watch(tripRepositoryProvider);
+  return AnalyticsRepository(api, tripRepo);
 });
 
 /// Repository for aggregating tracking data into analytics reports.
@@ -18,9 +20,10 @@ final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
 class AnalyticsRepository {
   static final _log = 'AnalyticsRepository'.logger;
 
-  const AnalyticsRepository(this._api);
+  const AnalyticsRepository(this._api, this._tripRepo);
 
   final TraccarApi _api;
+  final TripRepository _tripRepo;
 
   /// Fetches a daily analytics report for a specific date and device.
   ///
@@ -35,12 +38,15 @@ class AnalyticsRepository {
   /// Returns a zeroed report if any error occurs.
   Future<AnalyticsReport> fetchDailyReport(DateTime date, int deviceId) async {
     try {
-      final from = DateTime(date.year, date.month, date.day);
-      final to = DateTime(date.year, date.month, date.day, 23, 59, 59);
+      // Create UTC dates to ensure consistent timezone handling
+      // The user's selected date should cover the full 24 hours in UTC
+      final from = DateTime.utc(date.year, date.month, date.day, 0, 0, 0);
+      final to = DateTime.utc(date.year, date.month, date.day, 23, 59, 59);
 
       _log.debug(
         'Fetching daily report: deviceId=$deviceId, '
-        'from=$from, to=$to',
+        'date=${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}, '
+        'from=$from, to=$to (UTC)',
       );
 
       return await _fetchAndAggregateReport(deviceId, from, to);
@@ -69,12 +75,13 @@ class AnalyticsRepository {
     int deviceId,
   ) async {
     try {
-      final from = DateTime(start.year, start.month, start.day);
+      // Use UTC to avoid timezone conversion issues
+      final from = DateTime.utc(start.year, start.month, start.day, 0, 0, 0);
       final to = from.add(const Duration(days: 7));
 
       _log.debug(
         'Fetching weekly report: deviceId=$deviceId, '
-        'from=$from, to=$to',
+        'from=$from, to=$to (UTC)',
       );
 
       return await _fetchAndAggregateReport(deviceId, from, to);
@@ -103,12 +110,13 @@ class AnalyticsRepository {
     int deviceId,
   ) async {
     try {
-      final from = DateTime(start.year, start.month, start.day);
+      // Use UTC to avoid timezone conversion issues
+      final from = DateTime.utc(start.year, start.month, start.day, 0, 0, 0);
       final to = from.add(const Duration(days: 30));
 
       _log.debug(
         'Fetching monthly report: deviceId=$deviceId, '
-        'from=$from, to=$to',
+        'from=$from, to=$to (UTC)',
       );
 
       return await _fetchAndAggregateReport(deviceId, from, to);
@@ -122,52 +130,89 @@ class AnalyticsRepository {
     }
   }
 
+  /// Fetches an analytics report for a custom date range.
+  ///
+  /// Parameters:
+  /// - [from]: Start date and time of the report period
+  /// - [to]: End date and time of the report period
+  /// - [deviceId]: The ID of the device to analyze
+  ///
+  /// Returns an [AnalyticsReport] with aggregated statistics for the specified range.
+  /// Returns a zeroed report if any error occurs.
+  Future<AnalyticsReport> fetchCustomReport(
+    DateTime from,
+    DateTime to,
+    int deviceId,
+  ) async {
+    try {
+      _log.debug(
+        'Fetching custom report: deviceId=$deviceId, '
+        'from=$from, to=$to',
+      );
+
+      return await _fetchAndAggregateReport(deviceId, from, to);
+    } catch (e, st) {
+      _log.error(
+        'fetchCustomReport failed for deviceId=$deviceId, from=$from, to=$to',
+        error: e,
+        stackTrace: st,
+      );
+      return _createZeroedReport(from, to);
+    }
+  }
+
   /// Internal helper that fetches all data sources in parallel and aggregates them.
   Future<AnalyticsReport> _fetchAndAggregateReport(
     int deviceId,
     DateTime from,
     DateTime to,
   ) async {
-    // Fetch all data sources in parallel for efficiency
-    final results = await Future.wait([
-      _api.getSummaryReport(deviceId, from, to),
-      _api.getTripsReport(deviceId, from, to),
-      _api.getPositions(deviceId, from, to),
-    ]);
-
-    final summaryData = results[0];
-    final tripsData = results[1];
-    final positionsData = results[2];
+    // Fetch data sources separately to maintain proper types
+    final summaryData = await _api.getSummaryReport(deviceId, from, to);
+    final trips = await _tripRepo.fetchTrips(deviceId: deviceId, from: from, to: to);
+    final positionsData = await _api.getPositions(deviceId, from, to);
 
     _log.debug(
       'Data fetched: ${summaryData.length} summaries, '
-      '${tripsData.length} trips, ${positionsData.length} positions',
+      '${trips.length} trips, ${positionsData.length} positions',
     );
 
-    // Aggregate distance from summary or trips
-    var totalDistanceKm = _computeTotalDistance(summaryData, tripsData);
+    // Calculate total distance from trips (most accurate)
+    var totalDistanceKm = 0.0;
+    if (trips.isNotEmpty) {
+      totalDistanceKm = trips.fold<double>(
+        0,
+        (sum, trip) => sum + trip.distanceKm, // Already in km
+      );
+      _log.debug('Distance from trips: $totalDistanceKm km');
+    }
 
-    // Fallback: Calculate distance from positions if summary/trips returned 0
+    // Fallback: Get distance from summary if no trips
+    if (totalDistanceKm == 0 && summaryData.isNotEmpty) {
+      totalDistanceKm = summaryData.fold<double>(
+        0,
+        (sum, item) {
+          final dist = item['distance'];
+          if (dist != null) {
+            return sum + (dist is num ? dist.toDouble() / 1000.0 : 0.0);
+          }
+          return sum;
+        },
+      );
+      _log.debug('Distance from summary: $totalDistanceKm km');
+    }
+
+    // Fallback: Calculate distance from positions if still 0
     if (totalDistanceKm == 0 && positionsData.isNotEmpty) {
       totalDistanceKm = _calculateDistanceFromPositions(positionsData);
-      _log.debug(
-        '[AnalyticsRepository] Calculated distance from positions: $totalDistanceKm km',
-      );
+      _log.debug('Distance from positions: $totalDistanceKm km');
     }
 
     // Compute speed statistics from positions
     final speedStats = _computeSpeedStats(positionsData);
 
-    // Count trips
-    var tripCount = tripsData.length;
-
-    // Fallback: Estimate trip count from positions if trips returned 0
-    if (tripCount == 0 && positionsData.isNotEmpty) {
-      tripCount = _estimateTripCount(positionsData);
-      _log.debug(
-        '[AnalyticsRepository] Estimated trip count: $tripCount',
-      );
-    }
+    // Trip count from TripRepository (accurate, handles API errors)
+    final tripCount = trips.length;
 
     // Extract fuel usage if available
     final fuelUsed = _extractFuelUsed(summaryData);
@@ -185,45 +230,6 @@ class AnalyticsRepository {
     _log.debug('Report generated: $report');
 
     return report;
-  }
-
-  /// Computes total distance from summary or trips data.
-  double _computeTotalDistance(
-    List<Map<String, dynamic>> summaryData,
-    List<Map<String, dynamic>> tripsData,
-  ) {
-    // Try to get distance from summary data first (more accurate)
-    if (summaryData.isNotEmpty) {
-      final distance = summaryData.fold<double>(
-        0.0,
-        (sum, item) {
-          final dist = item['distance'];
-          if (dist != null) {
-            // Distance is usually in meters, convert to km
-            return sum + (dist is num ? dist.toDouble() / 1000.0 : 0.0);
-          }
-          return sum;
-        },
-      );
-      if (distance > 0) return distance;
-    }
-
-    // Fallback: Sum distances from trips data
-    if (tripsData.isNotEmpty) {
-      return tripsData.fold<double>(
-        0.0,
-        (sum, trip) {
-          final dist = trip['distance'];
-          if (dist != null) {
-            // Distance is usually in meters, convert to km
-            return sum + (dist is num ? dist.toDouble() / 1000.0 : 0.0);
-          }
-          return sum;
-        },
-      );
-    }
-
-    return 0.0;
   }
 
   /// Computes speed statistics (average and max) from positions data.
@@ -285,11 +291,10 @@ class AnalyticsRepository {
     return AnalyticsReport(
       startTime: from,
       endTime: to,
-      totalDistanceKm: 0.0,
-      avgSpeed: 0.0,
-      maxSpeed: 0.0,
+      totalDistanceKm: 0,
+      avgSpeed: 0,
+      maxSpeed: 0,
       tripCount: 0,
-      fuelUsed: null,
     );
   }
 
@@ -299,11 +304,11 @@ class AnalyticsRepository {
   /// provide distance data. It computes the distance between consecutive
   /// GPS positions.
   double _calculateDistanceFromPositions(List<dynamic> positions) {
-    double total = 0.0;
+    var total = 0.0;
     
     for (var i = 1; i < positions.length; i++) {
-      final prev = positions[i - 1];
-      final curr = positions[i];
+      final prev = positions[i - 1] as Map<String, dynamic>;
+      final curr = positions[i] as Map<String, dynamic>;
       
       final lat1 = prev['latitude'];
       final lon1 = prev['longitude'];
@@ -343,34 +348,4 @@ class AnalyticsRepository {
 
   /// Converts degrees to radians.
   double _deg2rad(double deg) => deg * pi / 180;
-
-  /// Estimates trip count from position data based on speed thresholds.
-  ///
-  /// This is a fallback method when Traccar's trips report is empty.
-  /// It counts trips by detecting when speed crosses above 5 km/h (moving)
-  /// and drops below 2 km/h (stopped).
-  int _estimateTripCount(List<dynamic> positions) {
-    int trips = 0;
-    bool inTrip = false;
-    
-    for (final pos in positions) {
-      final speed = pos['speed'];
-      
-      if (speed != null && speed is num) {
-        // Convert knots to km/h
-        final speedKmh = speed.toDouble() * 1.852;
-        
-        if (!inTrip && speedKmh > 5) {
-          // Started moving - new trip
-          inTrip = true;
-          trips++;
-        } else if (inTrip && speedKmh < 2) {
-          // Stopped moving - trip ended
-          inTrip = false;
-        }
-      }
-    }
-    
-    return trips;
-  }
 }

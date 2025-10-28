@@ -1,0 +1,112 @@
+name: Web CI/CD
+
+on:
+  push:
+    branches: [ main, web-version ]
+  pull_request:
+    branches: [ main, web-version ]
+
+jobs:
+  analyze-test-build:
+    name: Analyze, Test & Build Web
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Install dependencies
+        run: flutter pub get
+
+      - name: 🔍 Run analyzer
+        run: flutter analyze --fatal-infos
+
+      - name: 🧪 Run tests
+        run: flutter test --coverage
+
+      - name: 📊 Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+      - name: 🏗️ Build web (release)
+        run: flutter build web --release --wasm
+
+      - name: 📤 Upload web build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: web-build
+          path: build/web/
+          retention-days: 7
+
+  # Deploy to staging (preview channel)
+  deploy-staging:
+    name: Deploy to Staging
+    needs: analyze-test-build
+    runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/main' && github.event_name == 'pull_request'
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: web-build
+          path: build/web
+      
+      - name: 🚀 Deploy to Firebase Staging
+        id: firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: staging
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          expires: 30d
+      
+      - name: 📦 Install smoke test dependencies
+        run: npm install
+      
+      - name: 🧪 Run smoke tests on staging
+        run: BASE_URL=${{ steps.firebase.outputs.url }} npm run smoke-test
+
+  # Deploy to production
+  deploy-production:
+    name: Deploy to Production
+    needs: analyze-test-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: web-build
+          path: build/web
+      
+      - name: 🚀 Deploy to Firebase Production
+        id: firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+      
+      - name: 📦 Install smoke test dependencies
+        run: npm install
+      
+      - name: 🧪 Run smoke tests on production
+        run: BASE_URL=${{ steps.firebase.outputs.url }} npm run smoke-test

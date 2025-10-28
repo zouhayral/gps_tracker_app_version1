@@ -80,7 +80,7 @@ extension SafeNavigation on BuildContext {
     // Safe to pop and push
     navigator.pop();
     if (mounted) {
-      return await push<T>(location, extra: extra);
+      return push<T>(location, extra: extra);
     }
     return null;
   }

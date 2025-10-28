@@ -1,11 +1,12 @@
 import 'dart:io';
+
 import 'package:intl/intl.dart';
+import 'package:my_app_gps/core/utils/app_logger.dart';
+import 'package:my_app_gps/features/analytics/models/analytics_report.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:my_app_gps/l10n/app_localizations.dart';
-import 'package:my_app_gps/features/analytics/models/analytics_report.dart';
-import 'package:my_app_gps/core/utils/app_logger.dart';
 
 /// Utility class for generating PDF reports from analytics data.
 ///
@@ -13,13 +14,28 @@ import 'package:my_app_gps/core/utils/app_logger.dart';
 /// with summary statistics, charts, and branding.
 class AnalyticsPdfGenerator {
   /// Brand accent color (lime green).
-  static final _accentColor = PdfColor.fromInt(0xFFb4e15c);
+  static const _accentColor = PdfColor.fromInt(0xFFb4e15c);
+  
+  /// Darker accent for contrast.
+  static const _accentDark = PdfColor.fromInt(0xFF8BC34A);
   
   /// Secondary color for backgrounds.
-  static final _lightGray = PdfColor.fromInt(0xFFF5F5F5);
+  static const _lightGray = PdfColor.fromInt(0xFFF5F5F5);
+  
+  /// Light background for cards.
+  static const _cardBg = PdfColor.fromInt(0xFFFAFAFA);
   
   /// Text color.
-  static final _darkGray = PdfColor.fromInt(0xFF424242);
+  static const _darkGray = PdfColor.fromInt(0xFF424242);
+  
+  /// Success color.
+  static const _successColor = PdfColor.fromInt(0xFF4CAF50);
+  
+  /// Warning color.
+  static const _warningColor = PdfColor.fromInt(0xFFFF9800);
+  
+  /// Info color.
+  static const _infoColor = PdfColor.fromInt(0xFF2196F3);
 
   /// Generates a PDF report from the given [AnalyticsReport].
   ///
@@ -55,32 +71,32 @@ class AnalyticsPdfGenerator {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
+        margin: const pw.EdgeInsets.all(32),
         textDirection: textDirection,
         build: (pw.Context context) {
           return [
-            // Header Section
-            _buildHeader(periodLabel, dateFormat, report, t, textDirection),
-            pw.SizedBox(height: 30),
+            // Modern Header with Icon
+            _buildModernHeader(periodLabel, dateFormat, report, t, textDirection),
+            pw.SizedBox(height: 24),
 
-            // Summary Statistics Table
-            _buildSummarySection(report, t, textDirection),
-            pw.SizedBox(height: 30),
+            // Key Metrics Cards (Grid)
+            _buildKeyMetricsGrid(report, t, textDirection),
+            pw.SizedBox(height: 24),
 
-            // Period Details
-            _buildPeriodDetails(report, dateFormat, t, textDirection),
-            pw.SizedBox(height: 30),
+            // Visual Charts Section
+            _buildChartsSection(report, t, textDirection),
+            pw.SizedBox(height: 24),
 
-            // Charts Placeholder
-            _buildChartsPlaceholder(t, textDirection),
-            pw.SizedBox(height: 30),
+            // Period Details Card
+            _buildPeriodDetailsCard(report, dateFormat, t, textDirection),
+            pw.SizedBox(height: 24),
 
             // Divider
-            pw.Divider(color: _lightGray, thickness: 2),
-            pw.SizedBox(height: 20),
+            pw.Divider(color: _lightGray, thickness: 1.5),
+            pw.SizedBox(height: 16),
 
-            // Footer
-            _buildFooter(now, dateFormat, t, textDirection),
+            // Modern Footer
+            _buildModernFooter(now, dateFormat, t, textDirection),
           ];
         },
       ),
@@ -103,8 +119,8 @@ class AnalyticsPdfGenerator {
     }
   }
 
-  /// Builds the header section with title and subtitle.
-  static pw.Widget _buildHeader(
+  /// Builds a modern header with emoji and gradient background.
+  static pw.Widget _buildModernHeader(
     String periodLabel,
     DateFormat dateFormat,
     AnalyticsReport report,
@@ -112,39 +128,91 @@ class AnalyticsPdfGenerator {
     pw.TextDirection textDirection,
   ) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(20),
+      padding: const pw.EdgeInsets.all(24),
       decoration: pw.BoxDecoration(
-        color: _accentColor.flatten(),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            '${t.reportsTitle} – $periodLabel',
-            style: pw.TextStyle(
-              fontSize: 24,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.black,
-            ),
-            textDirection: textDirection,
+        gradient: const pw.LinearGradient(
+          colors: [_accentColor, _accentDark],
+          begin: pw.Alignment.topLeft,
+          end: pw.Alignment.bottomRight,
+        ),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(16)),
+        boxShadow: [
+          pw.BoxShadow(
+            color: PdfColors.grey400,
+            blurRadius: 10,
+            offset: const PdfPoint(0, 4),
           ),
-          pw.SizedBox(height: 8),
-          pw.Text(
-            '${t.period}: ${dateFormat.format(report.startTime)} - ${dateFormat.format(report.endTime)}',
-            style: pw.TextStyle(
-              fontSize: 12,
-              color: _darkGray,
+        ],
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  t.reportsTitle,
+                  style: pw.TextStyle(
+                    fontSize: 28,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                  textDirection: textDirection,
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  periodLabel,
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                    color: const PdfColor.fromInt(0xFF212121),
+                  ),
+                  textDirection: textDirection,
+                ),
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.white.flatten(),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(20)),
+                  ),
+                  child: pw.Text(
+                    '${t.period}: ${dateFormat.format(report.startTime)} - ${dateFormat.format(report.endTime)}',
+                    style: const pw.TextStyle(
+                      fontSize: 10,
+                      color: _darkGray,
+                    ),
+                    textDirection: textDirection,
+                  ),
+                ),
+              ],
             ),
-            textDirection: textDirection,
+          ),
+          // Emoji Icon
+          pw.Container(
+            width: 70,
+            height: 70,
+            decoration: pw.BoxDecoration(
+              color: PdfColors.white.flatten(),
+              shape: pw.BoxShape.circle,
+            ),
+            child: pw.Center(
+              child: pw.Text(
+                '📊',
+                style: const pw.TextStyle(
+                  fontSize: 36,
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Builds the summary statistics section with key metrics.
-  static pw.Widget _buildSummarySection(
+  /// Builds a grid of key metric cards with icons.
+  static pw.Widget _buildKeyMetricsGrid(
     AnalyticsReport report,
     AppLocalizations t,
     pw.TextDirection textDirection,
@@ -155,90 +223,285 @@ class AnalyticsPdfGenerator {
         pw.Text(
           t.mainStatistics,
           style: pw.TextStyle(
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: pw.FontWeight.bold,
             color: _darkGray,
           ),
           textDirection: textDirection,
         ),
         pw.SizedBox(height: 16),
-        pw.Table(
-          border: pw.TableBorder.all(color: _lightGray, width: 1),
+        pw.Row(
           children: [
-            // Header row
-            _buildTableRow(
-              t.metric,
-              t.value,
-              isHeader: true,
-              textDirection: textDirection,
-            ),
-            // Data rows
-            _buildTableRow(
-              t.distance,
-              '${report.totalDistanceKm.toStringAsFixed(2)} km',
-              textDirection: textDirection,
-            ),
-            _buildTableRow(
-              t.avgSpeed,
-              '${report.avgSpeed.toStringAsFixed(1)} km/h',
-              textDirection: textDirection,
-            ),
-            _buildTableRow(
-              t.maxSpeed,
-              '${report.maxSpeed.toStringAsFixed(1)} km/h',
-              textDirection: textDirection,
-            ),
-            _buildTableRow(
-              t.trips,
-              report.tripCount.toString(),
-              textDirection: textDirection,
-            ),
-            if (report.fuelUsed != null && report.fuelUsed! > 0)
-              _buildTableRow(
-                t.fuelUsed,
-                '${report.fuelUsed!.toStringAsFixed(2)} L',
+            pw.Expanded(
+              child: _buildMetricCard(
+                icon: '📏', // route/distance icon
+                label: t.distance,
+                value: '${report.totalDistanceKm.toStringAsFixed(2)} km',
+                color: _infoColor,
                 textDirection: textDirection,
               ),
+            ),
+            pw.SizedBox(width: 12),
+            pw.Expanded(
+              child: _buildMetricCard(
+                icon: '🚗', // speed icon
+                label: t.avgSpeed,
+                value: '${report.avgSpeed.toStringAsFixed(1)} km/h',
+                color: _successColor,
+                textDirection: textDirection,
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        pw.Row(
+          children: [
+            pw.Expanded(
+              child: _buildMetricCard(
+                icon: '📈', // trending up icon
+                label: t.maxSpeed,
+                value: '${report.maxSpeed.toStringAsFixed(1)} km/h',
+                color: _warningColor,
+                textDirection: textDirection,
+              ),
+            ),
+            pw.SizedBox(width: 12),
+            pw.Expanded(
+              child: _buildMetricCard(
+                icon: '🚙', // directions car icon
+                label: t.trips,
+                value: report.tripCount.toString(),
+                color: _accentDark,
+                textDirection: textDirection,
+              ),
+            ),
           ],
         ),
       ],
     );
   }
 
-  /// Builds a table row with two columns.
-  static pw.TableRow _buildTableRow(
-    String label,
-    String value, {
-    bool isHeader = false,
+  /// Builds a single metric card with emoji icon.
+  static pw.Widget _buildMetricCard({
+    required String icon,
+    required String label,
+    required String value,
+    required PdfColor color,
     required pw.TextDirection textDirection,
   }) {
-    final textStyle = pw.TextStyle(
-      fontSize: isHeader ? 12 : 11,
-      fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
-      color: isHeader ? PdfColors.white : _darkGray,
-    );
-
-    final backgroundColor = isHeader ? _accentColor.flatten() : PdfColors.white;
-
-    return pw.TableRow(
-      decoration: pw.BoxDecoration(color: backgroundColor),
-      children: [
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(12),
-          child: pw.Text(
-            label, 
-            style: textStyle,
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(16),
+      decoration: pw.BoxDecoration(
+        color: _cardBg,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+        border: pw.Border.all(color: _lightGray, width: 1),
+        boxShadow: [
+          pw.BoxShadow(
+            color: PdfColors.grey300,
+            blurRadius: 4,
+            offset: const PdfPoint(0, 2),
+          ),
+        ],
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            children: [
+              pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: color.flatten(),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Text(
+                  icon,
+                  style: const pw.TextStyle(
+                    fontSize: 18,
+                    color: PdfColors.white,
+                  ),
+                ),
+              ),
+              pw.Spacer(),
+            ],
+          ),
+          pw.SizedBox(height: 12),
+          pw.Text(
+            label,
+            style: const pw.TextStyle(
+              fontSize: 11,
+              color: PdfColors.grey600,
+            ),
             textDirection: textDirection,
           ),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(12),
-          child: pw.Text(
+          pw.SizedBox(height: 4),
+          pw.Text(
             value,
-            style: textStyle.copyWith(
-              fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.bold,
+            style: pw.TextStyle(
+              fontSize: 20,
+              fontWeight: pw.FontWeight.bold,
+              color: _darkGray,
             ),
-            textAlign: pw.TextAlign.right,
+            textDirection: textDirection,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds visual charts section with bar chart and pie chart.
+  static pw.Widget _buildChartsSection(
+    AnalyticsReport report,
+    AppLocalizations t,
+    pw.TextDirection textDirection,
+  ) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          t.speedEvolution,
+          style: pw.TextStyle(
+            fontSize: 20,
+            fontWeight: pw.FontWeight.bold,
+            color: _darkGray,
+          ),
+          textDirection: textDirection,
+        ),
+        pw.SizedBox(height: 16),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Speed Bar Chart
+            pw.Expanded(
+              flex: 3,
+              child: _buildSpeedBarChart(report, t, textDirection),
+            ),
+            pw.SizedBox(width: 16),
+            // Metrics Summary
+            pw.Expanded(
+              flex: 2,
+              child: _buildMetricsSummary(report, t, textDirection),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Builds a bar chart showing speed metrics.
+  static pw.Widget _buildSpeedBarChart(
+    AnalyticsReport report,
+    AppLocalizations t,
+    pw.TextDirection textDirection,
+  ) {
+    final maxSpeed = report.maxSpeed;
+    final avgSpeed = report.avgSpeed;
+    final chartMaxHeight = 150.0;
+    
+    final avgBarHeight = (avgSpeed / maxSpeed) * chartMaxHeight;
+    final maxBarHeight = chartMaxHeight;
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(16),
+      decoration: pw.BoxDecoration(
+        color: _cardBg,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+        border: pw.Border.all(color: _lightGray, width: 1),
+      ),
+      child: pw.Column(
+        children: [
+          pw.Text(
+            '${t.speed} (km/h)',
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: _darkGray,
+            ),
+            textDirection: textDirection,
+          ),
+          pw.SizedBox(height: 20),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              // Average Speed Bar
+              _buildBar(
+                height: avgBarHeight,
+                label: t.avgSpeed,
+                value: avgSpeed.toStringAsFixed(1),
+                color: _successColor,
+                textDirection: textDirection,
+              ),
+              // Max Speed Bar
+              _buildBar(
+                height: maxBarHeight,
+                label: t.maxSpeed,
+                value: maxSpeed.toStringAsFixed(1),
+                color: _warningColor,
+                textDirection: textDirection,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds a single bar for the chart.
+  static pw.Widget _buildBar({
+    required double height,
+    required String label,
+    required String value,
+    required PdfColor color,
+    required pw.TextDirection textDirection,
+  }) {
+    return pw.Column(
+      mainAxisAlignment: pw.MainAxisAlignment.end,
+      children: [
+        pw.Text(
+          value,
+          style: pw.TextStyle(
+            fontSize: 10,
+            fontWeight: pw.FontWeight.bold,
+            color: _darkGray,
+          ),
+          textDirection: textDirection,
+        ),
+        pw.SizedBox(height: 4),
+        pw.Container(
+          width: 60,
+          height: height < 20 ? 20 : height,
+          decoration: pw.BoxDecoration(
+            gradient: pw.LinearGradient(
+              begin: pw.Alignment.bottomCenter,
+              end: pw.Alignment.topCenter,
+              colors: [
+                color,
+                color.flatten(),
+              ],
+            ),
+            borderRadius: const pw.BorderRadius.vertical(
+              top: pw.Radius.circular(8),
+            ),
+            boxShadow: [
+              pw.BoxShadow(
+                color: color.flatten(),
+                blurRadius: 4,
+                offset: const PdfPoint(0, 2),
+              ),
+            ],
+          ),
+        ),
+        pw.SizedBox(height: 8),
+        pw.Container(
+          width: 70,
+          child: pw.Text(
+            label,
+            style: const pw.TextStyle(
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
+            textAlign: pw.TextAlign.center,
             textDirection: textDirection,
           ),
         ),
@@ -246,8 +509,150 @@ class AnalyticsPdfGenerator {
     );
   }
 
-  /// Builds the period details section.
-  static pw.Widget _buildPeriodDetails(
+  /// Builds a metrics summary panel.
+  static pw.Widget _buildMetricsSummary(
+    AnalyticsReport report,
+    AppLocalizations t,
+    pw.TextDirection textDirection,
+  ) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(16),
+      decoration: pw.BoxDecoration(
+        color: _cardBg,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+        border: pw.Border.all(color: _lightGray, width: 1),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            t.periodSummary,
+            style: pw.TextStyle(
+              fontSize: 13,
+              fontWeight: pw.FontWeight.bold,
+              color: _darkGray,
+            ),
+            textDirection: textDirection,
+          ),
+          pw.SizedBox(height: 16),
+          _buildSummaryItem(
+            icon: '📏',
+            label: t.distance,
+            value: '${report.totalDistanceKm.toStringAsFixed(2)} km',
+            color: _infoColor,
+            textDirection: textDirection,
+          ),
+          pw.SizedBox(height: 12),
+          _buildSummaryItem(
+            icon: '🚗',
+            label: t.trips,
+            value: report.tripCount.toString(),
+            color: _accentDark,
+            textDirection: textDirection,
+          ),
+          if (report.fuelUsed != null && report.fuelUsed! > 0) ...[
+            pw.SizedBox(height: 12),
+            _buildSummaryItem(
+              icon: '⛽',
+              label: t.fuelUsed,
+              value: '${report.fuelUsed!.toStringAsFixed(2)} L',
+              color: _warningColor,
+              textDirection: textDirection,
+            ),
+          ],
+          pw.SizedBox(height: 20),
+          // Visual indicator
+          pw.Container(
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(
+              color: _successColor.flatten(),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+            ),
+            child: pw.Row(
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                pw.Text(
+                  '✓',
+                  style: const pw.TextStyle(
+                    fontSize: 14,
+                    color: PdfColors.white,
+                  ),
+                ),
+                pw.SizedBox(width: 6),
+                pw.Text(
+                  'Complete',
+                  style: const pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds a summary item with emoji icon.
+  static pw.Widget _buildSummaryItem({
+    required String icon,
+    required String label,
+    required String value,
+    required PdfColor color,
+    required pw.TextDirection textDirection,
+  }) {
+    return pw.Row(
+      children: [
+        pw.Container(
+          width: 28,
+          height: 28,
+          padding: const pw.EdgeInsets.all(6),
+          decoration: pw.BoxDecoration(
+            color: color.flatten(),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+          ),
+          child: pw.Center(
+            child: pw.Text(
+              icon,
+              style: const pw.TextStyle(
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+        pw.SizedBox(width: 10),
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                label,
+                style: const pw.TextStyle(
+                  fontSize: 9,
+                  color: PdfColors.grey600,
+                ),
+                textDirection: textDirection,
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                value,
+                style: pw.TextStyle(
+                  fontSize: 11,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _darkGray,
+                ),
+                textDirection: textDirection,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Builds period details card with timeline design.
+  static pw.Widget _buildPeriodDetailsCard(
     AnalyticsReport report,
     DateFormat dateFormat,
     AppLocalizations t,
@@ -257,123 +662,243 @@ class AnalyticsPdfGenerator {
     final durationText = _formatDuration(duration);
 
     return pw.Container(
-      padding: const pw.EdgeInsets.all(16),
+      padding: const pw.EdgeInsets.all(20),
       decoration: pw.BoxDecoration(
-        color: _lightGray,
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+        gradient: const pw.LinearGradient(
+          colors: [_cardBg, PdfColors.white],
+          begin: pw.Alignment.topLeft,
+          end: pw.Alignment.bottomRight,
+        ),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+        border: pw.Border.all(color: _lightGray, width: 1),
+        boxShadow: [
+          pw.BoxShadow(
+            color: PdfColors.grey300,
+            blurRadius: 4,
+            offset: const PdfPoint(0, 2),
+          ),
+        ],
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(
-            t.periodDetails,
-            style: pw.TextStyle(
-              fontSize: 14,
-              fontWeight: pw.FontWeight.bold,
-              color: _darkGray,
-            ),
-            textDirection: textDirection,
+          pw.Row(
+            children: [
+              pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: _infoColor.flatten(),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Text(
+                  '🕐', // schedule/clock emoji
+                  style: const pw.TextStyle(
+                    fontSize: 18,
+                    color: PdfColors.white,
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 12),
+              pw.Text(
+                t.periodDetails,
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _darkGray,
+                ),
+                textDirection: textDirection,
+              ),
+            ],
           ),
-          pw.SizedBox(height: 12),
-          _buildDetailRow(t.start, dateFormat.format(report.startTime), textDirection),
-          pw.SizedBox(height: 6),
-          _buildDetailRow(t.end, dateFormat.format(report.endTime), textDirection),
-          pw.SizedBox(height: 6),
-          _buildDetailRow(t.duration, durationText, textDirection),
+          pw.SizedBox(height: 20),
+          // Timeline visualization
+          _buildTimelineItem(
+            icon: '🚗', // start icon
+            label: t.start,
+            value: dateFormat.format(report.startTime),
+            color: _successColor,
+            textDirection: textDirection,
+            isFirst: true,
+          ),
+          pw.SizedBox(height: 4),
+          _buildTimelineDivider(),
+          pw.SizedBox(height: 4),
+          _buildTimelineItem(
+            icon: '⏱️', // duration icon
+            label: t.duration,
+            value: durationText,
+            color: _infoColor,
+            textDirection: textDirection,
+            isFirst: false,
+          ),
+          pw.SizedBox(height: 4),
+          _buildTimelineDivider(),
+          pw.SizedBox(height: 4),
+          _buildTimelineItem(
+            icon: '🏁', // end/finish flag icon
+            label: t.end,
+            value: dateFormat.format(report.endTime),
+            color: _warningColor,
+            textDirection: textDirection,
+            isFirst: false,
+          ),
         ],
       ),
     );
   }
 
-  /// Builds a detail row with label and value.
-  static pw.Widget _buildDetailRow(
-    String label, 
-    String value,
-    pw.TextDirection textDirection,
-  ) {
+  /// Builds a timeline item with emoji icon.
+  static pw.Widget _buildTimelineItem({
+    required String icon,
+    required String label,
+    required String value,
+    required PdfColor color,
+    required pw.TextDirection textDirection,
+    required bool isFirst,
+  }) {
     return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
-        pw.Text(
-          '$label:',
-          style: pw.TextStyle(
-            fontSize: 11,
-            color: _darkGray,
+        pw.Container(
+          width: 40,
+          height: 40,
+          decoration: pw.BoxDecoration(
+            color: color.flatten(),
+            shape: pw.BoxShape.circle,
           ),
-          textDirection: textDirection,
+          child: pw.Center(
+            child: pw.Text(
+              icon,
+              style: const pw.TextStyle(
+                fontSize: 18,
+                color: PdfColors.white,
+              ),
+            ),
+          ),
         ),
-        pw.Text(
-          value,
-          style: pw.TextStyle(
-            fontSize: 11,
-            fontWeight: pw.FontWeight.bold,
-            color: _darkGray,
+        pw.SizedBox(width: 16),
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                label,
+                style: const pw.TextStyle(
+                  fontSize: 11,
+                  color: PdfColors.grey600,
+                ),
+                textDirection: textDirection,
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                value,
+                style: pw.TextStyle(
+                  fontSize: 13,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _darkGray,
+                ),
+                textDirection: textDirection,
+              ),
+            ],
           ),
-          textDirection: textDirection,
         ),
       ],
     );
   }
 
-  /// Builds the charts placeholder section.
-  static pw.Widget _buildChartsPlaceholder(
-    AppLocalizations t,
-    pw.TextDirection textDirection,
-  ) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(20),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: _lightGray, width: 2),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-      ),
-      child: pw.Column(
-        children: [
-          pw.Icon(
-            pw.IconData(0xe4a7), // chart icon
-            size: 40,
-            color: _lightGray,
-          ),
-          pw.SizedBox(height: 12),
-          pw.Text(
-            t.chartsNotIncluded,
-            style: pw.TextStyle(
-              fontSize: 12,
-              color: PdfColors.grey600,
-              fontStyle: pw.FontStyle.italic,
-            ),
-            textDirection: textDirection,
-          ),
-        ],
+  /// Builds a timeline divider line.
+  static pw.Widget _buildTimelineDivider() {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(left: 19),
+      child: pw.Container(
+        width: 2,
+        height: 16,
+        color: _lightGray,
       ),
     );
   }
 
-  /// Builds the footer section with generation timestamp and app info.
-  static pw.Widget _buildFooter(
+  /// Builds a modern footer with branding and generation info.
+  static pw.Widget _buildModernFooter(
     DateTime now, 
     DateFormat dateFormat,
     AppLocalizations t,
     pw.TextDirection textDirection,
   ) {
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        pw.Text(
-          '${t.generatedOn} ${dateFormat.format(now)}',
-          style: pw.TextStyle(
-            fontSize: 10,
-            color: PdfColors.grey600,
-          ),
-          textDirection: textDirection,
-        ),
-        pw.SizedBox(height: 6),
-        pw.Text(
-          'GPS Tracker App',
-          style: pw.TextStyle(
-            fontSize: 10,
-            fontWeight: pw.FontWeight.bold,
-            color: _accentColor.flatten(),
-          ),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Row(
+              children: [
+                pw.Container(
+                  width: 30,
+                  height: 30,
+                  decoration: pw.BoxDecoration(
+                    gradient: const pw.LinearGradient(
+                      colors: [_accentColor, _accentDark],
+                    ),
+                    shape: pw.BoxShape.circle,
+                  ),
+                  child: pw.Center(
+                    child: pw.Text(
+                      '📍', // gps/location pin emoji
+                      style: const pw.TextStyle(
+                        fontSize: 14,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                pw.SizedBox(width: 10),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'GPS Tracker App',
+                      style: pw.TextStyle(
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _darkGray,
+                      ),
+                    ),
+                    pw.Text(
+                      'Real-time vehicle monitoring',
+                      style: const pw.TextStyle(
+                        fontSize: 8,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: pw.BoxDecoration(
+                color: _cardBg,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+                border: pw.Border.all(color: _lightGray, width: 1),
+              ),
+              child: pw.Row(
+                children: [
+                  pw.Text(
+                    '📅', // calendar emoji
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                  pw.SizedBox(width: 6),
+                  pw.Text(
+                    '${t.generatedOn} ${dateFormat.format(now)}',
+                    style: const pw.TextStyle(
+                      fontSize: 8,
+                      color: PdfColors.grey600,
+                    ),
+                    textDirection: textDirection,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     );

@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 // Adjust these imports to match actual package structure.
 import 'package:my_app_gps/core/diagnostics/perf_thresholds.dart';
-import 'package:my_app_gps/main.dart' as app;
 import '../test_utils/test_config.dart' as testcfg;
 
 void main() {
@@ -14,7 +13,6 @@ void main() {
     setUpAll(() async {
       // Launch the app (best-effort in test env) and warm up timers.
       await testcfg.setupTestEnvironment();
-      await app.main();
       // Give DevDiagnostics time to start its timers, if any.
       await Future<void>.delayed(const Duration(seconds: 2));
     });

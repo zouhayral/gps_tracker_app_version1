@@ -211,7 +211,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
         leading: CircleAvatar(
           backgroundColor: geofence.enabled
               ? colorScheme.primaryContainer
-              : colorScheme.surfaceVariant,
+              : colorScheme.surfaceContainerHighest,
           child: Icon(
             geofence.type == 'circle'
                 ? Icons.circle_outlined
@@ -367,8 +367,8 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    String message = 'No geofences yet';
-    String hint = 'Create your first geofence to get started';
+    var message = 'No geofences yet';
+    var hint = 'Create your first geofence to get started';
 
     if (_searchQuery.isNotEmpty) {
       message = 'No results found';
@@ -498,7 +498,6 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
 
     return SafeArea(
       child: BottomAppBar(
-        height: null, // Allow dynamic height based on content
         padding: EdgeInsets.zero, // Remove default padding
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -506,8 +505,7 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
             color: theme.colorScheme.surface,
             border: Border(
               top: BorderSide(
-                color: theme.colorScheme.outlineVariant.withOpacity(0.5),
-                width: 1,
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -662,13 +660,10 @@ class _GeofenceListPageState extends ConsumerState<GeofenceListPage> {
     switch (_sortOption) {
       case GeofenceSortOption.name:
         filtered.sort((a, b) => a.name.compareTo(b.name));
-        break;
       case GeofenceSortOption.created:
         filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        break;
       case GeofenceSortOption.updated:
         filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-        break;
     }
 
     return filtered;

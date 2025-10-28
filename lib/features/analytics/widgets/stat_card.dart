@@ -58,8 +58,8 @@ class _StatCardState extends State<StatCard>
 
     // Fade-in animation
     _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
+      begin: 0,
+      end: 1,
     ).animate(
       CurvedAnimation(
         parent: _controller,
@@ -101,7 +101,7 @@ class _StatCardState extends State<StatCard>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(
-              color: widget.color.withOpacity(0.2),
+              color: widget.color.withValues(alpha: 0.2),
               width: 1.5,
             ),
           ),
@@ -117,7 +117,7 @@ class _StatCardState extends State<StatCard>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    widget.color.withOpacity(0.05),
+                    widget.color.withValues(alpha: 0.05),
                     Colors.white,
                   ],
                 ),
@@ -133,13 +133,13 @@ class _StatCardState extends State<StatCard>
                         end: Alignment.bottomRight,
                         colors: [
                           widget.color,
-                          widget.color.withOpacity(0.7),
+                          widget.color.withValues(alpha: 0.7),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: widget.color.withOpacity(0.3),
+                          color: widget.color.withValues(alpha: 0.3),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -259,8 +259,8 @@ class _StatCardVerticalState extends State<StatCardVertical>
     );
 
     _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
+      begin: 0,
+      end: 1,
     ).animate(
       CurvedAnimation(
         parent: _controller,
@@ -300,7 +300,7 @@ class _StatCardVerticalState extends State<StatCardVertical>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
             side: BorderSide(
-              color: widget.color.withOpacity(0.2),
+              color: widget.color.withValues(alpha: 0.2),
               width: 1.5,
             ),
           ),
@@ -316,7 +316,7 @@ class _StatCardVerticalState extends State<StatCardVertical>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    widget.color.withOpacity(0.08),
+                    widget.color.withValues(alpha: 0.08),
                     Colors.white,
                   ],
                 ),
@@ -334,13 +334,13 @@ class _StatCardVerticalState extends State<StatCardVertical>
                         end: Alignment.bottomRight,
                         colors: [
                           widget.color,
-                          widget.color.withOpacity(0.7),
+                          widget.color.withValues(alpha: 0.7),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
-                          color: widget.color.withOpacity(0.3),
+                          color: widget.color.withValues(alpha: 0.3),
                           blurRadius: 6,
                           offset: const Offset(0, 3),
                         ),

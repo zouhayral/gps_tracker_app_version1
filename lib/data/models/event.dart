@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'package:my_app_gps/core/database/entities/event_entity.dart';
 
 /// Domain model representing a Traccar event or alert.
 /// Converts between:
@@ -76,42 +75,6 @@ class Event {
         'isRead': isRead,
       };
 
-  // -----------------------------
-  // ObjectBox conversion
-  // -----------------------------
-  EventEntity toEntity() => EventEntity(
-        eventId: id,
-        deviceId: deviceId,
-        deviceName: deviceName,
-        eventType: type,
-        eventTimeMs: timestamp.toLocal().millisecondsSinceEpoch,
-        positionId: positionId,
-        geofenceId: geofenceId,
-        // Persist both severity and priority correctly
-        severity: severity,
-        priority: _priorityForSeverity(severity),
-        message: message ?? '',
-        attributesJson: attributes.isNotEmpty ? attributes.toString() : '{}',
-        isRead: isRead,
-      );
-
-  factory Event.fromEntity(EventEntity e) => Event(
-        id: e.eventId,
-        deviceId: e.deviceId,
-        deviceName: e.deviceName,
-        type: e.eventType,
-        timestamp: DateTime.fromMillisecondsSinceEpoch(e.eventTimeMs),
-        message: e.message,
-        // Read proper severity from entity
-        severity: e.severity,
-        positionId: e.positionId,
-        geofenceId: e.geofenceId,
-        // Ensure priority is available in attributes for filtering
-        attributes: {
-          if (e.priority != null) 'priority': e.priority,
-        },
-        isRead: e.isRead,
-      );
 
   // -----------------------------
   // UI Helpers
@@ -207,14 +170,4 @@ class Event {
       );
 }
 
-/// Helper to map severity buckets to priority labels used by UI chips
-String _priorityForSeverity(String? severity) {
-  switch ((severity ?? '').toLowerCase()) {
-    case 'critical':
-      return 'high';
-    case 'warning':
-      return 'medium';
-    default:
-      return 'low';
-  }
-}
+// (Removed ObjectBox-specific priority mapping helper)

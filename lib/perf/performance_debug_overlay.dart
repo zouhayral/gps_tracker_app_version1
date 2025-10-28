@@ -44,10 +44,10 @@ class PerformanceDebugOverlay extends StatelessWidget {
       top: 60,
       right: 8,
       child: Material(
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -215,7 +215,7 @@ class CompactDebugOverlay extends StatelessWidget {
       top: 60,
       right: 8,
       child: Material(
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(4),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),

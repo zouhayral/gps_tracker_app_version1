@@ -214,4 +214,3 @@ class _NotificationBannerState extends ConsumerState<NotificationBanner> {
 
   String _priorityLabel(Event e) => _priorityChip(e).$1;
 }
-

@@ -1,5 +1,9 @@
 /// Data model representing analytics and statistics for a GPS tracker device
 /// over a specific time period.
+library;
+import 'package:flutter/foundation.dart';
+
+@immutable
 class AnalyticsReport {
   /// Creates an immutable [AnalyticsReport] instance.
   const AnalyticsReport({

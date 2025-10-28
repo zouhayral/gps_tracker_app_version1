@@ -16,6 +16,7 @@
 /// });
 /// // Bitmap is cached and reused on next request
 /// ```
+library;
 
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
@@ -226,8 +227,7 @@ class BitmapPoolManager {
   /// Get or create the global bitmap pool
   static BitmapPool get instance {
     _instance ??= BitmapPool(
-      maxEntries: 50,
-      maxSizeBytes: 20 * 1024 * 1024,
+      
     );
     return _instance!;
   }

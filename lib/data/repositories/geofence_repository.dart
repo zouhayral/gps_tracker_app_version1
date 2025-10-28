@@ -163,8 +163,8 @@ class GeofenceRepository {
       _log('✅ Geofence created locally');
       _emitGeofences();
 
-      // Trigger sync (will be no-op until Firebase is implemented)
-      _processSyncQueue();
+  // Trigger sync (will be no-op until Firebase is implemented)
+  unawaited(_processSyncQueue());
     } catch (e, stackTrace) {
       _log('❌ Failed to create geofence: $e');
       if (kDebugMode) {
@@ -213,8 +213,8 @@ class GeofenceRepository {
       _log('✅ Geofence updated locally');
       _emitGeofences();
 
-      // Trigger sync (will be no-op until Firebase is implemented)
-      _processSyncQueue();
+  // Trigger sync (will be no-op until Firebase is implemented)
+  unawaited(_processSyncQueue());
     } catch (e, stackTrace) {
       _log('❌ Failed to update geofence: $e');
       if (kDebugMode) {
@@ -252,6 +252,7 @@ class GeofenceRepository {
   /// Toggle geofence enabled status
   ///
   /// Quick operation for enabling/disabling geofences.
+  // ignore: avoid_positional_boolean_parameters
   Future<void> toggleGeofence(String id, bool enabled) async {
     try {
       _log('🔄 Toggling geofence $id to enabled=$enabled');
@@ -395,9 +396,7 @@ final geofenceRepositoryProvider = FutureProvider<GeofenceRepository>((ref) asyn
   final repository = GeofenceRepository(dao: dao);
   
   // Auto-dispose repository when provider is disposed
-  ref.onDispose(() {
-    repository.dispose();
-  });
+  ref.onDispose(repository.dispose);
   
   return repository;
 });

@@ -52,6 +52,7 @@ class AppRoot extends ConsumerStatefulWidget {
 class _AppRootState extends ConsumerState<AppRoot> {
   StreamSubscription<Map<String, dynamic>>? _eventSub;
   _TripRepositoryLifecycleObserver? _lifecycleObserver;
+  bool _bridgeInitialized = false; // Track if bridge listener is set up
   
   @override
   void initState() {
@@ -98,23 +99,6 @@ class _AppRootState extends ConsumerState<AppRoot> {
     // Kick off notifications boot initializer (await DAOs then init repo)
     // ignore: unused_result
     ref.read(notificationsBootInitializer);
-    
-    // 🎯 Initialize geofence notification bridge
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        try {
-          // Watch the provider to ensure it's initialized
-          ref.read(geofenceNotificationBridgeProvider);
-          if (kDebugMode) {
-            debugPrint('[AppRoot] 🔔 Geofence notification bridge initializing');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('[AppRoot] ⚠️ Failed to initialize geofence notifications: $e');
-          }
-        }
-      }
-    });
   }
 
   @override
@@ -180,6 +164,33 @@ class _AppRootState extends ConsumerState<AppRoot> {
       debugCheckHasDirectionality(context),
       'Directionality missing: AppRoot must be under a MaterialApp/Directionality',
     );
+    
+    // 🎯 Initialize geofence notification bridge
+    // CRITICAL: ref.listen MUST be called in build method, not initState
+    // Use state tracking to prevent re-registering listener on every build
+    if (!_bridgeInitialized) {
+      ref.listen(geofenceNotificationBridgeProvider, (previous, next) {
+        next.when(
+          data: (bridge) {
+            if (kDebugMode) {
+              debugPrint('[AppRoot] 🔔 Geofence notification bridge attached: ${bridge.isAttached}');
+            }
+          },
+          loading: () {
+            if (kDebugMode) {
+              debugPrint('[AppRoot] 🔄 Geofence notification bridge loading...');
+            }
+          },
+          error: (error, stack) {
+            if (kDebugMode) {
+              debugPrint('[AppRoot] ❌ Failed to initialize geofence notifications: $error');
+            }
+          },
+        );
+      });
+      _bridgeInitialized = true;
+    }
+    
     final router = ref.watch(goRouterProvider);
     final currentLocale = ref.watch(localeProvider);
     

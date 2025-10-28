@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
+import 'package:my_app_gps/features/geofencing/models/geofence_optimizer_state.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import '../models/geofence_optimizer_state.dart';
 
 /// Provider for GeofenceOptimizerService
 final geofenceOptimizerServiceProvider = Provider<GeofenceOptimizerService>((ref) {
@@ -124,9 +125,7 @@ class GeofenceOptimizerService {
     _log.i('📱 Starting motion monitoring');
 
     _accelerometerSub = accelerometerEventStream().listen(
-      (AccelerometerEvent event) {
-        _processMotionEvent(event);
-      },
+      _processMotionEvent,
       onError: (Object error) {
         _log.e('Motion sensor error: $error');
       },

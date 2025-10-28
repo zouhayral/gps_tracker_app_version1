@@ -3,10 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
-
-import '../../../features/map/data/position_model.dart';
-import '../providers/geofence_providers.dart';
-import '../service/geofence_monitor_service.dart';
+import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
+import 'package:my_app_gps/features/geofencing/service/geofence_monitor_service.dart';
+import 'package:my_app_gps/features/map/data/position_model.dart';
 
 /// Provider for GeofenceBackgroundService
 /// 
@@ -31,7 +30,7 @@ final geofenceBackgroundServiceProvider =
     geofenceMonitorServiceProvider.future,
   );
   final service = GeofenceBackgroundService(monitor: monitor, ref: ref);
-  ref.onDispose(() => service.dispose());
+  ref.onDispose(service.dispose);
   return service;
 });
 
@@ -137,7 +136,7 @@ class GeofenceBackgroundService {
       _isRunning = true;
       
       _log.i('[GeofenceBackgroundService] ✅ Started successfully');
-      _log.d('[GeofenceBackgroundService] Stats: ${statistics}');
+      _log.d('[GeofenceBackgroundService] Stats: $statistics');
     } catch (e, stackTrace) {
       _log.e(
         '[GeofenceBackgroundService] ❌ Failed to start: $e',
@@ -201,7 +200,7 @@ class GeofenceBackgroundService {
       if (kDebugMode && _positionsProcessed % 10 == 0) {
         _log.d(
           '[GeofenceBackgroundService] Processed $_positionsProcessed positions. '
-          'Last update: ${_lastPositionTime}',
+          'Last update: $_lastPositionTime',
         );
       }
 
@@ -237,7 +236,7 @@ class GeofenceBackgroundService {
       _currentUserId = null;
 
       _log.i('[GeofenceBackgroundService] ✅ Stopped successfully');
-      _log.d('[GeofenceBackgroundService] Final stats: ${statistics}');
+      _log.d('[GeofenceBackgroundService] Final stats: $statistics');
     } catch (e, stackTrace) {
       _log.e(
         '[GeofenceBackgroundService] Error during stop: $e',

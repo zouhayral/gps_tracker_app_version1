@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'package:intl/intl.dart';
 
 import 'package:my_app_gps/data/models/event.dart';
-import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/l10n/app_localizations.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// NotificationTile displays a single event notification.
 ///

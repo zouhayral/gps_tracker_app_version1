@@ -145,7 +145,7 @@ class RenderScheduler {
 /// Batched notifier update scheduler to prevent notifyListeners() spam
 /// 
 /// **Problem**: Rapid state changes cause excessive widget rebuilds:
-/// ```
+/// ```dart
 /// // Bad: 10 updates in 100ms = 10 rebuilds
 /// for (final update in updates) {
 ///   setState(() => _data = update);
@@ -210,7 +210,7 @@ class DeferredNotifyScheduler {
 /// Marker update task queue for serialized, throttled rebuilds
 /// 
 /// **Problem**: Bursty WebSocket updates cause concurrent marker rebuilds:
-/// ```
+/// ```text
 /// [WS] 3 updates in 50ms
 /// [REBUILD] Started...
 /// [REBUILD] Started...
@@ -219,7 +219,7 @@ class DeferredNotifyScheduler {
 /// ```
 /// 
 /// **Solution**: Queue + serialize + throttle:
-/// ```
+/// ```text
 /// [WS] 3 updates in 50ms
 /// [QUEUE] Task 1 enqueued
 /// [QUEUE] Task 2 enqueued

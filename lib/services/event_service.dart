@@ -4,7 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
-import 'package:my_app_gps/core/database/entities/event_entity.dart';
+// Entity import removed; DAO now works with domain Event directly
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -167,18 +167,16 @@ class EventService {
     }
   }
 
-  /// Persist events to ObjectBox.
+  /// Persist events to local storage (ObjectBox on mobile, Hive on web).
   Future<void> _persistEvents(List<Event> events) async {
     try {
       final dao = await _getDao();
-      final entities = events.map((e) => e.toEntity()).toList();
+      await dao.upsertMany(events);
 
-      await dao.upsertMany(entities);
-
-      if (kDebugMode) {
-        debugPrint(
-            '[EventService] 💾 Persisted ${entities.length} events to ObjectBox',);
-      }
+  if (kDebugMode) {
+    debugPrint(
+    '[EventService] 💾 Persisted ${events.length} events to local storage',);
+  }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[EventService] ⚠️ Failed to persist events: $e');
@@ -194,7 +192,7 @@ class EventService {
   /// - [type]: Filter by event type (optional)
   /// - [limit]: Maximum number of events to return (default: 100)
   ///
-  /// Returns cached events from ObjectBox, ordered by timestamp (newest first).
+  /// Returns cached events, ordered by timestamp (newest first).
   Future<List<Event>> getCachedEvents({
     int? deviceId,
     String? type,
@@ -202,24 +200,19 @@ class EventService {
   }) async {
     try {
       final dao = await _getDao();
-      List<dynamic> entities;
+      List<Event> events;
 
       if (deviceId != null && type != null) {
-        entities = await dao.getByDeviceAndType(deviceId, type);
+        events = await dao.getByDeviceAndType(deviceId, type);
       } else if (deviceId != null) {
-        entities = await dao.getByDevice(deviceId);
+        events = await dao.getByDevice(deviceId);
       } else if (type != null) {
-        entities = await dao.getByType(type);
+        events = await dao.getByType(type);
       } else {
-        entities = await dao.getAll();
+        events = await dao.getAll();
       }
 
-      // Convert entities to domain models
-      final events = entities
-          .cast<EventEntity>()
-          .map(Event.fromEntity)
-          .take(limit)
-          .toList();
+      events = events.take(limit).toList();
 
       if (kDebugMode) {
         debugPrint(
@@ -249,21 +242,18 @@ class EventService {
     try {
       final dao = await _getDao();
 
-      // Get the event entity from ObjectBox
-      final entity = await dao.getById(eventId);
+      // Get the event from storage
+      final event = await dao.getById(eventId);
 
-      if (entity == null) {
+      if (event == null) {
         if (kDebugMode) {
           debugPrint('[EventService] ⚠️ Event not found: $eventId');
         }
         return false;
       }
 
-      // Update isRead flag
-      entity.isRead = true;
-
-      // Persist the update
-      await dao.upsert(entity);
+      // Update isRead flag and persist
+      await dao.upsert(event.copyWith(isRead: true));
 
       if (kDebugMode) {
         debugPrint('[EventService] ✅ Marked event $eventId as read');
@@ -410,19 +400,18 @@ class EventService {
     }
   }
 
-  /// Return the latest cached Event timestamp from ObjectBox (in local time).
+  /// Return the latest cached Event timestamp (in local time).
   ///
   /// Useful to compute an accurate backfill window on reconnect.
   Future<DateTime?> getLatestCachedEventTimestamp() async {
     try {
       final dao = await _getDao();
-      final entities = await dao.getAll();
-      if (entities.isEmpty) return null;
-      final latestMs = entities
-          .cast<EventEntity>()
-          .map((e) => e.eventTimeMs)
-          .reduce((a, b) => a > b ? a : b);
-      return DateTime.fromMillisecondsSinceEpoch(latestMs).toLocal();
+      final events = await dao.getAll();
+      if (events.isEmpty) return null;
+      final latest = events
+          .map((e) => e.timestamp)
+          .reduce((a, b) => a.isAfter(b) ? a : b);
+      return latest.toLocal();
     } catch (e) {
       if (kDebugMode) {
         debugPrint(

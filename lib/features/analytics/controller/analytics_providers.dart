@@ -15,6 +15,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// ```
 final reportPeriodProvider = StateProvider<String>((ref) => 'daily');
 
+/// Provider for the selected date when using 'daily' period.
+///
+/// This allows the calendar picker to control which specific day's
+/// data is displayed. When null, defaults to today.
+///
+/// Example usage:
+/// ```dart
+/// // Set to specific date from calendar
+/// ref.read(selectedDateProvider.notifier).state = DateTime(2025, 10, 27);
+/// ```
+final selectedDateProvider = StateProvider<DateTime?>((ref) => null);
+
 /// Provider for the currently selected device ID.
 ///
 /// Determines which device's analytics data to fetch and display.
@@ -81,30 +93,38 @@ final dateRangeProvider = StateProvider<DateTimeRange?>((ref) => null);
 final effectiveDateRangeProvider = Provider<DateTimeRange?>((ref) {
   final period = ref.watch(reportPeriodProvider);
   final customRange = ref.watch(dateRangeProvider);
+  final selectedDate = ref.watch(selectedDateProvider);
 
-  final now = DateTime.now();
+  // Use selected date if available, otherwise use current date
+  final referenceDate = selectedDate ?? DateTime.now();
 
   switch (period) {
     case 'daily':
-      final startOfDay = DateTime(now.year, now.month, now.day);
-      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      final startOfDay = DateTime(referenceDate.year, referenceDate.month, referenceDate.day);
+      final endOfDay = DateTime(referenceDate.year, referenceDate.month, referenceDate.day, 23, 59, 59);
       return DateTimeRange(start: startOfDay, end: endOfDay);
 
     case 'weekly':
-      final startOfWeek = now.subtract(const Duration(days: 7));
-      return DateTimeRange(start: startOfWeek, end: now);
+      // Start from 7 days before the reference date
+      final startOfWeek = referenceDate.subtract(const Duration(days: 7));
+      final startOfDay = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+      final endOfDay = DateTime(referenceDate.year, referenceDate.month, referenceDate.day, 23, 59, 59);
+      return DateTimeRange(start: startOfDay, end: endOfDay);
 
     case 'monthly':
-      final startOfMonth = now.subtract(const Duration(days: 30));
-      return DateTimeRange(start: startOfMonth, end: now);
+      // Start from 30 days before the reference date
+      final startOfMonth = referenceDate.subtract(const Duration(days: 30));
+      final startOfDay = DateTime(startOfMonth.year, startOfMonth.month, startOfMonth.day);
+      final endOfDay = DateTime(referenceDate.year, referenceDate.month, referenceDate.day, 23, 59, 59);
+      return DateTimeRange(start: startOfDay, end: endOfDay);
 
     case 'custom':
       return customRange;
 
     default:
       // Fallback to daily if unknown period
-      final startOfDay = DateTime(now.year, now.month, now.day);
-      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      final startOfDay = DateTime(referenceDate.year, referenceDate.month, referenceDate.day);
+      final endOfDay = DateTime(referenceDate.year, referenceDate.month, referenceDate.day, 23, 59, 59);
       return DateTimeRange(start: startOfDay, end: endOfDay);
   }
 });
@@ -142,13 +162,28 @@ final needsCustomRangeProvider = Provider<bool>((ref) {
 final periodLabelProvider = Provider<String>((ref) {
   final period = ref.watch(reportPeriodProvider);
   final customRange = ref.watch(dateRangeProvider);
+  final selectedDate = ref.watch(selectedDateProvider);
 
   switch (period) {
     case 'daily':
+      if (selectedDate != null) {
+        // Show the selected date
+        return _formatDate(selectedDate);
+      }
       return 'Today';
     case 'weekly':
+      if (selectedDate != null) {
+        final endDate = selectedDate;
+        final startDate = selectedDate.subtract(const Duration(days: 7));
+        return '${_formatDate(startDate)} - ${_formatDate(endDate)}';
+      }
       return 'Last 7 Days';
     case 'monthly':
+      if (selectedDate != null) {
+        final endDate = selectedDate;
+        final startDate = selectedDate.subtract(const Duration(days: 30));
+        return '${_formatDate(startDate)} - ${_formatDate(endDate)}';
+      }
       return 'Last 30 Days';
     case 'custom':
       if (customRange != null) {

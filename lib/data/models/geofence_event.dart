@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 ///   • REST/WebSocket JSON
 ///   • SQLite Map storage
 ///   • UI-friendly data (icon, color, formatted message)
+@immutable
 class GeofenceEvent {
   final String id;
   final String geofenceId;
@@ -33,9 +34,8 @@ class GeofenceEvent {
     required this.timestamp,
     required this.latitude,
     required this.longitude,
-    this.status = 'pending',
+    required this.createdAt, this.status = 'pending',
     this.syncStatus = 'synced',
-    required this.createdAt,
     this.dwellDurationMs,
     this.attributes = const {},
   });
@@ -65,11 +65,9 @@ class GeofenceEvent {
       timestamp: timestamp ?? now,
       latitude: location.latitude,
       longitude: location.longitude,
-      status: 'pending',
       syncStatus: 'pending',
       createdAt: now,
-      dwellDurationMs: null,
-      attributes: {'priority': 'high'},
+  attributes: const {'priority': 'high'},
     );
   }
 
@@ -94,11 +92,9 @@ class GeofenceEvent {
       timestamp: timestamp ?? now,
       latitude: location.latitude,
       longitude: location.longitude,
-      status: 'pending',
       syncStatus: 'pending',
       createdAt: now,
-      dwellDurationMs: null,
-      attributes: {'priority': 'high'},
+  attributes: const {'priority': 'high'},
     );
   }
 
@@ -124,11 +120,10 @@ class GeofenceEvent {
       timestamp: timestamp ?? now,
       latitude: location.latitude,
       longitude: location.longitude,
-      status: 'pending',
       syncStatus: 'pending',
       createdAt: now,
       dwellDurationMs: dwellDurationMs,
-      attributes: {'priority': 'default'},
+  attributes: const {'priority': 'default'},
     );
   }
 
@@ -157,7 +152,6 @@ class GeofenceEvent {
       timestamp: timestamp ?? now,
       latitude: latitude,
       longitude: longitude,
-      status: 'pending',
       syncStatus: 'pending',
       createdAt: now,
       dwellDurationMs: dwellDurationMs,
@@ -185,7 +179,7 @@ class GeofenceEvent {
     final createdAtUtc = (parsedCreatedAt ?? DateTime.now()).toUtc();
 
     // Parse attributes
-    Map<String, dynamic> attributes = {};
+    var attributes = <String, dynamic>{};
     if (json['attributes'] != null) {
       try {
         if (json['attributes'] is Map) {
@@ -264,7 +258,7 @@ class GeofenceEvent {
   /// Convert from Map (SQLite result)
   factory GeofenceEvent.fromMap(Map<String, dynamic> map) {
     // Parse attributes from JSON string
-    Map<String, dynamic> attributes = {};
+    var attributes = <String, dynamic>{};
     if (map['attributes_json'] != null) {
       try {
         // Simple parsing - in production you might want to use jsonDecode

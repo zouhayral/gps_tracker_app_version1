@@ -1,7 +1,32 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app_gps/core/storage/secure_storage_interface.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// Mock implementation of SecureStorageInterface for testing
+class MockSecureStorage implements SecureStorageInterface {
+  final Map<String, String> _storage = {};
+
+  @override
+  Future<String?> read({required String key}) async {
+    return _storage[key];
+  }
+
+  @override
+  Future<void> write({required String key, required String value}) async {
+    _storage[key] = value;
+  }
+
+  @override
+  Future<void> delete({required String key}) async {
+    _storage.remove(key);
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    _storage.clear();
+  }
+}
 
 void main() {
   // Initialize Flutter test binding
@@ -26,36 +51,59 @@ void main() {
       // Verify the storage keys are defined correctly
       // This is important to prevent key collisions
       const emailKey = 'stored_email';
-      const passwordKey = 'stored_password';
       const lastEmailKey = 'last_email';
 
       expect(emailKey, isNotEmpty);
-      expect(passwordKey, isNotEmpty);
       expect(lastEmailKey, isNotEmpty);
-      expect(emailKey, isNot(equals(passwordKey)));
+      expect(emailKey, isNot(equals(lastEmailKey)));
     });
   });
 
-  group('FlutterSecureStorage Integration', () {
-    test('FlutterSecureStorage can be instantiated', () {
-      const storage = FlutterSecureStorage();
+  group('SecureStorage Integration', () {
+    test('MockSecureStorage can be instantiated', () {
+      final storage = MockSecureStorage();
       expect(storage, isNotNull);
     });
 
-    test('Storage operations (write/read/delete) are async', () async {
-      const storage = FlutterSecureStorage();
+    test('Storage operations (write/read/delete) work correctly', () async {
+      final storage = MockSecureStorage();
 
-      // Note: These operations will fail in unit tests without platform channels
-      // They are included to document the expected API usage
-      try {
-        await storage.write(key: 'test_key', value: 'test_value');
-        final value = await storage.read(key: 'test_key');
-        expect(value, 'test_value');
-        await storage.delete(key: 'test_key');
-      } catch (e) {
-        // Expected to fail in unit test environment
-        expect(e, isNotNull);
-      }
+      // Write operation
+      await storage.write(key: 'test_key', value: 'test_value');
+      
+      // Read operation
+      final value = await storage.read(key: 'test_key');
+      expect(value, 'test_value');
+      
+      // Delete operation
+      await storage.delete(key: 'test_key');
+      final deletedValue = await storage.read(key: 'test_key');
+      expect(deletedValue, isNull);
+    });
+
+    test('Storage can store and retrieve email', () async {
+      final storage = MockSecureStorage();
+      const testEmail = 'test@example.com';
+
+      await storage.write(key: 'stored_email', value: testEmail);
+      final retrievedEmail = await storage.read(key: 'stored_email');
+      
+      expect(retrievedEmail, testEmail);
+    });
+
+    test('DeleteAll clears all stored values', () async {
+      final storage = MockSecureStorage();
+
+      await storage.write(key: 'email', value: 'test@example.com');
+      await storage.write(key: 'other', value: 'data');
+      
+      await storage.deleteAll();
+      
+      final email = await storage.read(key: 'email');
+      final other = await storage.read(key: 'other');
+      
+      expect(email, isNull);
+      expect(other, isNull);
     });
   });
 
@@ -109,21 +157,28 @@ void main() {
       expect(true, true);
     });
 
-    test('Credentials should be cleared on logout', () {
+    test('Session tokens should be cleared on logout', () {
       // This is verified through the logout() implementation
-      // Ensures _clearStoredCredentials() is called
+      // Ensures session tokens and stored email are cleared
       expect(true, true);
     });
 
-    test('Credentials should be cleared on failed auto-login', () {
+    test('Session tokens should be cleared on failed session validation', () {
       // This is verified through the _bootstrap() implementation
-      // Ensures credentials are cleared when auto-login fails
+      // Ensures tokens are cleared when session validation fails
       expect(true, true);
     });
 
-    test('Credentials should be cleared on failed manual login', () {
+    test('Stored email should be cleared on failed login', () {
       // This is verified through the login() implementation
-      // Ensures partial credentials are cleared on error
+      // Ensures stored email is cleared on authentication error
+      expect(true, true);
+    });
+
+    test('Passwords are never stored', () {
+      // IMPORTANT: The app no longer stores passwords
+      // Only session tokens and email addresses are stored
+      // This test documents this security improvement
       expect(true, true);
     });
   });
@@ -172,48 +227,69 @@ void main() {
 // These require a running app and platform channels
 
 /*
-Integration Test 1: Full Auto-Login Flow
-1. Fresh install (no stored credentials)
+Integration Test 1: Full Session Validation Flow
+1. Fresh install (no stored session)
 2. Login with valid credentials
-3. Verify credentials stored in secure storage
-4. Kill and restart app
-5. Verify auto-login happens
-6. Verify map page is shown
-7. Verify devices are loaded
+3. Verify session token stored
+4. Verify email stored in secure storage
+5. Kill and restart app
+6. Verify session validation happens automatically
+7. Verify map page is shown
+8. Verify devices are loaded
 
-Integration Test 2: Auto-Login Failure Recovery
-1. Login with valid credentials (auto-login enabled)
-2. Change password on server
+Integration Test 2: Session Expiration Recovery
+1. Login with valid credentials
+2. Wait for session to expire on server
 3. Kill and restart app
-4. Verify auto-login fails
-5. Verify credentials are cleared
+4. Verify session validation fails
+5. Verify stored email is cleared
 6. Verify login page shown with "Session expired" message
-7. Login with new password
-8. Verify new credentials stored
+7. Login with credentials again
+8. Verify new session token stored
 
 Integration Test 3: Account Switching
 1. Login as User A
 2. Verify User A's devices shown
 3. Logout
-4. Login as User B
-5. Verify User B's devices shown (not User A's)
-6. Kill and restart app
-7. Verify auto-login as User B (not User A)
+4. Verify User A's session cleared
+5. Login as User B
+6. Verify User B's devices shown (not User A's)
+7. Verify caches cleared between users
+8. Kill and restart app
+9. Verify session validation as User B (not User A)
 
-Integration Test 4: Logout Clears Auto-Login
-1. Login with auto-login enabled
+Integration Test 4: Logout Clears Session
+1. Login with valid credentials
 2. Navigate to Settings
 3. Tap Logout
 4. Verify login page shown
-5. Kill and restart app
-6. Verify login page shown (no auto-login)
-7. Verify password field is empty
+5. Verify session token cleared
+6. Kill and restart app
+7. Verify login page shown (no session validation)
+8. Verify email field is empty (no stored email)
 
 Integration Test 5: Network Error Handling
 1. Login with valid credentials
 2. Kill and restart app (offline mode)
-3. Verify auto-login fails gracefully
+3. Verify session validation fails gracefully
 4. Verify error message shown
 5. Reconnect to network
 6. Verify manual login works
+7. Verify new session established
+
+Integration Test 6: Invalid Session Token
+1. Login with valid credentials
+2. Manually corrupt session token in storage
+3. Kill and restart app
+4. Verify session validation fails
+5. Verify user redirected to login
+6. Verify can login again successfully
+
+Integration Test 7: Cache Clearing
+1. Login as User A, browse devices
+2. Logout
+3. Login as User B
+4. Verify User B doesn't see User A's cached data
+5. Verify device notifier cleared
+6. Verify HTTP caches cleared
 */

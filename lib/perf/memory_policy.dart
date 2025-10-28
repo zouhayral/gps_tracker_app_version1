@@ -15,6 +15,7 @@
 /// - Heap drift: ≤+20 MB over 1 hour (down from +80 MB)
 /// - FMTC store size: Capped at policy limit
 /// - Idle frame overruns: <1%
+library;
 
 import 'dart:async';
 import 'dart:developer' as developer;
@@ -109,7 +110,6 @@ class MemoryPolicy {
     bitmapPoolMaxBytes: 30 * 1024 * 1024, // 30 MB
     bitmapPoolMaxEntries: 100,
     markerPoolMaxPerTier: 500,
-    enableAggressiveTrim: false,
   );
 
   /// Create policy adapted to current LOD mode
@@ -430,13 +430,17 @@ class MemoryMaintenanceManager {
     final markerStats = MarkerPoolManager.getStats();
 
     if (kDebugMode) {
+      final entries = (bitmapStats?['entries'] as int?) ?? 0;
+      final sizeBytes = (bitmapStats?['sizeBytes'] as num?)?.toDouble() ?? 0.0;
+      final totalMarkers = (markerStats?['totalMarkers'] as int?) ?? 0;
+      final reuseRate = (markerStats?['reuseRate'] as num?)?.toDouble() ?? 0.0;
       debugPrint(
         '[MemoryPerf] 📊 Runtime: ${runtime}min | '
         'Heap: ${_lastHeapMB}MB (+${heapGrowthMB}MB) | '
-        'Bitmap: ${bitmapStats?['entries']}/${_policy.bitmapPoolMaxEntries} '
-        '(${((bitmapStats?['sizeBytes'] ?? 0) / (1024 * 1024)).toStringAsFixed(1)}MB) | '
-        'Marker: ${markerStats?['totalMarkers']} '
-        '(reuse: ${((markerStats?['reuseRate'] ?? 0) * 100).toStringAsFixed(1)}%) | '
+        'Bitmap: $entries/${_policy.bitmapPoolMaxEntries} '
+        '(${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)}MB) | '
+        'Marker: $totalMarkers '
+        '(reuse: ${(reuseRate * 100).toStringAsFixed(1)}%) | '
         'Cleanups: $_cleanupCount | GC hints: $_gcHintCount',
       );
     }

@@ -1,7 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
+import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_provider.dart';
 
 class TelemetryHistoryPage extends ConsumerWidget {
@@ -135,7 +135,7 @@ class _SectionTitle extends StatelessWidget {
 
 class _StatsSummary extends StatelessWidget {
   const _StatsSummary({required this.records});
-  final List<TelemetryRecord> records;
+  final List<TelemetrySample> records;
 
   @override
   Widget build(BuildContext context) {

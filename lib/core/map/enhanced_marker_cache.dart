@@ -58,8 +58,9 @@ class EnhancedMarkerCache {
     // First time creation - always rebuild
     if (oldSnap == null) return true;
 
-    // ✅ Skip if timestamp identical (no new position data)
-    if (oldSnap.timestamp == newSnap.timestamp) return false;
+    // Note: Do not early-return solely on identical timestamp.
+    // Selection changes or other state changes must still trigger a rebuild
+    // even if the timestamp remains the same.
 
     // ✅ Skip if position delta < 0.000001° (~10 cm)
     final samePosition = (oldSnap.lat - newSnap.lat).abs() < 0.000001 &&

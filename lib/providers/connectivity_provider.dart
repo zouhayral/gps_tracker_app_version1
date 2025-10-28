@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/controllers/connectivity_coordinator.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
 
 /// Riverpod provider for unified connectivity state
@@ -175,6 +176,22 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
         debugPrint('[CONNECTIVITY_PROVIDER] ⚠️ Failed to resume WebSocket: $e');
       }
     }
+
+    // 🎯 NEW: Trigger notifications refresh to fetch missed events
+    // Use unawaited since we don't want to block the reconnect flow
+    Future<void>.microtask(() async {
+      try {
+        final notificationsRepo = await _ref.read(notificationsRepositoryProvider.future);
+        await notificationsRepo.refreshAfterReconnect();
+        if (kDebugMode) {
+          debugPrint('[CONNECTIVITY_PROVIDER] 🔔 Triggered notifications refresh');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[CONNECTIVITY_PROVIDER] ⚠️ Failed to refresh notifications: $e');
+        }
+      }
+    });
 
     // Trigger map rebuild to refresh tiles and resume live markers
     // This is handled by FlutterMapAdapter listening to this provider

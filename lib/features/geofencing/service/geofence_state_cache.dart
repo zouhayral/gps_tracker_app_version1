@@ -13,7 +13,7 @@ import 'package:my_app_gps/features/geofencing/service/geofence_evaluator_servic
 /// - Memory usage monitoring and statistics
 ///
 /// Architecture:
-/// ```
+/// ```text
 /// GeofenceMonitoringService
 ///     ↓
 /// GeofenceEvaluatorService

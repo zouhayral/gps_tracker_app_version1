@@ -255,9 +255,8 @@ class TripRepository {
       final dao = await _ref.read(tripsDaoProvider.future);
       final cached = await dao.getByDeviceInRange(deviceId, from, to);
       if (cached.isEmpty) return const <Trip>[];
-      return cached
-          .map((e) => Trip.fromJson(e.toDomain()))
-          .toList(growable: false);
+      // DAO returns domain Trip models directly
+      return List<Trip>.unmodifiable(cached);
     } catch (e) {
       _log.warning('Cache lookup failed', error: e);
       return const <Trip>[];

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -198,7 +200,7 @@ class GeofenceDetailPage extends ConsumerWidget {
                 CircleAvatar(
                   backgroundColor: geofence.enabled
                       ? colorScheme.primaryContainer
-                      : colorScheme.surfaceVariant,
+                      : colorScheme.surfaceContainerHighest,
                   child: Icon(
                     geofence.type == 'circle'
                         ? Icons.circle_outlined
@@ -355,16 +357,15 @@ class GeofenceDetailPage extends ConsumerWidget {
               data: (events) => GeofenceMapWidget(
                 geofence: geofence,
                 events: events.take(5).toList(),
-                editable: false,
               ),
-              loading: () => Container(
-                color: theme.colorScheme.surfaceVariant,
+              loading: () => ColoredBox(
+                color: theme.colorScheme.surfaceContainerHighest,
                 child: const Center(
                   child: CircularProgressIndicator(),
                 ),
               ),
-              error: (_, __) => Container(
-                color: theme.colorScheme.surfaceVariant,
+              error: (_, __) => ColoredBox(
+                color: theme.colorScheme.surfaceContainerHighest,
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -487,7 +488,7 @@ class GeofenceDetailPage extends ConsumerWidget {
                     (geofence.dwellMs == null || geofence.dwellMs == 0))
                   Chip(
                     label: const Text('No triggers'),
-                    backgroundColor: theme.colorScheme.surfaceVariant,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
                   ),
               ],
             ),
@@ -750,15 +751,12 @@ class GeofenceDetailPage extends ConsumerWidget {
       case 'entry':
         icon = Icons.login;
         color = Colors.green;
-        break;
       case 'exit':
         icon = Icons.logout;
         color = Colors.orange;
-        break;
       case 'dwell':
         icon = Icons.schedule;
         color = Colors.blue;
-        break;
       default:
         icon = Icons.place;
         color = theme.colorScheme.primary;
@@ -772,7 +770,7 @@ class GeofenceDetailPage extends ConsumerWidget {
       child: ListTile(
         contentPadding: EdgeInsets.zero,
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
+          backgroundColor: color.withValues(alpha: 0.1),
           child: Icon(icon, color: color, size: 20),
         ),
         title: Text(
@@ -823,11 +821,11 @@ class GeofenceDetailPage extends ConsumerWidget {
             event.status,
             style: theme.textTheme.labelSmall,
           ),
-          backgroundColor: event.status == 'pending'
-              ? Colors.orange.withOpacity(0.2)
-              : event.status == 'acknowledged'
-                  ? Colors.green.withOpacity(0.2)
-                  : theme.colorScheme.surfaceVariant,
+      backgroundColor: event.status == 'pending'
+        ? Colors.orange.withValues(alpha: 0.2)
+        : event.status == 'acknowledged'
+          ? Colors.green.withValues(alpha: 0.2)
+          : theme.colorScheme.surfaceContainerHighest,
           visualDensity: VisualDensity.compact,
         ),
       ),
@@ -991,7 +989,7 @@ class GeofenceDetailPage extends ConsumerWidget {
       ),
     );
 
-    if (confirmed == true && context.mounted) {
+    if ((confirmed ?? false) && context.mounted) {
       try {
         // Await repository initialization before deleting
         final repo = await ref.read(geofenceRepositoryProvider.future);
@@ -1002,7 +1000,7 @@ class GeofenceDetailPage extends ConsumerWidget {
         ref.invalidate(geofenceStatsProvider);
 
         if (context.mounted) {
-          context.safePop<void>(); // Return to list
+          unawaited(context.safePop<void>()); // Return to list
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${geofence.name} deleted'),

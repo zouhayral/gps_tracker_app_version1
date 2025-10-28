@@ -2,12 +2,14 @@
 /// 
 /// Spatial algorithms for reducing marker density while maintaining
 /// representative coverage across the viewport.
+library;
 
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
 /// Represents a screenspace point
+@immutable
 class ScreenPoint {
   const ScreenPoint(this.x, this.y);
   final double x;
@@ -89,7 +91,7 @@ class MarkerDecimator {
   }) {
     if (markers.length <= maxCount) return markers;
 
-    final distance = const Distance();
+    const distance = Distance();
     final clusters = <List<T>>[];
     final processed = <bool>[];
 
@@ -226,6 +228,7 @@ class MarkerDecimator {
 }
 
 /// Grid cell coordinate
+@immutable
 class _GridCell {
   const _GridCell(this.x, this.y);
   final int x;

@@ -12,8 +12,7 @@ import 'package:my_app_gps/app/app_root.dart';
 import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
-import 'package:my_app_gps/core/database/entities/device_entity.dart';
-import 'package:my_app_gps/core/database/entities/event_entity.dart';
+import 'package:my_app_gps/data/models/event.dart';
 import 'test_utils/test_config.dart';
 
 void main() {
@@ -27,7 +26,7 @@ void main() {
       ProviderScope(
         overrides: [
           // Avoid ObjectBox in widget tests
-          telemetryDaoProvider.overrideWithValue(TelemetryDaoNoop()),
+          telemetryDaoProvider.overrideWithValue(_TelemetryDaoFake()),
           eventsDaoProvider.overrideWith((ref) async => _EventsDaoFake()),
           devicesDaoProvider.overrideWith((ref) async => _DevicesDaoFake()),
         ],
@@ -59,28 +58,28 @@ class _EventsDaoFake implements EventsDaoBase {
   Future<void> deleteAll() async {}
 
   @override
-  Future<List<EventEntity>> getAll() async => <EventEntity>[];
+  Future<List<Event>> getAll() async => <Event>[];
 
   @override
-  Future<List<EventEntity>> getByDevice(int deviceId) async => <EventEntity>[];
+  Future<List<Event>> getByDevice(int deviceId) async => <Event>[];
 
   @override
-  Future<List<EventEntity>> getByDeviceAndType(int deviceId, String eventType) async => <EventEntity>[];
+  Future<List<Event>> getByDeviceAndType(int deviceId, String eventType) async => <Event>[];
 
   @override
-  Future<List<EventEntity>> getByDeviceInRange(int deviceId, DateTime startTime, DateTime endTime) async => <EventEntity>[];
+  Future<List<Event>> getByDeviceInRange(int deviceId, DateTime startTime, DateTime endTime) async => <Event>[];
 
   @override
-  Future<EventEntity?> getById(String eventId) async => null;
+  Future<Event?> getById(String eventId) async => null;
 
   @override
-  Future<List<EventEntity>> getByType(String eventType) async => <EventEntity>[];
+  Future<List<Event>> getByType(String eventType) async => <Event>[];
 
   @override
-  Future<void> upsert(EventEntity event) async {}
+  Future<void> upsert(Event event) async {}
 
   @override
-  Future<void> upsertMany(List<EventEntity> events) async {}
+  Future<void> upsertMany(List<Event> events) async {}
 }
 
 class _DevicesDaoFake implements DevicesDaoBase {
@@ -91,17 +90,38 @@ class _DevicesDaoFake implements DevicesDaoBase {
   Future<void> deleteAll() async {}
 
   @override
-  Future<List<DeviceEntity>> getAll() async => <DeviceEntity>[];
+  Future<List<DeviceRecord>> getAll() async => <DeviceRecord>[];
 
   @override
-  Future<DeviceEntity?> getById(int deviceId) async => null;
+  Future<DeviceRecord?> getById(int deviceId) async => null;
 
   @override
-  Future<List<DeviceEntity>> getByStatus(String status) async => <DeviceEntity>[];
+  Future<List<DeviceRecord>> getByStatus(String status) async => <DeviceRecord>[];
 
   @override
-  Future<void> upsert(DeviceEntity device) async {}
+  Future<void> upsert(DeviceRecord device) async {}
 
   @override
-  Future<void> upsertMany(List<DeviceEntity> devices) async {}
+  Future<void> upsertMany(List<DeviceRecord> devices) async {}
+}
+
+class _TelemetryDaoFake implements TelemetryDaoBase {
+  @override
+  Future<List<TelemetrySample>> byDeviceInRange(
+    int deviceId,
+    DateTime start,
+    DateTime end,
+  ) async => <TelemetrySample>[];
+
+  @override
+  Future<int> countForDevice(int deviceId) async => 0;
+
+  @override
+  Future<void> deleteOlderThan(DateTime cutoff) async {}
+
+  @override
+  Future<void> put(TelemetrySample record) async {}
+
+  @override
+  Future<void> putMany(List<TelemetrySample> records) async {}
 }

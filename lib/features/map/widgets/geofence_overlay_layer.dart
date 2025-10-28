@@ -82,9 +82,9 @@ class GeofenceOverlayLayer extends ConsumerWidget {
       point: LatLng(geofence.centerLat!, geofence.centerLng!),
       radius: geofence.radius!,
       useRadiusInMeter: true,
-      color: color.withOpacity(0.3),
+      color: color.withValues(alpha: 0.3),
       borderStrokeWidth: 3,
-      borderColor: color.withOpacity(0.9),
+      borderColor: color.withValues(alpha: 0.9),
     );
   }
 
@@ -96,9 +96,9 @@ class GeofenceOverlayLayer extends ConsumerWidget {
     
     return Polygon(
       points: vertices,
-      color: color.withOpacity(0.3),
+      color: color.withValues(alpha: 0.3),
       borderStrokeWidth: 3,
-      borderColor: color.withOpacity(0.9),
+      borderColor: color.withValues(alpha: 0.9),
     );
   }
 

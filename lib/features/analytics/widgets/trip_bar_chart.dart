@@ -79,8 +79,8 @@ class _TripBarChartState extends State<TripBarChart> {
         padding: const EdgeInsets.only(right: 16, top: 16, bottom: 8),
         child: BarChart(
           _buildChartData(effectiveBarColor, t),
-          swapAnimationDuration: const Duration(milliseconds: 800),
-          swapAnimationCurve: Curves.easeOut,
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.easeOut,
         ),
       ),
     );
@@ -99,17 +99,16 @@ class _TripBarChartState extends State<TripBarChart> {
       borderData: FlBorderData(
         show: true,
         border: Border(
-          bottom: BorderSide(color: Colors.grey[300]!, width: 1),
-          left: BorderSide(color: Colors.grey[300]!, width: 1),
+          bottom: BorderSide(color: Colors.grey[300]!),
+          left: BorderSide(color: Colors.grey[300]!),
         ),
       ),
       gridData: FlGridData(
-        show: true,
         drawVerticalLine: false,
         horizontalInterval: _calculateHorizontalInterval(maxCount),
         getDrawingHorizontalLine: (value) {
           return FlLine(
-            color: Colors.grey[300]!,
+            color: Colors.grey[300],
             strokeWidth: 1,
             dashArray: [5, 5],
           );
@@ -137,7 +136,7 @@ class _TripBarChartState extends State<TripBarChart> {
               gradient: LinearGradient(
                 colors: [
                   barColor,
-                  barColor.withOpacity(0.5),
+                  barColor.withValues(alpha: 0.5),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -170,7 +169,7 @@ class _TripBarChartState extends State<TripBarChart> {
         });
       },
       touchTooltipData: BarTouchTooltipData(
-        getTooltipColor: (group) => barColor.withOpacity(0.9),
+        getTooltipColor: (group) => barColor.withValues(alpha: 0.9),
         tooltipRoundedRadius: 8,
         tooltipPadding: const EdgeInsets.all(8),
         tooltipMargin: 8,
@@ -207,7 +206,6 @@ class _TripBarChartState extends State<TripBarChart> {
     final skipInterval = shouldSkipLabels ? 3 : 1; // Show every 3rd label if too many
     
     return FlTitlesData(
-      show: true,
       bottomTitles: AxisTitles(
         axisNameWidget: Text(
           t.period,
@@ -274,10 +272,10 @@ class _TripBarChartState extends State<TripBarChart> {
         ),
       ),
       topTitles: const AxisTitles(
-        sideTitles: SideTitles(showTitles: false),
+        
       ),
       rightTitles: const AxisTitles(
-        sideTitles: SideTitles(showTitles: false),
+        
       ),
     );
   }
@@ -355,7 +353,6 @@ class TripBarChartCompact extends StatelessWidget {
           minY: 0,
           barTouchData: BarTouchData(enabled: false),
           titlesData: FlTitlesData(
-            show: true,
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -375,13 +372,13 @@ class TripBarChartCompact extends StatelessWidget {
               ),
             ),
             leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
+              
             ),
             topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
+              
             ),
             rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
+              
             ),
           ),
           borderData: FlBorderData(show: false),
@@ -398,7 +395,7 @@ class TripBarChartCompact extends StatelessWidget {
                   gradient: LinearGradient(
                     colors: [
                       effectiveBarColor,
-                      effectiveBarColor.withOpacity(0.5),
+                      effectiveBarColor.withValues(alpha: 0.5),
                     ],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -409,8 +406,8 @@ class TripBarChartCompact extends StatelessWidget {
           ),
           alignment: BarChartAlignment.spaceAround,
         ),
-        swapAnimationDuration: const Duration(milliseconds: 600),
-        swapAnimationCurve: Curves.easeOut,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeOut,
       ),
     );
   }

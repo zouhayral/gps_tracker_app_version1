@@ -1,0 +1,66 @@
+# Docker Compose Setup for Traccar with Nginx HTTPS Proxy
+#
+# This configuration runs:
+# - Traccar server (internal port 8082)
+# - Nginx reverse proxy with SSL (exposed ports 80, 443)
+#
+# Usage:
+#   1. Update DOMAIN_NAME and EMAIL below
+#   2. Run: docker-compose up -d
+#   3. Obtain SSL cert: docker-compose run --rm certbot certonly --webroot -w /var/www/certbot -d YOUR_DOMAIN
+#   4. Restart nginx: docker-compose restart nginx
+
+version: '3.8'
+
+services:
+  traccar:
+    image: traccar/traccar:latest
+    container_name: traccar
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:8082"  # Only accessible from localhost
+      - "5055:5055"  # GPS device port
+    volumes:
+      - ./traccar-data/logs:/opt/traccar/logs:rw
+      - ./traccar-data/data:/opt/traccar/data:rw
+      - ./traccar-data/conf/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+    environment:
+      - TZ=UTC
+    networks:
+      - traccar-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - traccar
+    networks:
+      - traccar-network
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt:rw
+      - ./certbot/www:/var/www/certbot:rw
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  traccar-network:
+    driver: bridge
+
+volumes:
+  traccar-data:
+  certbot-conf:
+  certbot-www:

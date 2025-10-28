@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -73,8 +72,6 @@ class ClusterNotifier extends StateNotifier<ClusterState> {
   final Ref ref;
 
   Timer? _debounceTimer;
-  Isolate? _computeIsolate;
-  ReceivePort? _receivePort;
 
   ClusterNotifier({
     required this.config,
@@ -243,8 +240,6 @@ class ClusterNotifier extends StateNotifier<ClusterState> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
-    _receivePort?.close();
-    _computeIsolate?.kill(priority: Isolate.immediate);
     super.dispose();
   }
 }

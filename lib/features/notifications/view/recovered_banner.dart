@@ -152,4 +152,3 @@ class _RecoveredEventsBannerState extends ConsumerState<RecoveredEventsBanner> {
     super.dispose();
   }
 }
-

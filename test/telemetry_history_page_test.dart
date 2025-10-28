@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
+import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_page.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_provider.dart';
 
@@ -10,7 +10,7 @@ void main() {
       (tester) async {
     final container = ProviderContainer(overrides: [
       telemetryHistoryProvider
-          .overrideWith((ref, deviceId) async => <TelemetryRecord>[]),
+          .overrideWith((ref, deviceId) async => <TelemetrySample>[]),
     ],);
     addTearDown(container.dispose);
 

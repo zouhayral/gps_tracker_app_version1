@@ -10,7 +10,6 @@ void main() {
       cache = GeofenceStateCache(
         ttl: const Duration(hours: 1),
         autoPruneInterval: const Duration(seconds: 10),
-        enableStatistics: true,
       );
     });
 
@@ -402,7 +401,7 @@ void main() {
             deviceId: 'device${i % 10}',
             geofenceId: 'geo$i',
             geofenceName: 'Test',
-            isInside: i % 2 == 0,
+            isInside: i.isEven,
             lastSeenTimestamp: DateTime.now(),
           );
           cache.set('device${i % 10}', 'geo$i', state);
@@ -493,7 +492,6 @@ void main() {
         final shortTtlCache = GeofenceStateCache(
           ttl: const Duration(milliseconds: 100),
           autoPruneInterval: const Duration(seconds: 10),
-          enableStatistics: true,
         );
 
         final state = GeofenceState(
@@ -557,13 +555,10 @@ void main() {
         final shortTtlCache = GeofenceStateCache(
           ttl: const Duration(milliseconds: 100),
           autoPruneInterval: const Duration(milliseconds: 200),
-          enableStatistics: true,
         );
 
         final receivedStats = <CacheStatistics>[];
-        shortTtlCache.statsStream.listen((stats) {
-          receivedStats.add(stats);
-        });
+        shortTtlCache.statsStream.listen(receivedStats.add);
 
         final state = GeofenceState(
           deviceId: 'device1',
@@ -692,9 +687,9 @@ void main() {
         updates: 5,
         removals: 2,
         evictions: 3,
-        hitRate: 75.0,
-        missRate: 25.0,
-        averageStatesPerDevice: 5.0,
+        hitRate: 75,
+        missRate: 25,
+        averageStatesPerDevice: 5,
       );
 
       final str = stats.toString();

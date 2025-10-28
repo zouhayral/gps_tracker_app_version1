@@ -922,6 +922,12 @@ abstract class AppLocalizations {
   /// **'Vehicle moving'**
   String get vehicleMoving;
 
+  /// No description provided for @vehicleStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Vehicle started'**
+  String get vehicleStarted;
+
   /// No description provided for @unknownDevice.
   ///
   /// In en, this message translates to:

@@ -6,9 +6,9 @@ import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/trips/models/trip_filter.dart';
 import 'package:my_app_gps/features/trips/trip_details_page.dart';
 import 'package:my_app_gps/features/trips/widgets/trip_filter_dialog.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/providers/trip_auto_refresh_registrar.dart';
 import 'package:my_app_gps/providers/trip_providers.dart';
-import 'package:my_app_gps/l10n/app_localizations.dart';
 
 class TripsPage extends ConsumerStatefulWidget {
   const TripsPage({this.deviceId, super.key});

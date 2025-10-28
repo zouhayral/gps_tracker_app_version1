@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
-
 import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/analytics/controller/analytics_notifier.dart';
 import 'package:my_app_gps/features/analytics/controller/analytics_providers.dart';
@@ -13,6 +11,7 @@ import 'package:my_app_gps/features/analytics/widgets/stat_card.dart';
 import 'package:my_app_gps/features/analytics/widgets/trip_bar_chart.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/l10n/app_localizations.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Main analytics dashboard page showing comprehensive tracker statistics.
 ///
@@ -25,6 +24,11 @@ class AnalyticsPage extends ConsumerStatefulWidget {
 }
 
 class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
+  String? _lastPeriod;
+  int? _lastDeviceId;
+  DateTime? _lastSelectedDate;
+  DateTimeRange? _lastDateRange;
+
   @override
   void initState() {
     super.initState();
@@ -91,20 +95,18 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     }
 
     final period = ref.read(reportPeriodProvider);
+    final selectedDate = ref.read(selectedDateProvider);
     final notifier = ref.read(analyticsNotifierProvider.notifier);
 
-    AppLogger.debug('Loading $period report for device $deviceId');
+    AppLogger.debug('Loading $period report for device $deviceId with date: $selectedDate');
 
     switch (period) {
       case 'daily':
-        notifier.loadDaily(deviceId);
-        break;
+        notifier.loadDaily(deviceId, date: selectedDate);
       case 'weekly':
-        notifier.loadWeekly(deviceId);
-        break;
+        notifier.loadWeekly(deviceId, endDate: selectedDate);
       case 'monthly':
-        notifier.loadMonthly(deviceId);
-        break;
+        notifier.loadMonthly(deviceId, endDate: selectedDate);
       case 'custom':
         final dateRange = ref.read(dateRangeProvider);
         if (dateRange != null) {
@@ -115,9 +117,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           );
         } else {
           // Fallback to daily if custom range not set
-          notifier.loadDaily(deviceId);
+          notifier.loadDaily(deviceId, date: selectedDate);
         }
-        break;
     }
   }
 
@@ -227,7 +228,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           end: DateTime.now(),
         );
 
-    final DateTimeRange? picked = await showDateRangePicker(
+    final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now(),
@@ -250,24 +251,62 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     }
   }
 
+  Future<void> _selectSingleDate() async {
+    final currentDate = ref.read(selectedDateProvider) ?? DateTime.now();
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: currentDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: const Color(0xFFb4e15c),
+                ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      ref.read(selectedDateProvider.notifier).state = picked;
+      // No need to call _loadReport() as the listener will trigger it
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
 
-    // Listen to period changes and reload
-    ref.listen<String>(reportPeriodProvider, (previous, next) {
-      if (previous != next) {
-        _loadReport();
-      }
-    });
+    // Check if key values changed and reload
+    final currentPeriod = ref.watch(reportPeriodProvider);
+    final currentDeviceId = ref.watch(selectedDeviceIdProvider);
+    final currentDate = ref.watch(selectedDateProvider);
+    final currentDateRange = ref.watch(dateRangeProvider);
 
-    // Listen to device changes and reload
-    ref.listen<int?>(selectedDeviceIdProvider, (previous, next) {
-      if (previous != next && next != null) {
-        _loadReport();
-      }
-    });
+    // Trigger reload if values changed
+    if (_lastPeriod != null && _lastPeriod != currentPeriod) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadReport());
+    }
+    if (_lastDeviceId != null && _lastDeviceId != currentDeviceId && currentDeviceId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadReport());
+    }
+    if (_lastSelectedDate != currentDate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadReport());
+    }
+    if (_lastDateRange != currentDateRange) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadReport());
+    }
+
+    // Update last values
+    _lastPeriod = currentPeriod;
+    _lastDeviceId = currentDeviceId;
+    _lastSelectedDate = currentDate;
+    _lastDateRange = currentDateRange;
 
     return Scaffold(
       appBar: AppBar(
@@ -357,7 +396,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   
                   // Show date picker for custom period
                   if (newPeriod == 'custom') {
-                    Future.microtask(() => _selectCustomDateRange());
+                    Future.microtask(_selectCustomDateRange);
                   }
                 },
                 style: ButtonStyle(
@@ -385,7 +424,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -404,14 +443,16 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                           ),
                     ),
                   ),
-                  if (period == 'custom')
-                    IconButton(
-                      icon: const Icon(Icons.edit, size: 16),
-                      onPressed: _selectCustomDateRange,
-                      tooltip: t.editPeriod,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
+                  // Show edit button for all periods
+                  IconButton(
+                    icon: const Icon(Icons.edit_calendar, size: 16),
+                    onPressed: period == 'custom' 
+                      ? _selectCustomDateRange 
+                      : _selectSingleDate,
+                    tooltip: period == 'custom' ? t.editPeriod : 'Select date',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 ],
               ),
             ),
@@ -432,12 +473,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     return devicesAsync.when(
       data: (devices) {
         if (devices.isEmpty) {
-          return Container(
+            return Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
+              color: Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -462,7 +503,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<int>(
-              value: currentDeviceId,
+              initialValue: currentDeviceId,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -500,9 +541,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       error: (error, stack) => Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.1),
+          color: Colors.red.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.red.withOpacity(0.3)),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [
@@ -842,7 +883,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
   // Mock data generators (replace with real data from API in future)
   List<double> _generateSpeedData(String period, AnalyticsReport report) {
-    // TODO: Replace with actual speed data from positions API
+  // TODO(owner): Replace with actual speed data from positions API
     // For now, generate sample data based on avg/max speed
     final avgSpeed = report.avgSpeed;
     final maxSpeed = report.maxSpeed;
@@ -851,13 +892,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     switch (period) {
       case 'daily':
         dataPoints = 24; // Hourly
-        break;
       case 'weekly':
         dataPoints = 7; // Daily
-        break;
       case 'monthly':
         dataPoints = 30; // Daily
-        break;
       default:
         dataPoints = 10;
     }
@@ -877,15 +915,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       case 'daily':
         dataPoints = 24;
         interval = const Duration(hours: 1);
-        break;
       case 'weekly':
         dataPoints = 7;
         interval = const Duration(days: 1);
-        break;
       case 'monthly':
         dataPoints = 30;
         interval = const Duration(days: 1);
-        break;
       default:
         dataPoints = 10;
         interval = Duration(
@@ -903,20 +938,17 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   List<int> _generateTripCounts(String period, AnalyticsReport report) {
-    // TODO: Replace with actual trip distribution data
+  // TODO(owner): Replace with actual trip distribution data
     final totalTrips = report.tripCount;
     
     int bars;
     switch (period) {
       case 'daily':
         bars = 24; // Hourly
-        break;
       case 'weekly':
         bars = 7; // Daily
-        break;
       case 'monthly':
         bars = 4; // Weekly
-        break;
       default:
         bars = 7;
     }
@@ -928,8 +960,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     // Distribute trips across bars (mock distribution)
     final avgPerBar = totalTrips / bars;
     return List.generate(bars, (i) {
-      final variation = (i % 2 == 0) ? 1 : -1;
-      return ((avgPerBar + variation).round()).clamp(0, totalTrips);
+      final variation = i.isEven ? 1 : -1;
+      return (avgPerBar + variation).round().clamp(0, totalTrips);
     });
   }
 

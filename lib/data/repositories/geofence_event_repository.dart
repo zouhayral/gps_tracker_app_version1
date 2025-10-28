@@ -320,15 +320,15 @@ class GeofenceEventRepository {
       final pending = await getPendingEventsForSync();
       
       if (pending.isEmpty) {
-        return SyncResults(successCount: 0, failedCount: 0);
+        return const SyncResults(successCount: 0, failedCount: 0);
       }
 
-      int success = 0;
-      int failed = 0;
+      var success = 0;
+      var failed = 0;
 
       for (final event in pending) {
         try {
-          // TODO: Replace with actual Firestore or API upload
+          // TODO(owner): Replace with actual Firestore or API upload
           await _uploadEvent(event);
           
           // Mark as synced (update syncStatus if you have that field)
@@ -345,13 +345,13 @@ class GeofenceEventRepository {
       return SyncResults(successCount: success, failedCount: failed);
     } catch (e) {
       _log('❌ Failed to sync pending events: $e');
-      return SyncResults(successCount: 0, failedCount: 0);
+      return const SyncResults(successCount: 0, failedCount: 0);
     }
   }
 
   /// Upload a single event to server/Firestore
   /// 
-  /// TODO: Implement actual upload logic (Firestore, REST API, etc.)
+  /// TODO(owner): Implement actual upload logic (Firestore, REST API, etc.)
   Future<void> _uploadEvent(GeofenceEvent event) async {
     // Placeholder for actual upload implementation
     // 
@@ -484,9 +484,7 @@ final geofenceEventRepositoryProvider =
   final repository = GeofenceEventRepository(dao: dao);
 
   // Auto-dispose repository when provider is disposed
-  ref.onDispose(() {
-    repository.dispose();
-  });
+  ref.onDispose(repository.dispose);
 
   return repository;
 });

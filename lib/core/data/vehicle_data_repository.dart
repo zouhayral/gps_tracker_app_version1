@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/data/vehicle_data_cache.dart';
 import 'package:my_app_gps/core/data/vehicle_data_snapshot.dart';
 import 'package:my_app_gps/core/database/dao/telemetry_dao.dart';
-import 'package:my_app_gps/core/database/entities/telemetry_record.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/core/utils/adaptive_render.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
@@ -824,7 +823,7 @@ class VehicleDataRepository {
     // Persist telemetry record (history) - best-effort, ignore failures
     try {
       telemetryDao.put(
-        TelemetryRecord(
+        TelemetrySample(
           deviceId: snapshot.deviceId,
           timestampMs: snapshot.timestamp.toUtc().millisecondsSinceEpoch,
           speed: snapshot.speed,

@@ -1,5 +1,8 @@
-import 'dart:io';
+// Conditional IO import: on web, provide a stub for HttpOverrides
+import 'dart:io' if (dart.library.html) 'package:my_app_gps/utils/io_web.dart' as io;
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -8,15 +11,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_app_gps/app/app_root.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
-import 'package:my_app_gps/core/database/dao/geofences_dao.dart';
-import 'package:my_app_gps/core/database/objectbox_singleton.dart';
+import 'package:my_app_gps/core/notifications/fcm_handler.dart';
+import 'package:my_app_gps/core/notifications/fcm_service.dart';
 import 'package:my_app_gps/core/utils/memory_watchdog.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
-import 'package:my_app_gps/data/repositories/geofence_event_repository.dart'
-    hide geofenceEventRepositoryProvider;
-import 'package:my_app_gps/data/repositories/geofence_repository.dart'
-    hide geofenceRepositoryProvider;
-import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
+// Geofence repositories are provided via Riverpod; no direct imports needed here
 import 'package:my_app_gps/features/geofencing/service/geofence_sync_worker.dart';
 import 'package:my_app_gps/map/fmtc_config.dart';
 import 'package:my_app_gps/map/tile_http_overrides.dart';
@@ -30,6 +29,24 @@ import 'package:workmanager/workmanager.dart' as wm;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize Firebase (skip on web if not configured)
+  try {
+    if (!kIsWeb) {
+      await Firebase.initializeApp();
+      // Register FCM background message handler
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      // ignore: avoid_print
+      print('[FCM] Firebase initialized and background handler registered');
+    } else {
+      // ignore: avoid_print
+      print('[FCM] Firebase skipped on Web platform');
+    }
+  } catch (e) {
+    // ignore: avoid_print
+    print('[FCM][WARN] Firebase initialization failed: $e');
+    // Continue app startup even if Firebase fails
+  }
+
   if (kDebugMode || kProfileMode) {
     debugPrint(
         '[RENDER] Graphics backend: ${RendererBinding.instance.runtimeType}',);
@@ -37,9 +54,13 @@ Future<void> main() async {
 
   // Apply global HTTP overrides to stabilise DNS/SSL/socket stack for FMTC & others
   try {
-    HttpOverrides.global = TileHttpOverrides();
+    if (!kIsWeb) {
+      io.HttpOverrides.global = TileHttpOverrides();
+      // ignore: avoid_print
+      print('[NET] [TileHttpOverrides] Global override active');
+    }
     // ignore: avoid_print
-    print('[NET] [TileHttpOverrides] Global override active');
+    if (kIsWeb) print('[NET] [TileHttpOverrides] Skipped on Web');
   } catch (e) {
     // ignore: avoid_print
     print('[NET][WARN] Failed to set HttpOverrides: $e');
@@ -80,31 +101,7 @@ Future<void> main() async {
     print('Hive init failed or already initialized: $e');
   }
   
-  // ✅ Initialize ObjectBox for geofences BEFORE app launch
-  late final GeofenceRepository geofenceRepo;
-  late final GeofenceEventRepository geofenceEventRepo;
-  try {
-    // ignore: avoid_print
-    print('[OBJECTBOX] Initializing ObjectBox for geofences...');
-    final objectboxStore = await ObjectBoxSingleton.getStore();
-    // ignore: avoid_print
-    print('[OBJECTBOX] ✅ ObjectBox initialized successfully');
-    
-    // Create DAO with ObjectBox store
-    final geofencesDao = GeofencesDaoObjectBox(objectboxStore);
-    // ignore: avoid_print
-    print('[OBJECTBOX] ✅ GeofencesDAO created');
-    
-    // Create repository instances
-    geofenceRepo = GeofenceRepository(dao: geofencesDao);
-    geofenceEventRepo = GeofenceEventRepository(dao: geofencesDao);
-    // ignore: avoid_print
-    print('[OBJECTBOX] ✅ Geofence repositories initialized');
-  } catch (e) {
-    // ignore: avoid_print
-    print('[OBJECTBOX][ERROR] Failed to initialize geofence repositories: $e');
-    rethrow;
-  }
+  // Geofence repositories are created lazily via their Riverpod providers
   
   // Initialize local notification service
   try {
@@ -123,13 +120,38 @@ Future<void> main() async {
     print('[NOTIFICATIONS][ERROR] Failed to initialize notifications: $e');
     // Continue without local notifications (app will still work)
   }
+
+  // Initialize FCM service for foreground push notifications (mobile only)
+  if (!kIsWeb) {
+    try {
+      // ignore: avoid_print
+      print('[FCM] Initializing FCM service for foreground notifications...');
+      await FCMService.instance.initialize();
+      // ignore: avoid_print
+      print('[FCM] ✅ FCM service initialized successfully');
+      
+      // Optionally get and log FCM token for testing
+      final token = await FCMService.instance.getToken();
+      if (token != null) {
+        // ignore: avoid_print
+        print('[FCM] Device token: ${token.substring(0, 20)}...');
+        // TODO: Send token to your backend server for push notifications
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[FCM][ERROR] Failed to initialize FCM service: $e');
+      // Continue without FCM (local notifications still work)
+    }
+  } else {
+    // ignore: avoid_print
+    print('[FCM] Skipped on Web platform');
+  }
   
   // Initialize geofence notification service with background navigation support
-  late final NotificationService geofenceNotificationService;
+  final geofenceNotificationService = NotificationService();
   try {
     // ignore: avoid_print
     print('[GEOFENCE_NOTIFICATIONS] Initializing notification service...');
-    geofenceNotificationService = NotificationService();
     // Initialize with global navigator key for background navigation
     await geofenceNotificationService.init();
     // ignore: avoid_print
@@ -137,38 +159,44 @@ Future<void> main() async {
   } catch (e) {
     // ignore: avoid_print
     print('[GEOFENCE_NOTIFICATIONS][ERROR] Failed to initialize: $e');
-    // Create a fallback instance
-    geofenceNotificationService = NotificationService();
+    // Continue with the already-created instance without reassigning
   }
   
-  // Initialize WorkManager for background geofence sync
-  try {
+  // Initialize WorkManager for background geofence sync (mobile/desktop only)
+  if (!kIsWeb) {
+    try {
+      // ignore: avoid_print
+      print('[WORKMANAGER] Initializing WorkManager...');
+      // ignore: deprecated_member_use
+      await wm.Workmanager().initialize(
+        callbackDispatcher,
+        // ignore: deprecated_member_use
+        isInDebugMode: kDebugMode, // Enable debug logs in debug mode
+      );
+      // ignore: avoid_print
+      print('[WORKMANAGER] ✅ WorkManager initialized successfully');
+      
+      // Register periodic sync task (runs every 15 minutes)
+      await wm.Workmanager().registerPeriodicTask(
+        geofenceSyncTaskId,
+        geofenceSyncTaskKey,
+        frequency: const Duration(minutes: 15),
+        initialDelay: const Duration(minutes: 1),
+        constraints: wm.Constraints(
+          networkType: wm.NetworkType.connected,
+          requiresBatteryNotLow: true,
+        ),
+      );
+      // ignore: avoid_print
+      print('[WORKMANAGER] ✅ Geofence sync task registered (every 15 min)');
+    } catch (e) {
+      // ignore: avoid_print
+      print('[WORKMANAGER][ERROR] Failed to initialize: $e');
+      // Continue without WorkManager (manual sync still works)
+    }
+  } else {
     // ignore: avoid_print
-    print('[WORKMANAGER] Initializing WorkManager...');
-    await wm.Workmanager().initialize(
-      callbackDispatcher,
-      isInDebugMode: kDebugMode, // Enable debug logs in debug mode
-    );
-    // ignore: avoid_print
-    print('[WORKMANAGER] ✅ WorkManager initialized successfully');
-    
-    // Register periodic sync task (runs every 15 minutes)
-    await wm.Workmanager().registerPeriodicTask(
-      geofenceSyncTaskId,
-      geofenceSyncTaskKey,
-      frequency: const Duration(minutes: 15),
-      initialDelay: const Duration(minutes: 1),
-      constraints: wm.Constraints(
-        networkType: wm.NetworkType.connected,
-        requiresBatteryNotLow: true,
-      ),
-    );
-    // ignore: avoid_print
-    print('[WORKMANAGER] ✅ Geofence sync task registered (every 15 min)');
-  } catch (e) {
-    // ignore: avoid_print
-    print('[WORKMANAGER][ERROR] Failed to initialize: $e');
-    // Continue without WorkManager (manual sync still works)
+    print('[WORKMANAGER] Skipped on Web');
   }
   
   // Initialize tile caching (FMTC) with platform-appropriate backend
@@ -276,9 +304,6 @@ Future<void> main() async {
         sharedPreferencesProvider.overrideWithValue(prefs),
         // Override NotificationService provider with initialized instance
         notificationServiceProvider.overrideWithValue(geofenceNotificationService),
-        // ✅ Override geofence repository providers with initialized instances
-        geofenceRepositoryProvider.overrideWith((ref) async => geofenceRepo),
-        geofenceEventRepositoryProvider.overrideWith((ref) async => geofenceEventRepo),
       ],
       // Ensure performance overlay is disabled unless explicitly enabled by the user
       child: Builder(builder: (context) {

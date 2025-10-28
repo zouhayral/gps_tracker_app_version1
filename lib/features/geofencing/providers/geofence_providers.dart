@@ -12,6 +12,7 @@ import 'package:my_app_gps/features/geofencing/service/geofence_notification_bri
 import 'package:my_app_gps/features/geofencing/service/geofence_state_cache.dart';
 import 'package:my_app_gps/services/notification_service.dart';
 
+// ignore_for_file: flutter_style_todos, comment_references
 export 'package:my_app_gps/data/repositories/geofence_event_repository.dart'
     show geofenceEventRepositoryProvider;
 /// Riverpod providers for geofencing functionality.
@@ -68,8 +69,7 @@ export 'package:my_app_gps/data/repositories/geofence_repository.dart'
 /// Handles geometric calculations and state transitions
 final geofenceEvaluatorServiceProvider = Provider<GeofenceEvaluatorService>((ref) {
   return GeofenceEvaluatorService(
-    boundaryToleranceMeters: 5.0,
-    dwellThreshold: const Duration(minutes: 2),
+    
   );
 });
 
@@ -78,13 +78,11 @@ final geofenceEvaluatorServiceProvider = Provider<GeofenceEvaluatorService>((ref
 /// In-memory cache with TTL-based eviction
 final geofenceStateCacheProvider = Provider<GeofenceStateCache>((ref) {
   final cache = GeofenceStateCache(
-    ttl: const Duration(hours: 24),
-    autoPruneInterval: const Duration(minutes: 30),
-    enableStatistics: true,
+    
   );
 
   // Auto-dispose cache when provider is disposed
-  ref.onDispose(() => cache.dispose());
+  ref.onDispose(cache.dispose);
 
   return cache;
 });
@@ -102,13 +100,10 @@ final geofenceMonitorServiceProvider = FutureProvider<GeofenceMonitorService>((r
     cache: ref.watch(geofenceStateCacheProvider),
     eventRepo: eventRepo,
     geofenceRepo: geofenceRepo,
-    minEvalInterval: const Duration(seconds: 5),
-    minMovementMeters: 5.0,
-    cachePruneInterval: const Duration(minutes: 10),
   );
 
   // Auto-dispose monitor when provider is disposed
-  ref.onDispose(() => monitor.dispose());
+  ref.onDispose(monitor.dispose);
 
   return monitor;
 });
@@ -268,8 +263,7 @@ class GeofenceMonitorState {
   const GeofenceMonitorState({
     required this.isActive,
     required this.activeGeofences,
-    this.lastUpdate,
-    required this.eventsTriggered,
+    required this.eventsTriggered, this.lastUpdate,
     this.error,
   });
 
@@ -342,7 +336,6 @@ class GeofenceMonitorController extends StateNotifier<GeofenceMonitorState> {
       state = state.copyWith(
         isActive: true,
         activeGeofences: monitor.activeGeofenceCount,
-        error: null,
       );
     } catch (e) {
       state = state.copyWith(
@@ -373,7 +366,6 @@ class GeofenceMonitorController extends StateNotifier<GeofenceMonitorState> {
       state = state.copyWith(
         isActive: false,
         activeGeofences: 0,
-        error: null,
       );
     } catch (e) {
       state = state.copyWith(
@@ -412,10 +404,8 @@ class GeofenceMonitorController extends StateNotifier<GeofenceMonitorState> {
 ///
 /// Example:
 /// ```dart
-/// Provider for the GeofenceMonitorController
-///
-/// Usage: Ensure monitor service is ready before accessing
-/// ```dart
+/// // Provider for the GeofenceMonitorController
+/// // Usage: Ensure monitor service is ready before accessing
 /// final monitorServiceAsync = ref.watch(geofenceMonitorServiceProvider);
 /// if (monitorServiceAsync.hasValue) {
 ///   final controller = ref.read(geofenceMonitorProvider.notifier);
@@ -429,7 +419,7 @@ final geofenceMonitorProvider =
   
   // Extract the monitor or throw if not ready
   return monitorServiceAsync.maybeWhen(
-    data: (monitor) => GeofenceMonitorController(monitor),
+    data: GeofenceMonitorController.new,
     orElse: () => throw StateError('GeofenceMonitorService not initialized yet. Check monitorServiceAsync.hasValue before accessing.'),
   );
 });

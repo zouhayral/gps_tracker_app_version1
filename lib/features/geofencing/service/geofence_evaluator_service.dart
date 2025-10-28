@@ -132,7 +132,6 @@ class GeofenceEvaluatorService {
         else if (currentState.isInside && !isInside) {
           _activeStates[stateKey] = currentState.copyWith(
             isInside: false,
-            enterTimestamp: null,
             lastSeenTimestamp: timestamp,
             dwellEventSent: false,
           );
@@ -241,10 +240,10 @@ class GeofenceEvaluatorService {
 
   /// Bounding box optimization for polygon checks
   bool _isInBoundingBox(LatLng point, List<LatLng> vertices) {
-    double minLat = vertices[0].latitude;
-    double maxLat = vertices[0].latitude;
-    double minLng = vertices[0].longitude;
-    double maxLng = vertices[0].longitude;
+    var minLat = vertices[0].latitude;
+    var maxLat = vertices[0].latitude;
+    var minLng = vertices[0].longitude;
+    var maxLng = vertices[0].longitude;
 
     for (final vertex in vertices) {
       minLat = math.min(minLat, vertex.latitude);
@@ -441,10 +440,10 @@ class GeofenceEvaluatorService {
   /// Test helper: Check bounding box
   @visibleForTesting
   static bool testBoundingBox(LatLng point, List<LatLng> vertices) {
-    double minLat = vertices[0].latitude;
-    double maxLat = vertices[0].latitude;
-    double minLng = vertices[0].longitude;
-    double maxLng = vertices[0].longitude;
+    var minLat = vertices[0].latitude;
+    var maxLat = vertices[0].latitude;
+    var minLng = vertices[0].longitude;
+    var maxLng = vertices[0].longitude;
 
     for (final vertex in vertices) {
       minLat = math.min(minLat, vertex.latitude);
@@ -532,12 +531,8 @@ class GeofenceState {
   }
 
   @override
-  String toString() => 'GeofenceState('
-      'device: $deviceId, '
-      'geofence: $geofenceName, '
-      'inside: $isInside, '
-      'dwell: ${dwellDuration?.inMinutes ?? 0}m'
-      ')';
+  String toString() =>
+    'GeofenceState(device: $deviceId, geofence: $geofenceName, inside: $isInside, dwell: ${dwellDuration?.inMinutes ?? 0}m)';
 }
 
 // =============================

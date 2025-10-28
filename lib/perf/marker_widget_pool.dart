@@ -25,6 +25,7 @@
 /// // Use marker in widget tree
 /// // When done: pool.release(marker);
 /// ```
+library;
 
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
@@ -37,6 +38,7 @@ enum MarkerTier {
 }
 
 /// Configuration for a marker instance
+@immutable
 class MarkerConfig {
   const MarkerConfig({
     required this.deviceId,
@@ -356,7 +358,7 @@ class MarkerPoolManager {
 
   /// Get or create the global marker pool
   static MarkerWidgetPool get instance {
-    _instance ??= MarkerWidgetPool(maxPerTier: 300);
+    _instance ??= MarkerWidgetPool();
     return _instance!;
   }
 
