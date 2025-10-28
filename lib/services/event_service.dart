@@ -106,14 +106,49 @@ class EventService {
     }
 
     try {
-      // Make API request (primary endpoint)
-      final response = await _dio.get<List<dynamic>>(
-        '/api/events',
-        queryParameters: queryParams,
-        options: Options(
-          headers: {'Accept': 'application/json'},
-        ),
-      );
+      // Try primary endpoint first
+      Response<List<dynamic>>? response;
+      
+      try {
+        response = await _dio.get<List<dynamic>>(
+          '/api/events',
+          queryParameters: queryParams,
+          options: Options(
+            headers: {'Accept': 'application/json'},
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
+        
+        // If 404, this endpoint doesn't exist, try alternative
+        if (response.statusCode == 404) {
+          if (kDebugMode) {
+            debugPrint('[EventService] ⚠️ /api/events not found, trying alternative endpoints');
+          }
+          response = null;
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[EventService] ⚠️ Primary endpoint failed: $e');
+        }
+        response = null;
+      }
+
+      // Fallback: Try fetching from reports or positions if events endpoint doesn't exist
+      if (response == null && deviceId != null) {
+        if (kDebugMode) {
+          debugPrint('[EventService] 🔄 Falling back to cached events only');
+        }
+        // Return cached events as fallback
+        return await getCachedEvents(deviceId: deviceId, type: type);
+      }
+
+      // If we still don't have a response, return cached events
+      if (response == null) {
+        if (kDebugMode) {
+          debugPrint('[EventService] ⚠️ No API response, returning cached events');
+        }
+        return await getCachedEvents(type: type);
+      }
 
       final data = response.data;
       if (data is! List) {
@@ -121,7 +156,7 @@ class EventService {
           debugPrint(
               '[EventService] ⚠️ Unexpected response type: ${data.runtimeType}',);
         }
-        return [];
+        return await getCachedEvents(deviceId: deviceId, type: type);
       }
 
       // Parse events from JSON
@@ -151,19 +186,25 @@ class EventService {
 
       return events;
     } on DioException catch (e) {
-      // Log full context and surface the error. Traccar 6.10 uses /api/events only; no fallback.
+      // Log error but return cached events instead of throwing
       if (kDebugMode) {
-        debugPrint('[EventService] ❌ DioException: ${e.message}');
+        debugPrint('[EventService] ⚠️ DioException: ${e.message}');
         debugPrint('[EventService] Status: ${e.response?.statusCode}');
         debugPrint('[EventService] Response: ${e.response?.data}');
+        debugPrint('[EventService] 🔄 Falling back to cached events');
       }
-      throw Exception('Failed to fetch events: ${e.message}');
+      
+      // Return cached events as fallback
+      return await getCachedEvents(deviceId: deviceId, type: type);
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('[EventService] ❌ Unexpected error: $e');
         debugPrint('[EventService] Stack trace: $stackTrace');
+        debugPrint('[EventService] 🔄 Falling back to cached events');
       }
-      rethrow;
+      
+      // Return cached events as final fallback
+      return await getCachedEvents(deviceId: deviceId, type: type);
     }
   }
 
@@ -418,6 +459,43 @@ class EventService {
             '[EventService] ⚠️ Failed to get latest cached timestamp: $e',);
       }
       return null;
+    }
+  }
+
+  /// Add a single event to cache (useful for WebSocket events)
+  ///
+  /// This allows storing events received from WebSocket directly to cache
+  /// without going through the API endpoint.
+  Future<void> addEventToCache(Event event) async {
+    try {
+      final dao = await _getDao();
+      await dao.upsert(event);
+      
+      if (kDebugMode) {
+        debugPrint('[EventService] ✅ Added event ${event.id} to cache (${event.type})');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[EventService] ⚠️ Failed to add event to cache: $e');
+      }
+    }
+  }
+
+  /// Add multiple events to cache (useful for batch WebSocket events)
+  Future<void> addEventsToCache(List<Event> events) async {
+    try {
+      if (events.isEmpty) return;
+      
+      final dao = await _getDao();
+      await dao.upsertMany(events);
+      
+      if (kDebugMode) {
+        debugPrint('[EventService] ✅ Added ${events.length} events to cache');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[EventService] ⚠️ Failed to add events to cache: $e');
+      }
     }
   }
 

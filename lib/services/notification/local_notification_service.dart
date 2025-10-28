@@ -185,7 +185,7 @@ class LocalNotificationService {
 
     // Respect global notification toggle
     if (!await isNotificationsEnabled()) {
-      _log('� System notification suppressed (toggle OFF)');
+      _log('🔕 System notification suppressed (toggle OFF)');
       return;
     }
 
@@ -195,11 +195,8 @@ class LocalNotificationService {
       return;
     }
 
-    // Only notify for unread critical events
-    if (event.isRead) {
-      _log('⏭️ Skipping notification for read event ${event.id}');
-      return;
-    }
+    // Note: isRead filtering is handled at repository level (_showNotificationsForEvents)
+    // to allow backfilled events to show notifications even if marked as read
 
     try {
       final notificationData = _getNotificationData(event);
