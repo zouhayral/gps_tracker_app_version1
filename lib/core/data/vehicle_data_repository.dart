@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/data/vehicle_data_cache.dart';
@@ -18,6 +19,7 @@ import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
+import 'package:my_app_gps/core/network/reconnection_coordinator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider for cache (requires SharedPreferences) - PUBLIC for override in main
@@ -313,6 +315,16 @@ class VehicleDataRepository {
       // Subscribe to WebSocket updates (connect returns a stream)
       _socketSub = socketService.connect().listen(_handleSocketMessage);
 
+      // Register a resubscription with the centralized reconnection coordinator
+      // to avoid duplicate subscriptions across concurrent reconnects.
+      ReconnectionCoordinator.instance.registerSubscription(
+        'vehicle_data_repository',
+        () async {
+          if (_isDisposed) return;
+          await _resubscribeWebSocket();
+        },
+      );
+
       // Start REST fallback timer (disabled in tests)
       if (!VehicleDataRepository.testMode) {
         _startFallbackPolling();
@@ -325,6 +337,17 @@ class VehicleDataRepository {
 
       _log.debug('Initialized with deferred WebSocket connection');
     });
+  }
+
+  /// Cancel and re-establish the WebSocket subscription safely.
+  Future<void> _resubscribeWebSocket() async {
+    try {
+      await _socketSub?.cancel();
+      _socketSub = socketService.connect().listen(_handleSocketMessage);
+      _log.debug('WebSocket resubscribed (VehicleDataRepository)');
+    } catch (e) {
+      _log.error('Failed to resubscribe WebSocket', error: e);
+    }
   }
 
   /// Expose a stream of raw event maps coming from the WebSocket 'events' payload.
@@ -1027,8 +1050,20 @@ class VehicleDataRepository {
       }
 
       _log.debug('✅ Fetched ${positions.length} positions');
-    } catch (e) {
-      _log.error('Parallel fetch error', error: e);
+    } on FormatException catch (e) {
+      // JSON parsing errors - likely server returning HTML error page
+      // This is a common issue when API endpoint returns error HTML
+      _log.debug('Invalid response format during parallel fetch (likely HTML error page): ${e.message}');
+    } on DioException catch (e) {
+      // Network errors - log at debug level (expected in some scenarios)
+      if (e.response?.statusCode != null) {
+        _log.debug('HTTP ${e.response?.statusCode} error during parallel fetch');
+      } else {
+        _log.debug('Network error during parallel fetch: ${e.type}');
+      }
+    } catch (e, st) {
+      // Unexpected errors only
+      _log.error('Unexpected parallel fetch error', error: e, stackTrace: st);
     }
   }
 
@@ -1271,6 +1306,9 @@ class VehicleDataRepository {
       return;
     }
     _isDisposed = true;
+
+    // Unregister reconnection resubscription
+    ReconnectionCoordinator.instance.unregisterSubscription('vehicle_data_repository');
 
     _socketSub?.cancel();
     _fallbackTimer?.cancel();

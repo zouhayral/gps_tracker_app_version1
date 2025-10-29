@@ -83,8 +83,10 @@ class TripsDaoWeb implements TripsDaoBase {
   Future<List<Trip>> getByDeviceInRange(
     int deviceId,
     DateTime startTime,
-    DateTime endTime,
-  ) async {
+    DateTime endTime, {
+    int? limit,
+    int? offset,
+  }) async {
     final b = await _box();
     final startMs = startTime.toUtc().millisecondsSinceEpoch;
     final endMs = endTime.toUtc().millisecondsSinceEpoch;
@@ -97,7 +99,37 @@ class TripsDaoWeb implements TripsDaoBase {
       }
     }
     res.sort((a, b) => b.startTime.compareTo(a.startTime));
+    
+    // Apply pagination if specified
+    if (limit != null) {
+      final start = offset ?? 0;
+      final end = (start + limit).clamp(0, res.length);
+      return res.sublist(start.clamp(0, res.length), end);
+    }
+    
     return res;
+  }
+
+  @override
+  Future<int> countByDeviceInRange(
+    int deviceId,
+    DateTime startTime,
+    DateTime endTime,
+  ) async {
+    final b = await _box();
+    final startMs = startTime.toUtc().millisecondsSinceEpoch;
+    final endMs = endTime.toUtc().millisecondsSinceEpoch;
+    
+    var count = 0;
+    for (final j in b.values) {
+      if (j['deviceId'] == deviceId) {
+        final s = (j['startTimeMs'] as num).toInt();
+        final e = (j['endTimeMs'] as num).toInt();
+        if (s >= startMs && e <= endMs) count++;
+      }
+    }
+    
+    return count;
   }
 
   @override

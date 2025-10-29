@@ -13,6 +13,7 @@ import 'package:my_app_gps/app/app_root.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
 import 'package:my_app_gps/core/notifications/fcm_handler.dart';
 import 'package:my_app_gps/core/notifications/fcm_service.dart';
+import 'package:my_app_gps/core/services/connection_notification_service.dart';
 import 'package:my_app_gps/core/utils/memory_watchdog.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 // Geofence repositories are provided via Riverpod; no direct imports needed here
@@ -102,6 +103,19 @@ Future<void> main() async {
   }
   
   // Geofence repositories are created lazily via their Riverpod providers
+  
+  // Initialize connection notification service for WebSocket status updates
+  try {
+    // ignore: avoid_print
+    print('[CONNECTION_NOTIFICATIONS] Initializing connection notification service...');
+    await ConnectionNotificationService.instance.init();
+    // ignore: avoid_print
+    print('[CONNECTION_NOTIFICATIONS] ✅ Connection notification service initialized');
+  } catch (e) {
+    // ignore: avoid_print
+    print('[CONNECTION_NOTIFICATIONS][ERROR] Failed to initialize: $e');
+    // Continue without connection notifications (app will still work)
+  }
   
   // Initialize local notification service
   try {

@@ -180,7 +180,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get time => 'Temps';
 
   @override
-  String get speed => 'Vitesse';
+  String get speed => 'Vitesse (km/h)';
 
   @override
   String get numberOfTrips => 'Nombre de trajets';
@@ -282,13 +282,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get noDevicesFound => 'Aucun appareil trouvé';
 
   @override
-  String get engineAndMovement => 'Moteur et Mouvement';
+  String get engineAndMovement => 'Moteur et mouvement';
 
   @override
   String get engine => 'Moteur';
 
   @override
-  String get lastLocation => 'Dernière Position';
+  String get speedKmh => 'Vitesse (km/h)';
+
+  @override
+  String get lastLocation => 'Dernière position';
 
   @override
   String get coordinates => 'Coordonnées';

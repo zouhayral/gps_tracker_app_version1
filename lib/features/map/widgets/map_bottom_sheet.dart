@@ -52,7 +52,7 @@ class MapBottomSheet extends StatefulWidget {
 
 class MapBottomSheetState extends State<MapBottomSheet>
     with SingleTickerProviderStateMixin {
-  late double _fraction;
+  late final ValueNotifier<double> _fractionNotifier;
   double _dragStart = 0;
   double _startFraction = 0;
   bool _isDragging = false;
@@ -62,10 +62,18 @@ class MapBottomSheetState extends State<MapBottomSheet>
   @override
   void initState() {
     super.initState();
-    _fraction = widget.initialFraction.clamp(
-      widget.minFraction,
-      widget.maxFraction,
+    _fractionNotifier = ValueNotifier<double>(
+      widget.initialFraction.clamp(
+        widget.minFraction,
+        widget.maxFraction,
+      ),
     );
+  }
+
+  @override
+  void dispose() {
+    _fractionNotifier.dispose();
+    super.dispose();
   }
 
   /// Programmatically expand the sheet to maximum height with spring animation
@@ -73,7 +81,7 @@ class MapBottomSheetState extends State<MapBottomSheet>
     _animDuration = const Duration(milliseconds: 280);
     _animCurve = Curves.easeOutBack;
     HapticFeedback.selectionClick();
-    setState(() => _fraction = widget.maxFraction);
+    _fractionNotifier.value = widget.maxFraction;
   }
 
   /// Programmatically collapse the sheet to minimum height with spring animation
@@ -81,18 +89,18 @@ class MapBottomSheetState extends State<MapBottomSheet>
     _animDuration = const Duration(milliseconds: 280);
     _animCurve = Curves.easeOutBack;
     HapticFeedback.selectionClick();
-    setState(() => _fraction = widget.minFraction);
+    _fractionNotifier.value = widget.minFraction;
   }
 
   /// Check if the sheet is currently expanded
-  bool get isExpanded => _fraction >= (widget.minFraction + widget.maxFraction) / 2;
+  bool get isExpanded => _fractionNotifier.value >= (widget.minFraction + widget.maxFraction) / 2;
 
   /// Check if the sheet is currently collapsed
   bool get isCollapsed => !isExpanded;
 
   void _onDragStart(DragStartDetails d) {
     _dragStart = d.globalPosition.dy;
-    _startFraction = _fraction;
+    _startFraction = _fractionNotifier.value;
     _isDragging = true;
     // Instant reaction while dragging - no animation delay
     _animDuration = Duration.zero;
@@ -106,7 +114,8 @@ class MapBottomSheetState extends State<MapBottomSheet>
       widget.minFraction,
       widget.maxFraction,
     );
-    setState(() => _fraction = newFraction);
+    // Direct value update - no setState, no full rebuild
+    _fractionNotifier.value = newFraction;
   }
 
   void _onDragEnd(DragEndDetails d) {
@@ -124,30 +133,29 @@ class MapBottomSheetState extends State<MapBottomSheet>
     } else {
       // Slow drag -> snap to nearest state
       final midpoint = (widget.minFraction + widget.maxFraction) / 2;
-      target = (_fraction < midpoint) ? widget.minFraction : widget.maxFraction;
+      target = (_fractionNotifier.value < midpoint) ? widget.minFraction : widget.maxFraction;
     }
 
     HapticFeedback.selectionClick();
     // Smooth settle after drag ends
     _animDuration = const Duration(milliseconds: 220);
     _animCurve = Curves.easeOutCubic;
-    setState(() => _fraction = target);
+    _fractionNotifier.value = target;
   }
 
   void _onTap() {
     final midpoint = (widget.minFraction + widget.maxFraction) / 2;
-    final target = (_fraction < midpoint) ? widget.maxFraction : widget.minFraction;
+    final target = (_fractionNotifier.value < midpoint) ? widget.maxFraction : widget.minFraction;
     HapticFeedback.selectionClick();
     _animDuration = const Duration(milliseconds: 260);
     _animCurve = Curves.easeOutBack;
-    setState(() => _fraction = target);
+    _fractionNotifier.value = target;
   }
 
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final midpoint = (widget.minFraction + widget.maxFraction) / 2;
-    final isExpanded = _fraction > midpoint;
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -157,60 +165,67 @@ class MapBottomSheetState extends State<MapBottomSheet>
         onVerticalDragEnd: _onDragEnd,
         onTap: _onTap,
         behavior: HitTestBehavior.translucent,
-        child: AnimatedContainer(
-          duration: _animDuration,
-          curve: _animCurve,
-          height: screenHeight * _fraction,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: widget.borderColor, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 10,
-                offset: const Offset(0, -3),
-              ),
-            ],
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final available = constraints.biggest.height;
-              // Adapt the grab handle size/margins to avoid overflow on tiny heights
-              final handleHeight = available.clamp(0, double.infinity) * 0.15;
-              final safeHandleHeight = handleHeight.clamp(2.0, 8.0);
-              final handleVMargin = (available * 0.10).clamp(4.0, 10.0);
+        child: ValueListenableBuilder<double>(
+          valueListenable: _fractionNotifier,
+          builder: (context, fraction, child) {
+            final isExpanded = fraction > midpoint;
 
-              return Column(
-                children: [
-                  SizedBox(height: handleVMargin),
-                  // Drag handle that changes color based on state
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 56,
-                    height: safeHandleHeight,
-                    decoration: BoxDecoration(
-                      color: isExpanded
-                          ? widget.expandedColor
-                          : widget.collapsedColor,
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                  ),
-                  SizedBox(height: handleVMargin),
-                  // Ensure content never overflows: make it scrollable when space is tight
-                  Expanded(
-                    child: ClipRect(
-                      child: SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        child: widget.child,
-                      ),
-                    ),
+            return AnimatedContainer(
+              duration: _animDuration,
+              curve: _animCurve,
+              height: screenHeight * fraction,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border.all(color: widget.borderColor, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, -3),
                   ),
                 ],
-              );
-            },
-          ),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final available = constraints.biggest.height;
+                  // Adapt the grab handle size/margins to avoid overflow on tiny heights
+                  final handleHeight = available.clamp(0, double.infinity) * 0.15;
+                  final safeHandleHeight = handleHeight.clamp(2.0, 8.0);
+                  final handleVMargin = (available * 0.10).clamp(4.0, 10.0);
+
+                  return Column(
+                    children: [
+                      SizedBox(height: handleVMargin),
+                      // Drag handle that changes color based on state
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 56,
+                        height: safeHandleHeight,
+                        decoration: BoxDecoration(
+                          color: isExpanded
+                              ? widget.expandedColor
+                              : widget.collapsedColor,
+                          borderRadius: BorderRadius.circular(40),
+                        ),
+                      ),
+                      SizedBox(height: handleVMargin),
+                      // Ensure content never overflows: make it scrollable when space is tight
+                      Expanded(
+                        child: ClipRect(
+                          child: SingleChildScrollView(
+                            physics: const ClampingScrollPhysics(),
+                            padding: EdgeInsets.zero,
+                            child: widget.child,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            );
+          },
         ),
       ),
     );

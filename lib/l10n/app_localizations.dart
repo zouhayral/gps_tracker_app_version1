@@ -145,7 +145,7 @@ abstract class AppLocalizations {
   /// No description provided for @avgSpeed.
   ///
   /// In en, this message translates to:
-  /// **'Avg Speed'**
+  /// **'Avg. Speed'**
   String get avgSpeed;
 
   /// No description provided for @maxSpeed.
@@ -439,7 +439,7 @@ abstract class AppLocalizations {
   /// No description provided for @speed.
   ///
   /// In en, this message translates to:
-  /// **'Speed'**
+  /// **'Speed (km/h)'**
   String get speed;
 
   /// No description provided for @numberOfTrips.
@@ -511,7 +511,7 @@ abstract class AppLocalizations {
   /// No description provided for @allDevices.
   ///
   /// In en, this message translates to:
-  /// **'All Devices'**
+  /// **'All devices'**
   String get allDevices;
 
   /// No description provided for @noUpdateYet.
@@ -627,6 +627,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Engine'**
   String get engine;
+
+  /// No description provided for @speedKmh.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed (km/h)'**
+  String get speedKmh;
 
   /// No description provided for @lastLocation.
   ///

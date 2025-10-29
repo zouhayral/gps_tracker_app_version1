@@ -30,7 +30,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get distance => 'Distance';
 
   @override
-  String get avgSpeed => 'Avg Speed';
+  String get avgSpeed => 'Avg. Speed';
 
   @override
   String get maxSpeed => 'Max Speed';
@@ -179,7 +179,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get time => 'Time';
 
   @override
-  String get speed => 'Speed';
+  String get speed => 'Speed (km/h)';
 
   @override
   String get numberOfTrips => 'Number of trips';
@@ -224,7 +224,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationsTitle => 'Alerts';
 
   @override
-  String get allDevices => 'All Devices';
+  String get allDevices => 'All devices';
 
   @override
   String get noUpdateYet => 'No update yet';
@@ -283,6 +283,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get engine => 'Engine';
+
+  @override
+  String get speedKmh => 'Speed (km/h)';
 
   @override
   String get lastLocation => 'Last Location';

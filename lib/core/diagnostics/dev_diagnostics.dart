@@ -151,4 +151,85 @@ class DevDiagnostics {
     if (!kDebugMode) return;
     filterComputeMs.value = ms;
   }
+  
+  // ============================================================================
+  // TRIP PERFORMANCE METRICS (Phase 2 Optimization)
+  // ============================================================================
+  
+  final ValueNotifier<int> tripCacheHits = ValueNotifier<int>(0);
+  final ValueNotifier<int> tripCacheMisses = ValueNotifier<int>(0);
+  final ValueNotifier<int> tripApiCalls = ValueNotifier<int>(0);
+  final ValueNotifier<int> tripDbQueries = ValueNotifier<int>(0);
+  final ValueNotifier<int> tripLoadTimeMs = ValueNotifier<int>(0);
+  
+  Stopwatch? _tripLoadTimer;
+  
+  /// Start measuring trip load time
+  void startTripLoad() {
+    if (!kDebugMode) return;
+    _tripLoadTimer = Stopwatch()..start();
+  }
+  
+  /// Stop measuring and record trip load time
+  void endTripLoad() {
+    if (!kDebugMode) return;
+    if (_tripLoadTimer != null) {
+      _tripLoadTimer!.stop();
+      tripLoadTimeMs.value = _tripLoadTimer!.elapsedMilliseconds;
+      debugPrint('[TripMetrics] ⏱️ Load time: ${_tripLoadTimer!.elapsedMilliseconds}ms');
+      _tripLoadTimer!.reset();
+    }
+  }
+  
+  /// Record cache hit
+  void recordTripCacheHit() {
+    if (!kDebugMode) return;
+    tripCacheHits.value += 1;
+  }
+  
+  /// Record cache miss
+  void recordTripCacheMiss() {
+    if (!kDebugMode) return;
+    tripCacheMisses.value += 1;
+  }
+  
+  /// Record API call
+  void recordTripApiCall() {
+    if (!kDebugMode) return;
+    tripApiCalls.value += 1;
+  }
+  
+  /// Record database query
+  void recordTripDbQuery() {
+    if (!kDebugMode) return;
+    tripDbQueries.value += 1;
+  }
+  
+  /// Get trip cache hit rate as percentage
+  double get tripCacheHitRate {
+    final total = tripCacheHits.value + tripCacheMisses.value;
+    if (total == 0) return 0.0;
+    return (tripCacheHits.value / total) * 100;
+  }
+  
+  /// Get trip metrics summary
+  Map<String, dynamic> get tripMetricsSummary => {
+    'cache_hit_rate': '${tripCacheHitRate.toStringAsFixed(1)}%',
+    'cache_hits': tripCacheHits.value,
+    'cache_misses': tripCacheMisses.value,
+    'api_calls': tripApiCalls.value,
+    'db_queries': tripDbQueries.value,
+    'last_load_time_ms': tripLoadTimeMs.value,
+  };
+  
+  /// Reset trip metrics
+  void resetTripMetrics() {
+    if (!kDebugMode) return;
+    tripCacheHits.value = 0;
+    tripCacheMisses.value = 0;
+    tripApiCalls.value = 0;
+    tripDbQueries.value = 0;
+    tripLoadTimeMs.value = 0;
+    debugPrint('[TripMetrics] 🔄 Metrics reset');
+  }
 }

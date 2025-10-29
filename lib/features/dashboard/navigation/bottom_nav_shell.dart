@@ -54,20 +54,38 @@ class _BottomNavShellState extends ConsumerState<BottomNavShell> {
               label: t.settingsTitle,
             ),
           ],
-          onDestinationSelected: (i) {
+          onDestinationSelected: (i) async {
+            debugPrint('[BottomNav] Destination $i selected (current: $currentIndex)');
+            
             // If there's a modal route on top (like fullscreen trip map), pop it first
             if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
+              debugPrint('[BottomNav] Popping modal route before navigation');
+              await Navigator.of(context).maybePop();
+              // Wait for navigation animation to complete
+              await Future<void>.delayed(const Duration(milliseconds: 100));
+            }
+            
+            // Check if we're already on the target route
+            if ((i == 0 && currentIndex == 0) ||
+                (i == 1 && currentIndex == 1) ||
+                (i == 2 && currentIndex == 2) ||
+                (i == 3 && currentIndex == 3)) {
+              debugPrint('[BottomNav] Already on target tab, skipping navigation');
+              return; // Already on this tab
             }
             
             switch (i) {
               case 0:
+                debugPrint('[BottomNav] Navigating to Map');
                 context.safeGo(AppRoutes.map);
               case 1:
+                debugPrint('[BottomNav] Navigating to Trips');
                 context.safeGo(AppRoutes.trips);
               case 2:
+                debugPrint('[BottomNav] Navigating to Alerts');
                 context.safeGo(AppRoutes.alerts);
               case 3:
+                debugPrint('[BottomNav] Navigating to Settings');
                 context.safeGo(AppRoutes.settings);
             }
           },

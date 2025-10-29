@@ -132,6 +132,8 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
 
   @override
   Widget build(BuildContext context) {
+    // Use simplified polyline provider for better performance
+    final polylineAsync = ref.watch(tripSimplifiedPolylineProvider(widget.trip));
     final positionsAsync = ref.watch(tripPositionsProvider(widget.trip));
     final playback = ref.watch(tripPlaybackProvider);
     final tileSource = ref.watch(mapTileSourceProvider);
@@ -175,167 +177,186 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
             _TripStatRow(icon: Icons.flag, label: 'End Time', value: widget.trip.formattedEndTime),
             const SizedBox(height: 20),
 
-            // Map Card
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: SizedBox(
+            // Map Card - Optimized with Material elevation
+            Material(
+              elevation: 4,  // Hardware-accelerated shadow (much cheaper than BoxShadow)
+              borderRadius: BorderRadius.circular(20),
+              clipBehavior: Clip.none,  // No clipping on repainting map
+              color: Colors.white,
+              child: Container(
                 height: 300,
-                child: positionsAsync.when(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.grey.shade200,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: positionsAsync.when(
                   data: (positions) {
-                    final pts = positions.map((e) => e.toLatLng).toList(growable: false);
-                    // Ensure camera fits to route once when data arrives
-                    if (!_didFit) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
-                      _didFit = true;
-                    }
+                    // Keep full positions for accurate playback calculations
+                    final fullPts = positions.map((e) => e.toLatLng).toList(growable: false);
+                    
+                    return polylineAsync.when(
+                      data: (simplifiedPts) {
+                        // Ensure camera fits to route once when data arrives
+                        if (!_didFit) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(simplifiedPts));
+                          _didFit = true;
+                        }
 
-                    final current = _positionAtProgress(pts, playback.progress);
-                    // Visible layers
-                    const routeYellow = Color(0xFFFFC107); // bright yellow for visibility
-                    final polyline = Polyline(points: pts, strokeWidth: 5, color: routeYellow);
-                    final markers = <Marker>[];
-                    if (pts.isNotEmpty) {
-                      markers.add(
-                        Marker(
-                          point: pts.first,
-                          width: 28,
-                          height: 28,
-                          child: const Icon(Icons.flag, color: Colors.green, size: 24),
-                        ),
-                      );
-                      markers.add(
-                        Marker(
-                          point: pts.last,
-                          width: 28,
-                          height: 28,
-                          child: const Icon(Icons.flag, color: Colors.red, size: 24),
-                        ),
-                      );
-                    }
-                    if (current != null) {
-                      markers.add(
-                        Marker(
-                          point: current,
-                          width: 56,
-                          height: 56,
-                          child: ModernMarkerFlutterMapWidget(
-                            name: '',
-                            online: true,
-                            engineOn: true,
-                            moving: playback.isPlaying,
-                            zoomLevel: _safeZoom(),
-                          ),
-                        ),
-                      );
-                      // Keep camera gently following current marker when playing using animated controller
-                      if (playback.isPlaying) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) => _moveCameraSmooth(current));
-                      }
-                    }
-
-                    // Build FlutterMap with base tiles + polyline + markers
-                    final sep = tileSource.urlTemplate.contains('?') ? '&' : '?';
-                    final url = '${tileSource.urlTemplate}${sep}_v=$ts';
-
-                    return Stack(
-                      children: [
-                        FlutterMap(
-                          mapController: _animatedMapController.mapController,
-                          options: const MapOptions(
-                            initialCenter: LatLng(0, 0),
-                            initialZoom: 2,
-                            maxZoom: 18,
-                          ),
-                          children: [
-                            TileLayer(
-                              key: ValueKey('trip_tiles_${tileSource.id}_${url.hashCode}_$ts'),
-                              urlTemplate: url,
-                              userAgentPackageName: TileNetworkClient.userAgent,
-                              maxZoom: tileSource.maxZoom.toDouble(),
-                              minZoom: tileSource.minZoom.toDouble(),
+                        // Use full positions for accurate playback interpolation
+                        final current = _positionAtProgress(fullPts, playback.progress);
+                        
+                        // Visible layers - use simplified polyline for rendering performance
+                        const routeYellow = Color(0xFFFFC107); // bright yellow for visibility
+                        final polyline = Polyline(points: simplifiedPts, strokeWidth: 5, color: routeYellow);
+                        
+                        final markers = <Marker>[];
+                        if (simplifiedPts.isNotEmpty) {
+                          markers.add(
+                            Marker(
+                              point: simplifiedPts.first,
+                              width: 28,
+                              height: 28,
+                              child: const Icon(Icons.flag, color: Colors.green, size: 24),
                             ),
-                            PolylineLayer(polylines: [polyline]),
-                            if (markers.isNotEmpty) MarkerLayer(markers: markers),
-                          ],
-                        ),
-                        // Fullscreen toggle (top-left)
-                        Positioned(
-                          left: 8,
-                          top: 8,
-                          child: Material(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => TripMapFullscreenPage(trip: widget.trip),
-                                  ),
-                                );
-                              },
-                              child: const Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Icon(Icons.fullscreen, color: Colors.black87),
+                          );
+                          markers.add(
+                            Marker(
+                              point: simplifiedPts.last,
+                              width: 28,
+                              height: 28,
+                              child: const Icon(Icons.flag, color: Colors.red, size: 24),
+                            ),
+                          );
+                        }
+                        if (current != null) {
+                          markers.add(
+                            Marker(
+                              point: current,
+                              width: 56,
+                              height: 56,
+                              child: ModernMarkerFlutterMapWidget(
+                                name: '',
+                                online: true,
+                                engineOn: true,
+                                moving: playback.isPlaying,
+                                zoomLevel: _safeZoom(),
                               ),
                             ),
-                          ),
-                        ),
-                        // Attribution pill
-                        Positioned(
-                          right: 8,
-                          bottom: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(6),
+                          );
+                          // Keep camera gently following current marker when playing using animated controller
+                          if (playback.isPlaying) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) => _moveCameraSmooth(current));
+                          }
+                        }
+
+                        // Build FlutterMap with base tiles + polyline + markers
+                        final sep = tileSource.urlTemplate.contains('?') ? '&' : '?';
+                        final url = '${tileSource.urlTemplate}${sep}_v=$ts';
+
+                        return Stack(
+                          children: [
+                            FlutterMap(
+                              mapController: _animatedMapController.mapController,
+                              options: const MapOptions(
+                                initialCenter: LatLng(0, 0),
+                                initialZoom: 2,
+                                maxZoom: 18,
+                              ),
+                              children: [
+                                TileLayer(
+                                  key: ValueKey('trip_tiles_${tileSource.id}_${url.hashCode}_$ts'),
+                                  urlTemplate: url,
+                                  userAgentPackageName: TileNetworkClient.userAgent,
+                                  maxZoom: tileSource.maxZoom.toDouble(),
+                                  minZoom: tileSource.minZoom.toDouble(),
+                                ),
+                                PolylineLayer(polylines: [polyline]),
+                                if (markers.isNotEmpty) MarkerLayer(markers: markers),
+                              ],
                             ),
-                            child: Text(
-                              tileSource.attribution,
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        // Follow toggle chip
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Material(
-                            color: accent.withValues(alpha: 0.92),
-                            clipBehavior: Clip.antiAlias,
-                            borderRadius: BorderRadius.circular(20),
-                            child: InkWell(
-                              onTap: () => setState(() => _follow = !_follow),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _follow ? Icons.my_location : Icons.location_disabled,
-                                      color: Colors.white,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    const Text(
-                                      'Follow',
-                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                    ),
-                                  ],
+                            // Fullscreen toggle (top-left)
+                            Positioned(
+                              left: 8,
+                              top: 8,
+                              child: Material(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                shape: const CircleBorder(),
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => TripMapFullscreenPage(trip: widget.trip),
+                                      ),
+                                    );
+                                  },
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Icon(Icons.fullscreen, color: Colors.black87),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      ],
+                            // Attribution pill
+                            Positioned(
+                              right: 8,
+                              bottom: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  tileSource.attribution,
+                                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                                ),
+                              ),
+                            ),
+                            // Follow toggle chip
+                            Positioned(
+                              right: 8,
+                              top: 8,
+                              child: Material(
+                                color: accent.withValues(alpha: 0.92),
+                                clipBehavior: Clip.antiAlias,
+                                borderRadius: BorderRadius.circular(20),
+                                child: InkWell(
+                                  onTap: () => setState(() => _follow = !_follow),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _follow ? Icons.my_location : Icons.location_disabled,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        const Text(
+                                          'Follow',
+                                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (Object e, StackTrace st) => Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text('Failed to load simplified polyline: $e'),
+                      ),
                     );
                   },
                   loading: () => const Center(child: CircularProgressIndicator()),
@@ -344,22 +365,20 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                     child: Text('Failed to load trip positions: $e'),
                   ),
                 ),
+                ),
               ),
             ),
 
             const SizedBox(height: 20),
 
-            // Floating playback bar (capsule)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(50),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3)),
-                ],
-              ),
-              child: IconTheme(
+            // Floating playback bar (capsule) - Optimized with Material elevation
+            Material(
+              elevation: 3,  // Hardware-accelerated shadow
+              borderRadius: BorderRadius.circular(50),
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: IconTheme(
                 data: const IconThemeData(color: Colors.black87),
                 child: SliderTheme(
                   data: SliderTheme.of(context).copyWith(
@@ -373,6 +392,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                   ),
                 ),
               ),
+            ),
             ),
             ],
           ),
@@ -465,6 +485,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
   Widget build(BuildContext context) {
     final playback = ref.watch(tripPlaybackProvider);
     final positionsAsync = ref.watch(tripPositionsProvider(widget.trip));
+    final polylineAsync = ref.watch(tripSimplifiedPolylineProvider(widget.trip));
     final tileSource = ref.watch(mapTileSourceProvider);
     final ts = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
     const accent = Color(0xFF5C6B2F);
@@ -474,24 +495,31 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
       body: SafeArea(
         child: positionsAsync.when(
           data: (positions) {
-            final pts = positions.map((e) => e.toLatLng).toList(growable: false);
-            if (!_didFit) {
-              WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(pts));
-              _didFit = true;
-            }
-            final current = _positionAtProgress(pts, playback.progress);
+            // Keep full positions for accurate playback calculations
+            final fullPts = positions.map((e) => e.toLatLng).toList(growable: false);
+            
+            return polylineAsync.when(
+              data: (simplifiedPts) {
+                if (!_didFit) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFitBounds(simplifiedPts));
+                  _didFit = true;
+                }
+                // Use full positions for accurate playback interpolation
+                final current = _positionAtProgress(fullPts, playback.progress);
 
-            const routeYellow = Color(0xFFFFC107);
-            final polyline = Polyline(points: pts, strokeWidth: 5, color: routeYellow);
-            final markers = <Marker>[];
-            if (pts.isNotEmpty) {
-              markers.add(
-                Marker(point: pts.first, width: 28, height: 28, child: const Icon(Icons.flag, color: Colors.green, size: 24)),
-              );
-              markers.add(
-                Marker(point: pts.last, width: 28, height: 28, child: const Icon(Icons.flag, color: Colors.red, size: 24)),
-              );
-            }
+                // Use simplified polyline for rendering performance
+                const routeYellow = Color(0xFFFFC107);
+                final polyline = Polyline(points: simplifiedPts, strokeWidth: 5, color: routeYellow);
+                
+                final markers = <Marker>[];
+                if (simplifiedPts.isNotEmpty) {
+                  markers.add(
+                    Marker(point: simplifiedPts.first, width: 28, height: 28, child: const Icon(Icons.flag, color: Colors.green, size: 24)),
+                  );
+                  markers.add(
+                    Marker(point: simplifiedPts.last, width: 28, height: 28, child: const Icon(Icons.flag, color: Colors.red, size: 24)),
+                  );
+                }
             if (current != null) {
               double zoom;
               try {
@@ -590,9 +618,18 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
           error: (Object e, StackTrace st) => const Center(
             child: Padding(
               padding: EdgeInsets.all(16),
-              child: Text('Failed to load trip positions', style: TextStyle(color: Colors.white)),
+              child: Text('Failed to load simplified polyline', style: TextStyle(color: Colors.white)),
             ),
           ),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator(color: Colors.white)),
+      error: (Object e, StackTrace st) => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text('Failed to load trip positions', style: TextStyle(color: Colors.white)),
+        ),
+      ),
         ),
       ),
     );

@@ -1063,8 +1063,12 @@ class _MapPageState extends ConsumerState<MapPage>
     
     // MIGRATION NOTE: Removed _posSub.close() and _positionsDebounceTimer - repository manages lifecycle
     _preselectSnackTimer?.cancel();
-  _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
+    _sheetDebounce?.cancel(); // MEMORY LEAK FIX: Cancel sheet debounce timer
+    _debouncedCameraFit?.cancel(); // 7E: Cancel camera fit debounce timer
     _searchDebouncer.cancel();
+    
+    // MEMORY LEAK FIX: Remove focus listener before disposing
+    _focusNode.removeListener(_handleFocusChange);
     _searchCtrl.dispose();
     _focusNode.dispose();
   // No sheet controller to dispose for InstantInfoSheet

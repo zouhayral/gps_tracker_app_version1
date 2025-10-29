@@ -128,17 +128,7 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => context.safePush<void>(AppRoutes.geofences),
           ),
           const Divider(height: 32),
-          // === Localization Test Section ===
-          ListTile(
-            title: Text(
-              t.languageDeveloperTools,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            dense: true,
-          ),
+          // === Language Section ===
           // Language Selector
           Consumer(
             builder: (context, ref, _) {
@@ -192,13 +182,6 @@ class SettingsPage extends ConsumerWidget {
                 },
               );
             },
-          ),
-          ListTile(
-            leading: const Icon(Icons.language, color: Colors.blue),
-            title: Text(t.localeTest),
-            subtitle: Text(t.localeTestSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.safePush<void>(AppRoutes.localeTest),
           ),
           const Divider(height: 32),
           // === Logout Section ===

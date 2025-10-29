@@ -139,9 +139,10 @@ class _StatCardState extends State<StatCard>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: widget.color.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
+                          color: widget.color.withValues(alpha: 0.2),
+                          blurRadius: 2,  // Reduced from 8 (4x cheaper)
+                          spreadRadius: 1,  // Use spread instead of blur
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),

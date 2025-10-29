@@ -10,6 +10,13 @@ abstract class TripsDaoBase {
   Future<List<Trip>> getByDeviceInRange(
     int deviceId,
     DateTime startTime,
+    DateTime endTime, {
+    int? limit,
+    int? offset,
+  });
+  Future<int> countByDeviceInRange(
+    int deviceId,
+    DateTime startTime,
     DateTime endTime,
   );
   Future<List<Trip>> getAll();

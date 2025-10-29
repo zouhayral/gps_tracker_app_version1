@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/data/models/geofence_event.dart';
+import 'package:my_app_gps/features/geofencing/providers/geofence_events_filter_providers.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
+import 'package:my_app_gps/features/geofencing/ui/widgets/geofence_events_widgets.dart';
+import 'package:my_app_gps/features/geofencing/ui/widgets/geofence_events_app_bar_widgets.dart';
 
 /// View mode for events page
 enum GeofenceEventsViewMode {
@@ -59,7 +62,7 @@ enum GeofenceEventsViewMode {
 ///   },
 /// ),
 /// ```
-class GeofenceEventsPage extends ConsumerStatefulWidget {
+class GeofenceEventsPage extends ConsumerWidget {
   final GeofenceEventsViewMode mode;
   final String? geofenceId;
 
@@ -70,28 +73,13 @@ class GeofenceEventsPage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<GeofenceEventsPage> createState() =>
-      _GeofenceEventsPageState();
-}
-
-class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
-  // Filter state
-  Set<String> _selectedEventTypes = {'entry', 'exit', 'dwell'};
-  Set<String> _selectedStatuses = {'pending', 'acknowledged'};
-  String? _selectedDevice;
-  DateTimeRange? _dateRange;
-
-  // Sort state
-  String _sortBy = 'timestamp'; // timestamp, type, status
-  bool _sortAscending = false;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final filterState = ref.watch(geofenceEventsFilterProvider);
 
     // Watch events based on mode
-    final eventsAsync = widget.mode == GeofenceEventsViewMode.singleGeofence
-        ? ref.watch(eventsByGeofenceProvider(widget.geofenceId!))
+    final eventsAsync = mode == GeofenceEventsViewMode.singleGeofence
+        ? ref.watch(eventsByGeofenceProvider(geofenceId!))
         : ref.watch(geofenceEventsProvider);
 
     // Watch unacknowledged count for badge
@@ -100,7 +88,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.mode == GeofenceEventsViewMode.singleGeofence
+          mode == GeofenceEventsViewMode.singleGeofence
               ? 'Geofence Events'
               : 'All Events',
         ),
@@ -108,87 +96,15 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
           // Filter button
           IconButton(
             icon: Badge(
-              isLabelVisible: _hasActiveFilters(),
+              isLabelVisible: filterState.hasActiveFilters(),
               child: const Icon(Icons.filter_list),
             ),
             tooltip: 'Filter',
-            onPressed: () => _openFilterSheet(context),
+            onPressed: () => _openFilterSheet(context, ref),
           ),
 
-          // Sort button
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.sort),
-            tooltip: 'Sort',
-            onSelected: (value) {
-              setState(() {
-                if (_sortBy == value) {
-                  _sortAscending = !_sortAscending;
-                } else {
-                  _sortBy = value;
-                  _sortAscending = false;
-                }
-              });
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'timestamp',
-                child: Row(
-                  children: [
-                    const Icon(Icons.schedule),
-                    const SizedBox(width: 8),
-                    const Text('By Time'),
-                    if (_sortBy == 'timestamp') ...[
-                      const Spacer(),
-                      Icon(
-                        _sortAscending
-                            ? Icons.arrow_upward
-                            : Icons.arrow_downward,
-                        size: 16,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'type',
-                child: Row(
-                  children: [
-                    const Icon(Icons.category),
-                    const SizedBox(width: 8),
-                    const Text('By Type'),
-                    if (_sortBy == 'type') ...[
-                      const Spacer(),
-                      Icon(
-                        _sortAscending
-                            ? Icons.arrow_upward
-                            : Icons.arrow_downward,
-                        size: 16,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'status',
-                child: Row(
-                  children: [
-                    const Icon(Icons.flag),
-                    const SizedBox(width: 8),
-                    const Text('By Status'),
-                    if (_sortBy == 'status') ...[
-                      const Spacer(),
-                      Icon(
-                        _sortAscending
-                            ? Icons.arrow_upward
-                            : Icons.arrow_downward,
-                        size: 16,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
+          // Sort button (extracted widget)
+          const SortMenuButton(),
 
           // Refresh button
           IconButton(
@@ -196,74 +112,34 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
             tooltip: 'Refresh',
             onPressed: () {
               ref.invalidate(geofenceEventsProvider);
-              if (widget.geofenceId != null) {
-                ref.invalidate(eventsByGeofenceProvider(widget.geofenceId!));
+              if (geofenceId != null) {
+                ref.invalidate(eventsByGeofenceProvider(geofenceId!));
               }
             },
           ),
 
           // More actions
-          PopupMenuButton(
-            icon: const Icon(Icons.more_vert),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'acknowledge_all',
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle),
-                    SizedBox(width: 8),
-                    Text('Acknowledge All'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'archive_old',
-                child: Row(
-                  children: [
-                    Icon(Icons.archive),
-                    SizedBox(width: 8),
-                    Text('Archive Old Events'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'export',
-                child: Row(
-                  children: [
-                    Icon(Icons.download),
-                    SizedBox(width: 8),
-                    Text('Export Events'),
-                  ],
-                ),
-              ),
-            ],
-            onSelected: (value) {
-              switch (value) {
-                case 'acknowledge_all':
-                  _acknowledgeAll();
-                case 'archive_old':
-                  _archiveOld();
-                case 'export':
-                  _exportEvents();
-              }
-            },
+          MoreActionsMenu(
+            onAcknowledgeAll: () => _acknowledgeAll(context, ref),
+            onArchiveOld: () => _archiveOld(context, ref),
+            onExport: () => _exportEvents(context, ref),
           ),
         ],
       ),
       body: Column(
         children: [
           // Statistics bar
-          _buildStatisticsBar(theme, unacknowledgedCount),
+          EventStatisticsBar(unacknowledgedCount: unacknowledgedCount),
 
           // Filter chips
-          if (_hasActiveFilters()) _buildFilterChips(theme),
+          if (filterState.hasActiveFilters()) const ActiveFilterChips(),
 
           // Events list
           Expanded(
             child: eventsAsync.when(
-              data: (events) => _buildEventsList(context, theme, events),
+              data: (events) => _buildEventsList(context, theme, events, ref, filterState),
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => _buildErrorState(theme, error),
+              error: (error, stack) => _buildErrorState(theme, error, ref),
             ),
           ),
         ],
@@ -272,189 +148,29 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
     );
   }
 
-  /// Build statistics bar
-  Widget _buildStatisticsBar(ThemeData theme, int unacknowledgedCount) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        border: Border(
-          bottom: BorderSide(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.notifications_active,
-            size: 16,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '$unacknowledgedCount unacknowledged',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            'Sort: ${_sortBy.toUpperCase()}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Build filter chips
-  Widget _buildFilterChips(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            // Event type chips
-            if (_selectedEventTypes.length < 3)
-              ..._selectedEventTypes.map((type) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Chip(
-                    avatar: Icon(
-                      _getEventTypeIcon(type),
-                      size: 16,
-                    ),
-                    label: Text(_capitalizeFirst(type)),
-                    deleteIcon: const Icon(Icons.close, size: 16),
-                    onDeleted: () {
-                      setState(() {
-                        _selectedEventTypes.remove(type);
-                        if (_selectedEventTypes.isEmpty) {
-                          _selectedEventTypes = {'entry', 'exit', 'dwell'};
-                        }
-                      });
-                    },
-                  ),
-                );
-              }),
-
-            // Status chips
-            if (_selectedStatuses.length < 3)
-              ..._selectedStatuses.map((status) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Chip(
-                    avatar: Icon(
-                      _getStatusIcon(status),
-                      size: 16,
-                    ),
-                    label: Text(_capitalizeFirst(status)),
-                    deleteIcon: const Icon(Icons.close, size: 16),
-                    onDeleted: () {
-                      setState(() {
-                        _selectedStatuses.remove(status);
-                        if (_selectedStatuses.isEmpty) {
-                          _selectedStatuses = {
-                            'pending',
-                            'acknowledged',
-                            'archived'
-                          };
-                        }
-                      });
-                    },
-                  ),
-                );
-              }),
-
-            // Device chip
-            if (_selectedDevice != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Chip(
-                  avatar: const Icon(Icons.smartphone, size: 16),
-                  label: Text(_selectedDevice!),
-                  deleteIcon: const Icon(Icons.close, size: 16),
-                  onDeleted: () {
-                    setState(() {
-                      _selectedDevice = null;
-                    });
-                  },
-                ),
-              ),
-
-            // Date range chip
-            if (_dateRange != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Chip(
-                  avatar: const Icon(Icons.date_range, size: 16),
-                  label: Text(
-                    '${DateFormat('MMM d').format(_dateRange!.start)} - '
-                    '${DateFormat('MMM d').format(_dateRange!.end)}',
-                  ),
-                  deleteIcon: const Icon(Icons.close, size: 16),
-                  onDeleted: () {
-                    setState(() {
-                      _dateRange = null;
-                    });
-                  },
-                ),
-              ),
-
-            // Clear all
-            if (_hasActiveFilters())
-              TextButton.icon(
-                icon: const Icon(Icons.clear_all, size: 16),
-                label: const Text('Clear'),
-                onPressed: () {
-                  setState(() {
-                    _selectedEventTypes = {'entry', 'exit', 'dwell'};
-                    _selectedStatuses = {'pending', 'acknowledged'};
-                    _selectedDevice = null;
-                    _dateRange = null;
-                  });
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Build events list
   Widget _buildEventsList(
     BuildContext context,
     ThemeData theme,
     List<GeofenceEvent> events,
+    WidgetRef ref,
+    GeofenceEventsFilterState filterState,
   ) {
     // Apply filters
-    final filteredEvents = _applyFilters(events);
+    final filteredEvents = _applyFilters(events, filterState);
 
     // Apply sorting
-    final sortedEvents = _applySorting(filteredEvents);
+    final sortedEvents = _applySorting(filteredEvents, filterState);
 
     if (sortedEvents.isEmpty) {
-      return _buildEmptyState(theme);
+      return _buildEmptyState(theme, ref, filterState);
     }
 
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(geofenceEventsProvider);
-        if (widget.geofenceId != null) {
-          ref.invalidate(eventsByGeofenceProvider(widget.geofenceId!));
+        if (geofenceId != null) {
+          ref.invalidate(eventsByGeofenceProvider(geofenceId!));
         }
       },
       child: ListView.builder(
@@ -462,7 +178,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
         itemCount: sortedEvents.length,
         itemBuilder: (context, index) {
           final event = sortedEvents[index];
-          return _buildEventTile(context, theme, event);
+          return _buildEventTile(context, theme, event, ref);
         },
       ),
     );
@@ -473,6 +189,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
     BuildContext context,
     ThemeData theme,
     GeofenceEvent event,
+    WidgetRef ref,
   ) {
     final eventTypeColor = _getEventTypeColor(event.eventType, theme);
     final statusColor = _getStatusColor(event.status, theme);
@@ -480,7 +197,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: () => _showEventDetails(context, event),
+        onTap: () => _showEventDetails(context, ref, event),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -632,7 +349,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                       icon: const Icon(Icons.check_circle_outline),
                       tooltip: 'Acknowledge',
                       iconSize: 20,
-                      onPressed: () => _acknowledgeEvent(event),
+                      onPressed: () => _acknowledgeEvent(context, ref, event),
                     ),
 
                   // Archive button (if acknowledged)
@@ -641,7 +358,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                       icon: const Icon(Icons.archive_outlined),
                       tooltip: 'Archive',
                       iconSize: 20,
-                      onPressed: () => _archiveEvent(event),
+                      onPressed: () => _archiveEvent(context, ref, event),
                     ),
 
                   // View on map
@@ -661,7 +378,11 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Build empty state
-  Widget _buildEmptyState(ThemeData theme) {
+  Widget _buildEmptyState(
+    ThemeData theme,
+    WidgetRef ref,
+    GeofenceEventsFilterState filterState,
+  ) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -682,7 +403,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              _hasActiveFilters()
+              filterState.hasActiveFilters()
                   ? 'Try adjusting your filters'
                   : 'Events will appear here when devices\nenter or exit geofences',
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -696,8 +417,8 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
               label: const Text('Refresh'),
               onPressed: () {
                 ref.invalidate(geofenceEventsProvider);
-                if (widget.geofenceId != null) {
-                  ref.invalidate(eventsByGeofenceProvider(widget.geofenceId!));
+                if (geofenceId != null) {
+                  ref.invalidate(eventsByGeofenceProvider(geofenceId!));
                 }
               },
             ),
@@ -708,7 +429,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Build error state
-  Widget _buildErrorState(ThemeData theme, Object error) {
+  Widget _buildErrorState(ThemeData theme, Object error, WidgetRef ref) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -741,8 +462,8 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
               label: const Text('Retry'),
               onPressed: () {
                 ref.invalidate(geofenceEventsProvider);
-                if (widget.geofenceId != null) {
-                  ref.invalidate(eventsByGeofenceProvider(widget.geofenceId!));
+                if (geofenceId != null) {
+                  ref.invalidate(eventsByGeofenceProvider(geofenceId!));
                 }
               },
             ),
@@ -754,329 +475,108 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
 
   /// Build bottom bar
   Widget _buildBottomBar(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: theme.colorScheme.outline.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.check_circle),
-              label: const Text('Acknowledge All'),
-              onPressed: _acknowledgeAll,
+    return Consumer(
+      builder: (context, ref, child) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border(
+              top: BorderSide(
+                color: theme.colorScheme.outline.withValues(alpha: 0.2),
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.archive),
-              label: const Text('Archive Old'),
-              onPressed: _archiveOld,
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.check_circle),
+                  label: const Text('Acknowledge All'),
+                  onPressed: () => _acknowledgeAll(context, ref),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.archive),
+                  label: const Text('Archive Old'),
+                  onPressed: () => _archiveOld(context, ref),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   /// Open filter sheet
-  void _openFilterSheet(BuildContext context) {
+  void _openFilterSheet(BuildContext context, WidgetRef ref) {
+    final filterNotifier = ref.read(geofenceEventsFilterProvider.notifier);
+    
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return DraggableScrollableSheet(
-              initialChildSize: 0.7,
-              minChildSize: 0.5,
-              maxChildSize: 0.95,
-              expand: false,
-              builder: (context, scrollController) {
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
                     children: [
-                      // Header
-                      Row(
-                        children: [
-                          Text(
-                            'Filters',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _selectedEventTypes = {
-                                  'entry',
-                                  'exit',
-                                  'dwell'
-                                };
-                                _selectedStatuses = {
-                                  'pending',
-                                  'acknowledged'
-                                };
-                                _selectedDevice = null;
-                                _dateRange = null;
-                              });
-                              context.safePop<void>();
-                            },
-                            child: const Text('Reset'),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () => context.safePop<void>(),
-                          ),
-                        ],
+                      Text(
+                        'Filters',
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-
-                      const Divider(),
-
-                      Expanded(
-                        child: ListView(
-                          controller: scrollController,
-                          children: [
-                            // Event Type
-                            Text(
-                              'Event Type',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                FilterChip(
-                                  label: const Text('Entry'),
-                                  avatar: const Icon(Icons.login, size: 16),
-                                  selected:
-                                      _selectedEventTypes.contains('entry'),
-                                  onSelected: (selected) {
-                                    setModalState(() {
-                                      setState(() {
-                                        if (selected) {
-                                          _selectedEventTypes.add('entry');
-                                        } else {
-                                          _selectedEventTypes.remove('entry');
-                                        }
-                                      });
-                                    });
-                                  },
-                                ),
-                                FilterChip(
-                                  label: const Text('Exit'),
-                                  avatar: const Icon(Icons.logout, size: 16),
-                                  selected: _selectedEventTypes.contains('exit'),
-                                  onSelected: (selected) {
-                                    setModalState(() {
-                                      setState(() {
-                                        if (selected) {
-                                          _selectedEventTypes.add('exit');
-                                        } else {
-                                          _selectedEventTypes.remove('exit');
-                                        }
-                                      });
-                                    });
-                                  },
-                                ),
-                                FilterChip(
-                                  label: const Text('Dwell'),
-                                  avatar: const Icon(Icons.schedule, size: 16),
-                                  selected:
-                                      _selectedEventTypes.contains('dwell'),
-                                  onSelected: (selected) {
-                                    setModalState(() {
-                                      setState(() {
-                                        if (selected) {
-                                          _selectedEventTypes.add('dwell');
-                                        } else {
-                                          _selectedEventTypes.remove('dwell');
-                                        }
-                                      });
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Status
-                            Text(
-                              'Status',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                FilterChip(
-                                  label: const Text('Pending'),
-                                  avatar: const Icon(Icons.pending, size: 16),
-                                  selected:
-                                      _selectedStatuses.contains('pending'),
-                                  onSelected: (selected) {
-                                    setModalState(() {
-                                      setState(() {
-                                        if (selected) {
-                                          _selectedStatuses.add('pending');
-                                        } else {
-                                          _selectedStatuses.remove('pending');
-                                        }
-                                      });
-                                    });
-                                  },
-                                ),
-                                FilterChip(
-                                  label: const Text('Acknowledged'),
-                                  avatar:
-                                      const Icon(Icons.check_circle, size: 16),
-                                  selected:
-                                      _selectedStatuses.contains('acknowledged'),
-                                  onSelected: (selected) {
-                                    setModalState(() {
-                                      setState(() {
-                                        if (selected) {
-                                          _selectedStatuses.add('acknowledged');
-                                        } else {
-                                          _selectedStatuses
-                                              .remove('acknowledged');
-                                        }
-                                      });
-                                    });
-                                  },
-                                ),
-                                FilterChip(
-                                  label: const Text('Archived'),
-                                  avatar: const Icon(Icons.archive, size: 16),
-                                  selected:
-                                      _selectedStatuses.contains('archived'),
-                                  onSelected: (selected) {
-                                    setModalState(() {
-                                      setState(() {
-                                        if (selected) {
-                                          _selectedStatuses.add('archived');
-                                        } else {
-                                          _selectedStatuses.remove('archived');
-                                        }
-                                      });
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Device (TODO: Load from provider)
-                            Text(
-                              'Device',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            DropdownButtonFormField<String>(
-                              initialValue: _selectedDevice,
-                              decoration: const InputDecoration(
-                                border: OutlineInputBorder(),
-                                hintText: 'All Devices',
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  child: Text('All Devices'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'Device-1',
-                                  child: Text('Device-1'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'Device-2',
-                                  child: Text('Device-2'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'Device-3',
-                                  child: Text('Device-3'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                setModalState(() {
-                                  setState(() {
-                                    _selectedDevice = value;
-                                  });
-                                });
-                              },
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Date Range
-                            Text(
-                              'Date Range',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            OutlinedButton.icon(
-                              icon: const Icon(Icons.date_range),
-                              label: Text(
-                                _dateRange == null
-                                    ? 'Select Date Range'
-                                    : '${DateFormat('MMM d, y').format(_dateRange!.start)} - '
-                                        '${DateFormat('MMM d, y').format(_dateRange!.end)}',
-                              ),
-                              onPressed: () async {
-                                final range = await showDateRangePicker(
-                                  context: context,
-                                  firstDate: DateTime.now()
-                                      .subtract(const Duration(days: 365)),
-                                  lastDate: DateTime.now(),
-                                  initialDateRange: _dateRange,
-                                );
-                                if (range != null) {
-                                  setModalState(() {
-                                    setState(() {
-                                      _dateRange = range;
-                                    });
-                                  });
-                                }
-                              },
-                            ),
-                            if (_dateRange != null)
-                              TextButton.icon(
-                                icon: const Icon(Icons.clear),
-                                label: const Text('Clear Date Range'),
-                                onPressed: () {
-                                  setModalState(() {
-                                    setState(() {
-                                      _dateRange = null;
-                                    });
-                                  });
-                                },
-                              ),
-                          ],
-                        ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          filterNotifier.clearAll();
+                          context.safePop<void>();
+                        },
+                        child: const Text('Reset'),
                       ),
-
-                      const SizedBox(height: 16),
-
-                      // Apply button
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: () => context.safePop<void>(),
-                          child: const Text('Apply Filters'),
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => context.safePop<void>(),
                       ),
                     ],
                   ),
-                );
-              },
+
+                  const Divider(),
+
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      children: const [
+                        // Event Type
+                        EventTypeFilterToggle(),
+                        SizedBox(height: 16),
+
+                        // Status
+                        StatusFilterToggle(),
+                        SizedBox(height: 16),
+
+                        // Device
+                        DeviceFilterSelector(),
+                        SizedBox(height: 16),
+
+                        // Date Range
+                        EventDateRangePicker(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         );
@@ -1085,7 +585,11 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Show event details dialog
-  void _showEventDetails(BuildContext context, GeofenceEvent event) {
+  void _showEventDetails(
+    BuildContext context,
+    WidgetRef ref,
+    GeofenceEvent event,
+  ) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1126,7 +630,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
               label: const Text('Acknowledge'),
               onPressed: () {
                 context.safePop<void>();
-                _acknowledgeEvent(event);
+                _acknowledgeEvent(context, ref, event);
               },
             ),
           TextButton.icon(
@@ -1232,7 +736,11 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Acknowledge single event
-  Future<void> _acknowledgeEvent(GeofenceEvent event) async {
+  Future<void> _acknowledgeEvent(
+    BuildContext context,
+    WidgetRef ref,
+    GeofenceEvent event,
+  ) async {
     try {
       // Await repository initialization before acknowledging
       final repo = await ref.read(geofenceEventRepositoryProvider.future);
@@ -1242,7 +750,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
       ref.invalidate(geofenceEventsProvider);
       ref.invalidate(unacknowledgedEventsProvider);
 
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Event acknowledged'),
@@ -1253,7 +761,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error acknowledging event: $e'),
@@ -1266,7 +774,11 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Archive single event
-  Future<void> _archiveEvent(GeofenceEvent event) async {
+  Future<void> _archiveEvent(
+    BuildContext context,
+    WidgetRef ref,
+    GeofenceEvent event,
+  ) async {
     try {
       // Await repository initialization before archiving
       final repo = await ref.read(geofenceEventRepositoryProvider.future);
@@ -1278,7 +790,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
       ref.invalidate(geofenceEventsProvider);
       ref.invalidate(unacknowledgedEventsProvider);
       
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Event archived'),
@@ -1289,7 +801,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error archiving event: $e'),
@@ -1302,7 +814,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Acknowledge all pending events
-  Future<void> _acknowledgeAll() async {
+  Future<void> _acknowledgeAll(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1339,7 +851,6 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
           ref.invalidate(unacknowledgedEventsProvider);
           
           if (!context.mounted) return;
-          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${eventIds.length} events acknowledged'),
@@ -1374,7 +885,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Archive old events
-  Future<void> _archiveOld() async {
+  Future<void> _archiveOld(BuildContext context, WidgetRef ref) async {
     final days = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1439,7 +950,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Export events (placeholder)
-  void _exportEvents() {
+  void _exportEvents(BuildContext context, WidgetRef ref) {
     // TODO: Implement export to CSV/JSON
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1450,27 +961,31 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Apply filters to events list
-  List<GeofenceEvent> _applyFilters(List<GeofenceEvent> events) {
+  List<GeofenceEvent> _applyFilters(
+    List<GeofenceEvent> events,
+    GeofenceEventsFilterState filterState,
+  ) {
     return events.where((event) {
       // Filter by event type
-      if (!_selectedEventTypes.contains(event.eventType)) {
+      if (!filterState.selectedEventTypes.contains(event.eventType)) {
         return false;
       }
 
       // Filter by status
-      if (!_selectedStatuses.contains(event.status)) {
+      if (!filterState.selectedStatuses.contains(event.status)) {
         return false;
       }
 
       // Filter by device
-      if (_selectedDevice != null && event.deviceId != _selectedDevice) {
+      if (filterState.selectedDevice != null && 
+          event.deviceId != filterState.selectedDevice) {
         return false;
       }
 
       // Filter by date range
-      if (_dateRange != null) {
-        if (event.timestamp.isBefore(_dateRange!.start) ||
-            event.timestamp.isAfter(_dateRange!.end)) {
+      if (filterState.dateRange != null) {
+        if (event.timestamp.isBefore(filterState.dateRange!.start) ||
+            event.timestamp.isAfter(filterState.dateRange!.end)) {
           return false;
         }
       }
@@ -1480,13 +995,16 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
   }
 
   /// Apply sorting to events list
-  List<GeofenceEvent> _applySorting(List<GeofenceEvent> events) {
+  List<GeofenceEvent> _applySorting(
+    List<GeofenceEvent> events,
+    GeofenceEventsFilterState filterState,
+  ) {
     final sorted = List<GeofenceEvent>.from(events);
 
     sorted.sort((a, b) {
       int comparison;
 
-      switch (_sortBy) {
+      switch (filterState.sortBy) {
         case 'timestamp':
           comparison = a.timestamp.compareTo(b.timestamp);
         case 'type':
@@ -1497,18 +1015,10 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
           comparison = 0;
       }
 
-      return _sortAscending ? comparison : -comparison;
+      return filterState.sortAscending ? comparison : -comparison;
     });
 
     return sorted;
-  }
-
-  /// Check if any filters are active
-  bool _hasActiveFilters() {
-    return _selectedEventTypes.length < 3 ||
-        _selectedStatuses.length < 3 ||
-        _selectedDevice != null ||
-        _dateRange != null;
   }
 
   /// Get event type icon

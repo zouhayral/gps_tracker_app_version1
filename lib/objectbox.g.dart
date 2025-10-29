@@ -21,7 +21,7 @@ import 'core/database/entities/geofence_event_entity.dart';
 import 'core/database/entities/position_entity.dart';
 import 'core/database/entities/telemetry_record.dart';
 import 'core/database/entities/trip_entity.dart';
-import 'data/models/trip_snapshot.dart';
+import 'data/models/trip_snapshot_mobile.dart';
 
 export 'package:objectbox/objectbox.dart'; // so that callers only have to import this file
 

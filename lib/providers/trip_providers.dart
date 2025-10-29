@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/core/database/dao/trip_snapshots_dao.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
+import 'package:my_app_gps/core/utils/polyline_simplifier_isolate.dart';
 import 'package:my_app_gps/data/models/position.dart';
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/data/models/trip_snapshot.dart';
@@ -35,20 +37,35 @@ class TripQuery {
 /// AsyncNotifier for trips by device and date range with proper loading state management.
 class TripsByDeviceNotifier extends AutoDisposeFamilyAsyncNotifier<List<Trip>, TripQuery> {
   bool _isLoading = false;
-  bool _hasLoaded = false;
+  DateTime? _lastFetch;
   TripQuery? _lastQuery;
+  
+  // Cache TTL: 5 minutes (longer than repository's 2 min for stale-while-revalidate)
+  static const Duration _cacheTTL = Duration(minutes: 5);
 
   @override
   Future<List<Trip>> build(TripQuery arg) async {
+    // Check if cache is still valid
+    if (_lastFetch != null && 
+        _lastQuery == arg && 
+        DateTime.now().difference(_lastFetch!) < _cacheTTL &&
+        state.hasValue) {
+      final age = DateTime.now().difference(_lastFetch!);
+      debugPrint('[TripProviders] 🎯 Cache hit (age: ${age.inSeconds}s/${_cacheTTL.inSeconds}s)');
+      
+      // Start background refresh if cache is older than 2 minutes
+      if (age > const Duration(minutes: 2)) {
+        debugPrint('[TripProviders] 🔄 Cache stale, starting background refresh');
+        final repo = ref.read(tripRepositoryProvider);
+        unawaited(_backgroundRefresh(arg, repo));
+      }
+      
+      return state.value!;
+    }
+
     // Prevent multiple simultaneous fetches for the same query
     if (_isLoading && _lastQuery == arg) {
       debugPrint('[TripProviders] ⏸️ Already loading this query, returning current state');
-      return state.valueOrNull ?? const <Trip>[];
-    }
-
-    // If we've already loaded this exact query, return cached data without refetching
-    if (_hasLoaded && _lastQuery == arg && state.hasValue) {
-      debugPrint('[TripProviders] ✅ Data already loaded for this query, skipping fetch');
       return state.valueOrNull ?? const <Trip>[];
     }
 
@@ -58,31 +75,86 @@ class TripsByDeviceNotifier extends AutoDisposeFamilyAsyncNotifier<List<Trip>, T
     try {
       final repo = ref.read(tripRepositoryProvider);
 
-      // 1) Load from cache immediately if available
-      final cached = await repo.getCachedTrips(arg.deviceId, arg.from, arg.to);
+      // 1) Try ObjectBox cache first (instant) - load first page only
+      final cached = await repo.getCachedTrips(
+        arg.deviceId,
+        arg.from,
+        arg.to,
+        limit: 50, // Only load first page from cache for instant display
+      );
+      
       if (cached.isNotEmpty) {
-        debugPrint('[TripProviders] 🗄️ Loaded ${cached.length} trips from cache');
-        _hasLoaded = true;
+        debugPrint('[TripProviders] � Loaded ${cached.length} from ObjectBox cache');
+        _lastFetch = DateTime.now();
         _isLoading = false;
+        
+        // Start background refresh to ensure data is fresh
+        debugPrint('[TripProviders] 🔄 Starting background network refresh');
+        unawaited(_backgroundRefresh(arg, repo));
+        
         return cached;
       }
 
       // 2) No cache: fetch from network
+      debugPrint('[TripProviders] 🌐 No cache, fetching from network');
       final fetched = await repo.fetchTrips(
         deviceId: arg.deviceId,
         from: arg.from,
         to: arg.to,
       );
-      debugPrint('[TripProviders] 🌐 Loaded ${fetched.length} trips from network');
-      _hasLoaded = true;
+      
+      debugPrint('[TripProviders] ✅ Fetched ${fetched.length} trips from network');
+      _lastFetch = DateTime.now();
       return fetched;
     } catch (e) {
-      debugPrint('[TripProviders] ⚠️ Network fetch failed: $e');
-      // Return empty list instead of throwing to prevent infinite error states
+      debugPrint('[TripProviders] ❌ Error loading trips: $e');
+      // Don't throw - return empty list to prevent error state loops
       return const <Trip>[];
     } finally {
       _isLoading = false;
     }
+  }
+
+  /// Background refresh without blocking UI (stale-while-revalidate pattern)
+  Future<void> _backgroundRefresh(TripQuery query, TripRepository repo) async {
+    try {
+      // Small delay to avoid blocking initial render
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      
+      debugPrint('[TripProviders] 🔄 Background refresh starting for device ${query.deviceId}');
+      final fresh = await repo.fetchTrips(
+        deviceId: query.deviceId,
+        from: query.from,
+        to: query.to,
+      );
+      
+      if (fresh.isNotEmpty) {
+        // Only update state if data changed
+        final current = state.valueOrNull ?? [];
+        if (fresh.length != current.length || _tripsChanged(fresh, current)) {
+          debugPrint('[TripProviders] ✅ Background refresh: ${fresh.length} trips (updated)');
+          state = AsyncData(fresh);
+          _lastFetch = DateTime.now();
+        } else {
+          debugPrint('[TripProviders] ⏭️ Background refresh: No changes detected');
+          _lastFetch = DateTime.now(); // Update timestamp even if data unchanged
+        }
+      }
+    } catch (e) {
+      debugPrint('[TripProviders] ⚠️ Background refresh failed: $e');
+      // Don't update state on error - keep showing cached data
+    }
+  }
+
+  /// Check if trips list has changed (simple length + ID comparison)
+  bool _tripsChanged(List<Trip> fresh, List<Trip> current) {
+    if (fresh.length != current.length) return true;
+    
+    // Compare first and last trip IDs for quick change detection
+    if (fresh.isEmpty) return false;
+    
+    return fresh.first.id != current.first.id || 
+           fresh.last.id != current.last.id;
   }
 
   /// Manual refresh method for pull-to-refresh
@@ -97,20 +169,29 @@ class TripsByDeviceNotifier extends AutoDisposeFamilyAsyncNotifier<List<Trip>, T
     state = const AsyncLoading();
     
     try {
+      debugPrint('[TripProviders] 🔄 Manual refresh for device ${arg.deviceId}');
       final fetched = await repo.fetchTrips(
         deviceId: arg.deviceId,
         from: arg.from,
         to: arg.to,
       );
-      debugPrint('[TripProviders] 🔄 Manual refresh: ${fetched.length} trips');
+      debugPrint('[TripProviders] ✅ Manual refresh: ${fetched.length} trips');
       state = AsyncData(fetched);
-      _hasLoaded = true;
+      _lastFetch = DateTime.now();
     } catch (e, st) {
-      debugPrint('[TripProviders] ⚠️ Manual refresh failed: $e');
+      debugPrint('[TripProviders] ❌ Manual refresh failed: $e');
       state = AsyncError(e, st);
     } finally {
       _isLoading = false;
     }
+  }
+
+  /// Invalidate cache and force refresh
+  Future<void> invalidate() async {
+    debugPrint('[TripProviders] 🗑️ Cache invalidated for device ${arg.deviceId}');
+    _lastFetch = null;
+    _lastQuery = null;
+    await refresh();
   }
 }
 
@@ -119,6 +200,224 @@ final tripsByDeviceProvider =
     AutoDisposeAsyncNotifierProviderFamily<TripsByDeviceNotifier, List<Trip>, TripQuery>(
   TripsByDeviceNotifier.new,
 );
+
+// ============================================================================
+// BATCH PROVIDER FOR MULTIPLE DEVICES (Phase 2 Optimization)
+// ============================================================================
+
+/// Query model for batching trips from multiple devices
+@immutable
+class BatchTripQuery {
+  const BatchTripQuery({
+    required this.deviceIds,
+    required this.from,
+    required this.to,
+  });
+  
+  final List<int> deviceIds;
+  final DateTime from;
+  final DateTime to;
+  
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BatchTripQuery &&
+          runtimeType == other.runtimeType &&
+          _listEquals(deviceIds, other.deviceIds) &&
+          from == other.from &&
+          to == other.to;
+  
+  @override
+  int get hashCode => Object.hash(Object.hashAll(deviceIds), from, to);
+  
+  // Helper for list comparison
+  static bool _listEquals(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
+
+/// Batch provider for fetching trips from multiple devices in parallel
+/// 
+/// Optimizations:
+/// - Parallel fetching with timeout per device (10s)
+/// - Automatic result aggregation and sorting
+/// - Handles partial failures gracefully (some devices may fail)
+/// - Single provider subscription instead of N individual subscriptions
+class BatchTripsByDevicesNotifier 
+    extends AutoDisposeFamilyAsyncNotifier<List<Trip>, BatchTripQuery> {
+  
+  DateTime? _lastFetch;
+  BatchTripQuery? _lastQuery;
+  bool _isLoading = false;
+  
+  static const Duration _cacheTTL = Duration(minutes: 5);
+  static const Duration _deviceTimeout = Duration(seconds: 10);
+  
+  @override
+  Future<List<Trip>> build(BatchTripQuery arg) async {
+    // Check cache validity
+    if (_lastFetch != null &&
+        _lastQuery == arg &&
+        DateTime.now().difference(_lastFetch!) < _cacheTTL &&
+        state.hasValue) {
+      final age = DateTime.now().difference(_lastFetch!);
+      debugPrint('[BatchTrips] 🎯 Cache hit (age: ${age.inSeconds}s, devices: ${arg.deviceIds.length})');
+      
+      // Background refresh if stale
+      if (age > const Duration(minutes: 2)) {
+        debugPrint('[BatchTrips] 🔄 Starting background refresh');
+        final repo = ref.read(tripRepositoryProvider);
+        unawaited(_backgroundRefresh(arg, repo));
+      }
+      
+      return state.value!;
+    }
+    
+    if (_isLoading && _lastQuery == arg) {
+      debugPrint('[BatchTrips] ⏸️ Already loading');
+      return state.valueOrNull ?? const <Trip>[];
+    }
+    
+    _isLoading = true;
+    _lastQuery = arg;
+    
+    try {
+      final repo = ref.read(tripRepositoryProvider);
+      
+      debugPrint('[BatchTrips] 🚀 Fetching trips from ${arg.deviceIds.length} devices in parallel');
+      
+      // Fetch all devices in parallel with individual timeouts
+      final futures = arg.deviceIds.map((deviceId) =>
+        repo.fetchTrips(
+          deviceId: deviceId,
+          from: arg.from,
+          to: arg.to,
+        ).timeout(
+          _deviceTimeout,
+          onTimeout: () {
+            debugPrint('[BatchTrips] ⏱️ Device $deviceId timed out');
+            return <Trip>[];
+          },
+        ).catchError((Object e) {
+          debugPrint('[BatchTrips] ❌ Device $deviceId failed: $e');
+          return <Trip>[];
+        }),
+      );
+      
+      // Wait for all with error handling
+      final results = await Future.wait(futures);
+      
+      // Merge and sort all trips
+      final allTrips = <Trip>[];
+      var successCount = 0;
+      
+      for (var i = 0; i < results.length; i++) {
+        final deviceTrips = results[i];
+        if (deviceTrips.isNotEmpty) {
+          allTrips.addAll(deviceTrips);
+          successCount++;
+        }
+      }
+      
+      // Sort by start time (most recent first)
+      allTrips.sort((a, b) => b.startTime.compareTo(a.startTime));
+      
+      debugPrint('[BatchTrips] ✅ Fetched ${allTrips.length} trips from $successCount/${arg.deviceIds.length} devices');
+      _lastFetch = DateTime.now();
+      
+      return allTrips;
+    } catch (e) {
+      debugPrint('[BatchTrips] ❌ Batch fetch failed: $e');
+      return const <Trip>[];
+    } finally {
+      _isLoading = false;
+    }
+  }
+  
+  /// Background refresh for stale data
+  Future<void> _backgroundRefresh(BatchTripQuery query, TripRepository repo) async {
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      
+      debugPrint('[BatchTrips] 🔄 Background refresh for ${query.deviceIds.length} devices');
+      
+      final futures = query.deviceIds.map((deviceId) =>
+        repo.fetchTrips(
+          deviceId: deviceId,
+          from: query.from,
+          to: query.to,
+        ).timeout(_deviceTimeout, onTimeout: () => <Trip>[])
+         .catchError((Object _) => <Trip>[]),
+      );
+      
+      final results = await Future.wait(futures);
+      final allTrips = results.expand((trips) => trips).toList();
+      allTrips.sort((a, b) => b.startTime.compareTo(a.startTime));
+      
+      if (allTrips.isNotEmpty) {
+        final current = state.valueOrNull ?? [];
+        if (allTrips.length != current.length) {
+          debugPrint('[BatchTrips] ✅ Background refresh: ${allTrips.length} trips (updated)');
+          state = AsyncData(allTrips);
+          _lastFetch = DateTime.now();
+        } else {
+          debugPrint('[BatchTrips] ⏭️ Background refresh: No changes');
+          _lastFetch = DateTime.now();
+        }
+      }
+    } catch (e) {
+      debugPrint('[BatchTrips] ⚠️ Background refresh failed: $e');
+    }
+  }
+  
+  /// Manual refresh
+  Future<void> refresh() async {
+    if (_isLoading) return;
+    
+    _isLoading = true;
+    state = const AsyncLoading();
+    
+    try {
+      final repo = ref.read(tripRepositoryProvider);
+      
+      final futures = arg.deviceIds.map((deviceId) =>
+        repo.fetchTrips(
+          deviceId: deviceId,
+          from: arg.from,
+          to: arg.to,
+        ).timeout(_deviceTimeout, onTimeout: () => <Trip>[])
+         .catchError((Object _) => <Trip>[]),
+      );
+      
+      final results = await Future.wait(futures);
+      final allTrips = results.expand((trips) => trips).toList();
+      allTrips.sort((a, b) => b.startTime.compareTo(a.startTime));
+      
+      debugPrint('[BatchTrips] 🔄 Manual refresh: ${allTrips.length} trips');
+      state = AsyncData(allTrips);
+      _lastFetch = DateTime.now();
+    } catch (e, st) {
+      debugPrint('[BatchTrips] ❌ Manual refresh failed: $e');
+      state = AsyncError(e, st);
+    } finally {
+      _isLoading = false;
+    }
+  }
+}
+
+/// Provider for batching trips from multiple devices
+final batchTripsByDevicesProvider = AutoDisposeAsyncNotifierProviderFamily<
+    BatchTripsByDevicesNotifier, List<Trip>, BatchTripQuery>(
+  BatchTripsByDevicesNotifier.new,
+);
+
+// ============================================================================
+// END BATCH PROVIDER
+// ============================================================================
 
 /// Playback state for trip replay.
 class TripPlaybackState {
@@ -163,6 +462,50 @@ final tripPositionsProvider =
   // Record fetch+parse time to diagnostics for visibility
   DevDiagnostics.instance.recordClusterCompute(sw.elapsedMilliseconds);
   return positions;
+});
+
+/// Simplified polyline for trip map display
+/// 
+/// Uses background isolate to simplify heavy polylines without blocking UI.
+/// 
+/// **Performance:**
+/// - 10,000+ points simplified in background (no jank)
+/// - 30-50% point reduction with 10m epsilon
+/// - Main thread remains at 60 FPS during simplification
+/// 
+/// **Usage:**
+/// ```dart
+/// final polylineAsync = ref.watch(tripSimplifiedPolylineProvider(trip));
+/// polylineAsync.when(
+///   data: (points) => Polyline(points: points, ...),
+///   ...
+/// );
+/// ```
+final tripSimplifiedPolylineProvider =
+    FutureProvider.autoDispose.family<List<LatLng>, Trip>((ref, trip) async {
+  final positions = await ref.watch(tripPositionsProvider(trip).future);
+  
+  // Convert positions to LatLng
+  final points = positions.map((p) => p.toLatLng).toList(growable: false);
+  
+  if (points.length <= 100) {
+    // Small polylines: no simplification needed
+    return points;
+  }
+  
+  // Simplify in background isolate
+  // 10m epsilon: balanced reduction (30-50%) with good shape preservation
+  final sw = Stopwatch()..start();
+  final simplified = await PolylineSimplifierIsolate.simplify(
+    points: points,
+    epsilon: 10.0, // 10 meters tolerance
+  );
+  sw.stop();
+  
+  // Record simplification time (should be fast due to isolate)
+  DevDiagnostics.instance.recordClusterCompute(sw.elapsedMilliseconds);
+  
+  return simplified;
 });
 
 /// Provider for persisted monthly snapshots

@@ -74,23 +74,17 @@ class MapConnectivityBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Optimized: Use Material elevation instead of BoxShadow for animated widget
     return AnimatedOpacity(
       opacity: visible ? 1.0 : 0.0,
       duration: const Duration(milliseconds: 300),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
+      child: Material(
+        elevation: 3,  // Hardware-accelerated shadow (cheaper during animation)
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.orange.withValues(alpha: 0.9),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(
@@ -125,6 +119,7 @@ class MapConnectivityBanner extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

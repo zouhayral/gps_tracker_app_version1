@@ -115,13 +115,30 @@ class TripRepository {
 
     final cacheKey = _buildCacheKey(deviceId, from, to);
     final sw = Stopwatch()..start();
+    
+    // Track metrics
+    if (kDebugMode) {
+      DevDiagnostics.instance.startTripLoad();
+      DevDiagnostics.instance.recordTripApiCall();
+    }
 
     // 1. Check cache first
     final cached = _cache[cacheKey];
     if (cached != null && !cached.isExpired(_cacheTTL)) {
       final age = DateTime.now().difference(cached.timestamp).inSeconds;
       _log.debug('🎯 Returning ${cached.trips.length} trips (age: ${age}s, TTL: ${_cacheTTL.inSeconds}s)');
+      
+      if (kDebugMode) {
+        DevDiagnostics.instance.recordTripCacheHit();
+        DevDiagnostics.instance.endTripLoad();
+      }
+      
       return cached.trips;
+    }
+    
+    // Cache miss
+    if (kDebugMode) {
+      DevDiagnostics.instance.recordTripCacheMiss();
     }
 
     // 2. Check for ongoing request (throttling)
@@ -167,6 +184,11 @@ class TripRepository {
       
       sw.stop();
       _log.debug('⏱️ Fetch completed in ${sw.elapsedMilliseconds}ms');
+      
+      // Track metrics
+      if (kDebugMode) {
+        DevDiagnostics.instance.endTripLoad();
+      }
       
       // Cache the result
       _cache[cacheKey] = _CachedTripResponse(
@@ -548,17 +570,52 @@ class TripRepository {
   }
 
   /// Safe cached trips lookup from DAO; returns empty list on error.
+  /// 
+  /// Parameters:
+  /// - [limit]: Maximum number of trips to return (default: 50 for initial page load)
+  /// - [offset]: Number of trips to skip for pagination
   Future<List<Trip>> getCachedTrips(
-      int deviceId, DateTime from, DateTime to,) async {
+    int deviceId,
+    DateTime from,
+    DateTime to, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
     try {
+      // Track DB query
+      if (kDebugMode) {
+        DevDiagnostics.instance.recordTripDbQuery();
+      }
+      
       final dao = await _ref.read(tripsDaoProvider.future);
-      final cached = await dao.getByDeviceInRange(deviceId, from, to);
+      final cached = await dao.getByDeviceInRange(
+        deviceId,
+        from,
+        to,
+        limit: limit,
+        offset: offset,
+      );
       if (cached.isEmpty) return const <Trip>[];
       // Already domain Trip models from DAO; return directly
       return List<Trip>.unmodifiable(cached);
     } catch (e) {
       _log.warning('Cache lookup failed', error: e);
       return const <Trip>[];
+    }
+  }
+
+  /// Get total count of cached trips for a device in a date range
+  Future<int> getCachedTripsCount(
+    int deviceId,
+    DateTime from,
+    DateTime to,
+  ) async {
+    try {
+      final dao = await _ref.read(tripsDaoProvider.future);
+      return await dao.countByDeviceInRange(deviceId, from, to);
+    } catch (e) {
+      _log.warning('Cache count failed', error: e);
+      return 0;
     }
   }
 

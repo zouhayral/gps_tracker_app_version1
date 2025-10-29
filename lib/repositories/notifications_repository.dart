@@ -7,6 +7,7 @@ import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/data/models/event.dart';
+import 'package:my_app_gps/core/network/reconnection_coordinator.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
 import 'package:my_app_gps/services/event_service.dart';
 import 'package:my_app_gps/services/notification/local_notification_service.dart';
@@ -134,6 +135,16 @@ class NotificationsRepository {
 
       // Listen to WebSocket for real-time events
       _listenToWebSocket();
+
+      // Register resubscription with centralized coordinator to prevent
+      // duplicate subscriptions across reconnect storms
+      ReconnectionCoordinator.instance.registerSubscription(
+        'notifications_repository',
+        () async {
+          if (_disposed) return;
+          _listenToWebSocket();
+        },
+      );
 
       // Also listen to VehicleDataRepository.onEvent to capture backfilled events
       _listenToVehicleRepoEvents();
@@ -1051,6 +1062,9 @@ class NotificationsRepository {
     _disposed = true;
 
     _log('🛑 Disposing NotificationsRepository');
+
+    // Unregister reconnection resubscription
+    ReconnectionCoordinator.instance.unregisterSubscription('notifications_repository');
 
     // Persist dedup state before cleanup
     unawaited(_persistRecentEventIds());

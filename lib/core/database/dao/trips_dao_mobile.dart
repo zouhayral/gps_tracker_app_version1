@@ -76,20 +76,52 @@ class TripsDaoMobile implements TripsDaoBase {
   Future<List<Trip>> getByDeviceInRange(
     int deviceId,
     DateTime startTime,
+    DateTime endTime, {
+    int? limit,
+    int? offset,
+  }) async {
+    final startMs = startTime.toUtc().millisecondsSinceEpoch;
+    final endMs = endTime.toUtc().millisecondsSinceEpoch;
+    
+    final qb = _box.query(
+      TripEntity_.deviceId.equals(deviceId) &
+          TripEntity_.startTimeMs.greaterOrEqual(startMs) &
+          TripEntity_.endTimeMs.lessOrEqual(endMs),
+    ).order(TripEntity_.startTimeMs, flags: ob.Order.descending);
+    
+    // Apply pagination if specified
+    final q = qb.build();
+    try {
+      if (limit != null) {
+        q.limit = limit;
+        if (offset != null && offset > 0) {
+          q.offset = offset;
+        }
+      }
+      return q.find().map(_fromEntity).toList();
+    } finally {
+      q.close();
+    }
+  }
+
+  /// Count total trips for a device in a time range
+  @override
+  Future<int> countByDeviceInRange(
+    int deviceId,
+    DateTime startTime,
     DateTime endTime,
   ) async {
     final startMs = startTime.toUtc().millisecondsSinceEpoch;
     final endMs = endTime.toUtc().millisecondsSinceEpoch;
-    final q = _box
-        .query(
-          TripEntity_.deviceId.equals(deviceId) &
-              TripEntity_.startTimeMs.greaterOrEqual(startMs) &
-              TripEntity_.endTimeMs.lessOrEqual(endMs),
-        )
-        .order(TripEntity_.startTimeMs, flags: ob.Order.descending)
-        .build();
+    
+    final q = _box.query(
+      TripEntity_.deviceId.equals(deviceId) &
+          TripEntity_.startTimeMs.greaterOrEqual(startMs) &
+          TripEntity_.endTimeMs.lessOrEqual(endMs),
+    ).build();
+    
     try {
-      return q.find().map(_fromEntity).toList();
+      return q.count();
     } finally {
       q.close();
     }
@@ -257,7 +289,16 @@ class _TripsNoop implements TripsDaoBase {
   Future<List<Trip>> getByDevice(int deviceId) async => <Trip>[];
 
   @override
-  Future<List<Trip>> getByDeviceInRange(int deviceId, DateTime startTime, DateTime endTime) async => <Trip>[];
+  Future<List<Trip>> getByDeviceInRange(
+    int deviceId,
+    DateTime startTime,
+    DateTime endTime, {
+    int? limit,
+    int? offset,
+  }) async => <Trip>[];
+
+  @override
+  Future<int> countByDeviceInRange(int deviceId, DateTime startTime, DateTime endTime) async => 0;
 
   @override
   Future<Trip?> getById(String tripId) async => null;

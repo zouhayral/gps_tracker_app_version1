@@ -24,13 +24,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get period => 'الفترة';
 
   @override
-  String get device => 'جهاز';
+  String get device => 'الجهاز';
 
   @override
   String get distance => 'المسافة';
 
   @override
-  String get avgSpeed => 'متوسط السرعة';
+  String get avgSpeed => 'السرعة المتوسطة';
 
   @override
   String get maxSpeed => 'أقصى سرعة';
@@ -179,7 +179,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get time => 'الوقت';
 
   @override
-  String get speed => 'السرعة';
+  String get speed => 'السرعة (كم/ساعة)';
 
   @override
   String get numberOfTrips => 'عدد الرحلات';
@@ -224,7 +224,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get notificationsTitle => 'التنبيهات';
 
   @override
-  String get allDevices => 'جميع الأجهزة';
+  String get allDevices => 'كل الأجهزة';
 
   @override
   String get noUpdateYet => 'لا يوجد تحديث بعد';
@@ -282,6 +282,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get engine => 'المحرك';
+
+  @override
+  String get speedKmh => 'Speed (km/h)';
 
   @override
   String get lastLocation => 'آخر موقع';

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:intl/intl.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
@@ -129,18 +130,18 @@ class AnalyticsPdfGenerator {
   ) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(24),
-      decoration: pw.BoxDecoration(
-        gradient: const pw.LinearGradient(
+      decoration: const pw.BoxDecoration(
+        gradient: pw.LinearGradient(
           colors: [_accentColor, _accentDark],
           begin: pw.Alignment.topLeft,
           end: pw.Alignment.bottomRight,
         ),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(16)),
+        borderRadius: pw.BorderRadius.all(pw.Radius.circular(16)),
         boxShadow: [
           pw.BoxShadow(
             color: PdfColors.grey400,
             blurRadius: 10,
-            offset: const PdfPoint(0, 4),
+            offset: PdfPoint(0, 4),
           ),
         ],
       ),
@@ -234,7 +235,7 @@ class AnalyticsPdfGenerator {
           children: [
             pw.Expanded(
               child: _buildMetricCard(
-                icon: '📏', // route/distance icon
+                icon: 'distance',
                 label: t.distance,
                 value: '${report.totalDistanceKm.toStringAsFixed(2)} km',
                 color: _infoColor,
@@ -244,8 +245,8 @@ class AnalyticsPdfGenerator {
             pw.SizedBox(width: 12),
             pw.Expanded(
               child: _buildMetricCard(
-                icon: '🚗', // speed icon
-                label: t.avgSpeed,
+                icon: 'speed',
+                label: '${t.avgSpeed}',
                 value: '${report.avgSpeed.toStringAsFixed(1)} km/h',
                 color: _successColor,
                 textDirection: textDirection,
@@ -258,9 +259,9 @@ class AnalyticsPdfGenerator {
           children: [
             pw.Expanded(
               child: _buildMetricCard(
-                icon: '📈', // trending up icon
-                label: t.maxSpeed,
-                value: '${report.maxSpeed.toStringAsFixed(1)} km/h',
+                icon: 'max',
+                label: '${t.maxSpeed}',
+                value: '${report.maxSpeed.toStringAsFixed(0)} km/h',
                 color: _warningColor,
                 textDirection: textDirection,
               ),
@@ -268,7 +269,7 @@ class AnalyticsPdfGenerator {
             pw.SizedBox(width: 12),
             pw.Expanded(
               child: _buildMetricCard(
-                icon: '🚙', // directions car icon
+                icon: 'trips',
                 label: t.trips,
                 value: report.tripCount.toString(),
                 color: _accentDark,
@@ -291,15 +292,20 @@ class AnalyticsPdfGenerator {
   }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
-      decoration: pw.BoxDecoration(
+      decoration: const pw.BoxDecoration(
         color: _cardBg,
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-        border: pw.Border.all(color: _lightGray, width: 1),
+        borderRadius: pw.BorderRadius.all(pw.Radius.circular(12)),
+        border: pw.Border(
+          top: pw.BorderSide(color: _lightGray, width: 1),
+          bottom: pw.BorderSide(color: _lightGray, width: 1),
+          left: pw.BorderSide(color: _lightGray, width: 1),
+          right: pw.BorderSide(color: _lightGray, width: 1),
+        ),
         boxShadow: [
           pw.BoxShadow(
             color: PdfColors.grey300,
             blurRadius: 4,
-            offset: const PdfPoint(0, 2),
+            offset: PdfPoint(0, 2),
           ),
         ],
       ),
@@ -309,18 +315,14 @@ class AnalyticsPdfGenerator {
           pw.Row(
             children: [
               pw.Container(
+                width: 40,
+                height: 40,
                 padding: const pw.EdgeInsets.all(8),
                 decoration: pw.BoxDecoration(
                   color: color.flatten(),
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
                 ),
-                child: pw.Text(
-                  icon,
-                  style: const pw.TextStyle(
-                    fontSize: 18,
-                    color: PdfColors.white,
-                  ),
-                ),
+                child: _buildIcon(icon, color, 24),
               ),
               pw.Spacer(),
             ],
@@ -396,10 +398,10 @@ class AnalyticsPdfGenerator {
   ) {
     final maxSpeed = report.maxSpeed;
     final avgSpeed = report.avgSpeed;
-    final chartMaxHeight = 150.0;
+    const chartMaxHeight = 150.0;
     
     final avgBarHeight = (avgSpeed / maxSpeed) * chartMaxHeight;
-    final maxBarHeight = chartMaxHeight;
+    const maxBarHeight = chartMaxHeight;
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
@@ -536,7 +538,7 @@ class AnalyticsPdfGenerator {
           ),
           pw.SizedBox(height: 16),
           _buildSummaryItem(
-            icon: '📏',
+            icon: 'distance',
             label: t.distance,
             value: '${report.totalDistanceKm.toStringAsFixed(2)} km',
             color: _infoColor,
@@ -544,7 +546,7 @@ class AnalyticsPdfGenerator {
           ),
           pw.SizedBox(height: 12),
           _buildSummaryItem(
-            icon: '🚗',
+            icon: 'trips',
             label: t.trips,
             value: report.tripCount.toString(),
             color: _accentDark,
@@ -553,7 +555,7 @@ class AnalyticsPdfGenerator {
           if (report.fuelUsed != null && report.fuelUsed! > 0) ...[
             pw.SizedBox(height: 12),
             _buildSummaryItem(
-              icon: '⛽',
+              icon: 'fuel',
               label: t.fuelUsed,
               value: '${report.fuelUsed!.toStringAsFixed(2)} L',
               color: _warningColor,
@@ -613,12 +615,7 @@ class AnalyticsPdfGenerator {
             borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
           ),
           child: pw.Center(
-            child: pw.Text(
-              icon,
-              style: const pw.TextStyle(
-                fontSize: 14,
-              ),
-            ),
+            child: _buildIcon(icon, color, 16),
           ),
         ),
         pw.SizedBox(width: 10),
@@ -663,19 +660,24 @@ class AnalyticsPdfGenerator {
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(20),
-      decoration: pw.BoxDecoration(
-        gradient: const pw.LinearGradient(
+      decoration: const pw.BoxDecoration(
+        gradient: pw.LinearGradient(
           colors: [_cardBg, PdfColors.white],
           begin: pw.Alignment.topLeft,
           end: pw.Alignment.bottomRight,
         ),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-        border: pw.Border.all(color: _lightGray, width: 1),
+        borderRadius: pw.BorderRadius.all(pw.Radius.circular(12)),
+        border: pw.Border(
+          top: pw.BorderSide(color: _lightGray, width: 1),
+          bottom: pw.BorderSide(color: _lightGray, width: 1),
+          left: pw.BorderSide(color: _lightGray, width: 1),
+          right: pw.BorderSide(color: _lightGray, width: 1),
+        ),
         boxShadow: [
           pw.BoxShadow(
             color: PdfColors.grey300,
             blurRadius: 4,
-            offset: const PdfPoint(0, 2),
+            offset: PdfPoint(0, 2),
           ),
         ],
       ),
@@ -713,7 +715,7 @@ class AnalyticsPdfGenerator {
           pw.SizedBox(height: 20),
           // Timeline visualization
           _buildTimelineItem(
-            icon: '🚗', // start icon
+            icon: 'start',
             label: t.start,
             value: dateFormat.format(report.startTime),
             color: _successColor,
@@ -724,7 +726,7 @@ class AnalyticsPdfGenerator {
           _buildTimelineDivider(),
           pw.SizedBox(height: 4),
           _buildTimelineItem(
-            icon: '⏱️', // duration icon
+            icon: 'duration',
             label: t.duration,
             value: durationText,
             color: _infoColor,
@@ -735,7 +737,7 @@ class AnalyticsPdfGenerator {
           _buildTimelineDivider(),
           pw.SizedBox(height: 4),
           _buildTimelineItem(
-            icon: '🏁', // end/finish flag icon
+            icon: 'end',
             label: t.end,
             value: dateFormat.format(report.endTime),
             color: _warningColor,
@@ -766,13 +768,7 @@ class AnalyticsPdfGenerator {
             shape: pw.BoxShape.circle,
           ),
           child: pw.Center(
-            child: pw.Text(
-              icon,
-              style: const pw.TextStyle(
-                fontSize: 18,
-                color: PdfColors.white,
-              ),
-            ),
+            child: _buildIcon(icon, color, 20),
           ),
         ),
         pw.SizedBox(width: 16),
@@ -834,8 +830,8 @@ class AnalyticsPdfGenerator {
                 pw.Container(
                   width: 30,
                   height: 30,
-                  decoration: pw.BoxDecoration(
-                    gradient: const pw.LinearGradient(
+                  decoration: const pw.BoxDecoration(
+                    gradient: pw.LinearGradient(
                       colors: [_accentColor, _accentDark],
                     ),
                     shape: pw.BoxShape.circle,
@@ -913,5 +909,132 @@ class AnalyticsPdfGenerator {
     } else {
       return '${duration.inMinutes}min';
     }
+  }
+
+  /// Builds an icon widget using custom drawn shapes
+  static pw.Widget _buildIcon(String iconType, PdfColor color, double size) {
+    return pw.CustomPaint(
+      size: PdfPoint(size, size),
+      painter: (PdfGraphics canvas, PdfPoint pdfSize) {
+        canvas
+          ..setStrokeColor(PdfColors.white)
+          ..setFillColor(PdfColors.white)
+          ..setLineWidth(2);
+
+        switch (iconType) {
+          case 'distance':
+            // Draw route/path icon (wavy line)
+            canvas
+              ..moveTo(pdfSize.x * 0.2, pdfSize.y * 0.3)
+              ..lineTo(pdfSize.x * 0.4, pdfSize.y * 0.5)
+              ..lineTo(pdfSize.x * 0.6, pdfSize.y * 0.4)
+              ..lineTo(pdfSize.x * 0.8, pdfSize.y * 0.6)
+              ..strokePath();
+            // Add arrow
+            canvas
+              ..moveTo(pdfSize.x * 0.8, pdfSize.y * 0.6)
+              ..lineTo(pdfSize.x * 0.7, pdfSize.y * 0.55)
+              ..moveTo(pdfSize.x * 0.8, pdfSize.y * 0.6)
+              ..lineTo(pdfSize.x * 0.75, pdfSize.y * 0.68)
+              ..strokePath();
+            break;
+
+          case 'speed':
+            // Draw speedometer icon (arc with needle)
+            final centerX = pdfSize.x * 0.5;
+            final centerY = pdfSize.y * 0.6;
+            final radius = pdfSize.x * 0.35;
+            // Arc
+            for (var i = 0.7; i <= 2.3; i += 0.1) {
+              final x = centerX + radius * 0.8 * cos(i * pi);
+              final y = centerY + radius * 0.8 * sin(i * pi);
+              if (i == 0.7) {
+                canvas.moveTo(x, y);
+              } else {
+                canvas.lineTo(x, y);
+              }
+            }
+            canvas.strokePath();
+            // Needle
+            canvas
+              ..moveTo(centerX, centerY)
+              ..lineTo(centerX + radius * 0.6, centerY - radius * 0.3)
+              ..strokePath();
+            break;
+
+          case 'max':
+            // Draw upward arrow
+            canvas
+              ..moveTo(pdfSize.x * 0.5, pdfSize.y * 0.2)
+              ..lineTo(pdfSize.x * 0.3, pdfSize.y * 0.4)
+              ..moveTo(pdfSize.x * 0.5, pdfSize.y * 0.2)
+              ..lineTo(pdfSize.x * 0.7, pdfSize.y * 0.4)
+              ..moveTo(pdfSize.x * 0.5, pdfSize.y * 0.2)
+              ..lineTo(pdfSize.x * 0.5, pdfSize.y * 0.8)
+              ..setLineWidth(2.5)
+              ..strokePath();
+            break;
+
+          case 'trips':
+            // Draw car icon (simplified)
+            canvas
+              // Car body
+              ..moveTo(pdfSize.x * 0.2, pdfSize.y * 0.5)
+              ..lineTo(pdfSize.x * 0.3, pdfSize.y * 0.3)
+              ..lineTo(pdfSize.x * 0.7, pdfSize.y * 0.3)
+              ..lineTo(pdfSize.x * 0.8, pdfSize.y * 0.5)
+              ..lineTo(pdfSize.x * 0.8, pdfSize.y * 0.7)
+              ..lineTo(pdfSize.x * 0.2, pdfSize.y * 0.7)
+              ..lineTo(pdfSize.x * 0.2, pdfSize.y * 0.5)
+              ..strokePath();
+            // Wheels
+            canvas.drawEllipse(pdfSize.x * 0.3, pdfSize.y * 0.75, pdfSize.x * 0.08, pdfSize.y * 0.08);
+            canvas.drawEllipse(pdfSize.x * 0.7, pdfSize.y * 0.75, pdfSize.x * 0.08, pdfSize.y * 0.08);
+            canvas.strokePath();
+            break;
+
+          case 'fuel':
+            // Draw fuel pump icon
+            canvas
+              ..drawRect(pdfSize.x * 0.3, pdfSize.y * 0.3, pdfSize.x * 0.4, pdfSize.y * 0.5)
+              ..strokePath()
+              ..moveTo(pdfSize.x * 0.5, pdfSize.y * 0.45)
+              ..lineTo(pdfSize.x * 0.7, pdfSize.y * 0.45)
+              ..lineTo(pdfSize.x * 0.7, pdfSize.y * 0.3)
+              ..strokePath();
+            break;
+
+          case 'start':
+            // Draw play/start triangle
+            canvas
+              ..moveTo(pdfSize.x * 0.3, pdfSize.y * 0.2)
+              ..lineTo(pdfSize.x * 0.3, pdfSize.y * 0.8)
+              ..lineTo(pdfSize.x * 0.75, pdfSize.y * 0.5)
+              ..lineTo(pdfSize.x * 0.3, pdfSize.y * 0.2)
+              ..fillPath();
+            break;
+
+          case 'duration':
+            // Draw clock icon
+            canvas.drawEllipse(pdfSize.x * 0.5, pdfSize.y * 0.5, pdfSize.x * 0.4, pdfSize.y * 0.4);
+            canvas.strokePath();
+            // Clock hands
+            canvas
+              ..moveTo(pdfSize.x * 0.5, pdfSize.y * 0.5)
+              ..lineTo(pdfSize.x * 0.5, pdfSize.y * 0.25)
+              ..moveTo(pdfSize.x * 0.5, pdfSize.y * 0.5)
+              ..lineTo(pdfSize.x * 0.7, pdfSize.y * 0.5)
+              ..strokePath();
+            break;
+
+          case 'end':
+            // Draw stop square
+            canvas
+              ..drawRect(pdfSize.x * 0.25, pdfSize.y * 0.25, pdfSize.x * 0.5, pdfSize.y * 0.5)
+              ..fillPath();
+            break;
+        }
+      },
+    );
   }
 }

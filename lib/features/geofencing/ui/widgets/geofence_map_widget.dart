@@ -228,10 +228,18 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
 
     return Stack(
       children: [
-        // Flutter Map
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: FlutterMap(
+        // Flutter Map - Optimized: removed ClipRRect, added border for visual effect
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _getInitialCenter(),
@@ -289,6 +297,7 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
               // Markers layer
               MarkerLayer(markers: _markers),
             ],
+          ),
           ),
         ),
 

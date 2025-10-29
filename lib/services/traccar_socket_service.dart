@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +10,7 @@ import 'package:my_app_gps/services/ws_connect_stub.dart'
     if (dart.library.html) 'package:my_app_gps/services/ws_connect_web.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:my_app_gps/core/network/reconnection_coordinator.dart';
 
 /// Provides a singleton TraccarSocketService.
 final traccarSocketServiceProvider = Provider<TraccarSocketService>((ref) {
@@ -28,7 +28,6 @@ class TraccarSocketService {
   WebSocketChannel? _channel;
   StreamController<TraccarSocketMessage>? _controller;
   Timer? _reconnectTimer;
-  int _reconnectAttempts = 0;
   bool _manuallyClosed = false;
   // Optional verbose socket logs to reduce noise in release builds
   static bool verboseSocketLogs = false;
@@ -71,7 +70,7 @@ class TraccarSocketService {
       }
 
       _channel = connectWebSocket(uri, headers);
-      _reconnectAttempts = 0;
+  // Reset reconnect counters handled by coordinator (no-op here)
 
       if (kDebugMode) {
         // ignore: avoid_print
@@ -218,24 +217,14 @@ class TraccarSocketService {
   void _scheduleReconnect(String reason) {
     if (_manuallyClosed) return;
     _channel = null;
-    // Capped exponential backoff with jitter: ~2s, 4s, 8s, 16s, 32s (+/-25%)
-    final exp = _reconnectAttempts.clamp(0, 4);
-    final baseSeconds = math.min(32, 2 << exp);
-    // Apply +/-25% jitter to avoid thundering herd on network recovery
-    const jitterFraction = 0.25;
-    final rand = math.Random();
-    final jitter = (baseSeconds * (rand.nextDouble() * 2 * jitterFraction - jitterFraction)).round();
-    final delaySeconds = (baseSeconds + jitter).clamp(1, 60);
-    final nextAttempt = _reconnectAttempts + 1;
-    _reconnectAttempts = nextAttempt;
+    // Delegate reconnection scheduling to the centralized coordinator
     if (kDebugMode) {
       // ignore: avoid_print
-      print(
-        '[SOCKET][RETRY] attempt #$nextAttempt in ${delaySeconds}s (reason=$reason)',
-      );
+      print('[SOCKET][RETRY] delegated to ReconnectionCoordinator (reason=$reason)');
     }
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(Duration(seconds: delaySeconds), _ensureConnected);
+    _reconnectTimer = null;
+    ReconnectionCoordinator.instance.trigger('traccar:$reason');
   }
 
   Future<void> close() async {

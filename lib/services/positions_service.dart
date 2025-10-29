@@ -267,7 +267,22 @@ class PositionsService {
       final data = resp.data;
       if (data == null) return null;
       return Position.fromJson(data);
-    } catch (_) {
+    } on DioException catch (e) {
+      // Log network errors at debug level (not error - these are expected)
+      if (e.response?.statusCode == 404) {
+        _log.debug('Position $id not found (404)');
+      } else if (e.response?.statusCode != null) {
+        _log.debug('Failed to fetch position $id: HTTP ${e.response?.statusCode}');
+      } else {
+        _log.debug('Failed to fetch position $id: ${e.type}');
+      }
+      return null;
+    } on FormatException catch (e) {
+      // JSON parsing errors - server might be returning HTML
+      _log.warning('Invalid JSON response for position $id: ${e.message}');
+      return null;
+    } catch (e) {
+      _log.debug('Unexpected error fetching position $id: $e');
       return null;
     }
   }
