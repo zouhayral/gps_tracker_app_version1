@@ -195,7 +195,7 @@ class AnalyticsRepository {
     // Try to get distance from summary data first (more accurate)
     if (summaryData.isNotEmpty) {
       final distance = summaryData.fold<double>(
-        0.0,
+        0,
         (sum, item) {
           final dist = item['distance'];
           if (dist != null) {
@@ -211,7 +211,7 @@ class AnalyticsRepository {
     // Fallback: Sum distances from trips data
     if (tripsData.isNotEmpty) {
       return tripsData.fold<double>(
-        0.0,
+        0,
         (sum, trip) {
           final dist = trip['distance'];
           if (dist != null) {
@@ -223,7 +223,7 @@ class AnalyticsRepository {
       );
     }
 
-    return 0.0;
+    return 0;
   }
 
   /// Computes speed statistics (average and max) from positions data.
@@ -285,11 +285,10 @@ class AnalyticsRepository {
     return AnalyticsReport(
       startTime: from,
       endTime: to,
-      totalDistanceKm: 0.0,
-      avgSpeed: 0.0,
-      maxSpeed: 0.0,
+      totalDistanceKm: 0,
+      avgSpeed: 0,
+      maxSpeed: 0,
       tripCount: 0,
-      fuelUsed: null,
     );
   }
 
@@ -299,7 +298,7 @@ class AnalyticsRepository {
   /// provide distance data. It computes the distance between consecutive
   /// GPS positions.
   double _calculateDistanceFromPositions(List<dynamic> positions) {
-    double total = 0.0;
+    var total = 0.0;
     
     for (var i = 1; i < positions.length; i++) {
       final prev = positions[i - 1];
@@ -350,8 +349,8 @@ class AnalyticsRepository {
   /// It counts trips by detecting when speed crosses above 5 km/h (moving)
   /// and drops below 2 km/h (stopped).
   int _estimateTripCount(List<dynamic> positions) {
-    int trips = 0;
-    bool inTrip = false;
+    var trips = 0;
+    var inTrip = false;
     
     for (final pos in positions) {
       final speed = pos['speed'];

@@ -796,4 +796,16 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get howOftenTheAppChecks =>
       'عدد المرات التي يتحقق فيها التطبيق من وجود الأجهزة داخل السياج الجغرافي. تردد أعلى = استهلاك أكبر للبطارية ولكن اكتشاف أسرع.';
+
+  @override
+  String get tripDetails => 'تفاصيل الرحلة';
+
+  @override
+  String get startTime => 'وقت البدء';
+
+  @override
+  String get endTime => 'وقت الانتهاء';
+
+  @override
+  String get follow => 'متابعة';
 }

@@ -320,11 +320,11 @@ class GeofenceEventRepository {
       final pending = await getPendingEventsForSync();
       
       if (pending.isEmpty) {
-        return SyncResults(successCount: 0, failedCount: 0);
+        return const SyncResults(successCount: 0, failedCount: 0);
       }
 
-      int success = 0;
-      int failed = 0;
+      var success = 0;
+      var failed = 0;
 
       for (final event in pending) {
         try {
@@ -345,7 +345,7 @@ class GeofenceEventRepository {
       return SyncResults(successCount: success, failedCount: failed);
     } catch (e) {
       _log('❌ Failed to sync pending events: $e');
-      return SyncResults(successCount: 0, failedCount: 0);
+      return const SyncResults(successCount: 0, failedCount: 0);
     }
   }
 
@@ -484,9 +484,7 @@ final geofenceEventRepositoryProvider =
   final repository = GeofenceEventRepository(dao: dao);
 
   // Auto-dispose repository when provider is disposed
-  ref.onDispose(() {
-    repository.dispose();
-  });
+  ref.onDispose(repository.dispose);
 
   return repository;
 });

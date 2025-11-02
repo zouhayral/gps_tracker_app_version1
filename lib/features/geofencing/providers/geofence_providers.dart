@@ -68,8 +68,7 @@ export 'package:my_app_gps/data/repositories/geofence_repository.dart'
 /// Handles geometric calculations and state transitions
 final geofenceEvaluatorServiceProvider = Provider<GeofenceEvaluatorService>((ref) {
   return GeofenceEvaluatorService(
-    boundaryToleranceMeters: 5.0,
-    dwellThreshold: const Duration(minutes: 2),
+    
   );
 });
 
@@ -78,13 +77,11 @@ final geofenceEvaluatorServiceProvider = Provider<GeofenceEvaluatorService>((ref
 /// In-memory cache with TTL-based eviction
 final geofenceStateCacheProvider = Provider<GeofenceStateCache>((ref) {
   final cache = GeofenceStateCache(
-    ttl: const Duration(hours: 24),
-    autoPruneInterval: const Duration(minutes: 30),
-    enableStatistics: true,
+    
   );
 
   // Auto-dispose cache when provider is disposed
-  ref.onDispose(() => cache.dispose());
+  ref.onDispose(cache.dispose);
 
   return cache;
 });
@@ -102,13 +99,10 @@ final geofenceMonitorServiceProvider = FutureProvider<GeofenceMonitorService>((r
     cache: ref.watch(geofenceStateCacheProvider),
     eventRepo: eventRepo,
     geofenceRepo: geofenceRepo,
-    minEvalInterval: const Duration(seconds: 5),
-    minMovementMeters: 5.0,
-    cachePruneInterval: const Duration(minutes: 10),
   );
 
   // Auto-dispose monitor when provider is disposed
-  ref.onDispose(() => monitor.dispose());
+  ref.onDispose(monitor.dispose);
 
   return monitor;
 });
@@ -268,8 +262,7 @@ class GeofenceMonitorState {
   const GeofenceMonitorState({
     required this.isActive,
     required this.activeGeofences,
-    this.lastUpdate,
-    required this.eventsTriggered,
+    required this.eventsTriggered, this.lastUpdate,
     this.error,
   });
 
@@ -342,7 +335,6 @@ class GeofenceMonitorController extends StateNotifier<GeofenceMonitorState> {
       state = state.copyWith(
         isActive: true,
         activeGeofences: monitor.activeGeofenceCount,
-        error: null,
       );
     } catch (e) {
       state = state.copyWith(
@@ -373,7 +365,6 @@ class GeofenceMonitorController extends StateNotifier<GeofenceMonitorState> {
       state = state.copyWith(
         isActive: false,
         activeGeofences: 0,
-        error: null,
       );
     } catch (e) {
       state = state.copyWith(
@@ -429,7 +420,7 @@ final geofenceMonitorProvider =
   
   // Extract the monitor or throw if not ready
   return monitorServiceAsync.maybeWhen(
-    data: (monitor) => GeofenceMonitorController(monitor),
+    data: GeofenceMonitorController.new,
     orElse: () => throw StateError('GeofenceMonitorService not initialized yet. Check monitorServiceAsync.hasValue before accessing.'),
   );
 });

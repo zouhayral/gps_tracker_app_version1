@@ -105,7 +105,7 @@ final filteredNotificationsProvider =
   final baseAsync = ref.watch(notificationsStreamProvider);
   final baseEvents = baseAsync.maybeWhen(
     data: (events) => events,
-    orElse: () => repo.getCurrentEvents(),
+    orElse: repo.getCurrentEvents,
   );
 
   // Debounced search query
@@ -201,7 +201,7 @@ final notificationByIdProvider =
   final listAsync = ref.watch(notificationsStreamProvider);
   final list = listAsync.maybeWhen(
     data: (v) => v,
-    orElse: () => repo.getCurrentEvents(),
+    orElse: repo.getCurrentEvents,
   );
   for (final e in list) {
     if (e.id == id) return e;

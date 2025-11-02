@@ -8,8 +8,8 @@ import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
 import 'package:my_app_gps/features/notifications/view/notification_tile.dart';
 import 'package:my_app_gps/features/notifications/view/recovered_banner.dart';
-import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/l10n/app_localizations.dart';
+import 'package:my_app_gps/providers/notification_providers.dart';
 
 /// NotificationsPage displays a list of notification events with live updates.
 ///

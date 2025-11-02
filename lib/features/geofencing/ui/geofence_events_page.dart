@@ -241,13 +241,10 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
               switch (value) {
                 case 'acknowledge_all':
                   _acknowledgeAll();
-                  break;
                 case 'archive_old':
                   _archiveOld();
-                  break;
                 case 'export':
                   _exportEvents();
-                  break;
               }
             },
           ),
@@ -280,7 +277,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant,
+        color: theme.colorScheme.surfaceContainerHighest,
         border: Border(
           bottom: BorderSide(
             color: theme.colorScheme.outline.withOpacity(0.2),
@@ -352,7 +349,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                     },
                   ),
                 );
-              }).toList(),
+              }),
 
             // Status chips
             if (_selectedStatuses.length < 3)
@@ -380,7 +377,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                     },
                   ),
                 );
-              }).toList(),
+              }),
 
             // Device chip
             if (_selectedDevice != null)
@@ -986,14 +983,13 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
                             ),
                             const SizedBox(height: 8),
                             DropdownButtonFormField<String>(
-                              value: _selectedDevice,
+                              initialValue: _selectedDevice,
                               decoration: const InputDecoration(
                                 border: OutlineInputBorder(),
                                 hintText: 'All Devices',
                               ),
                               items: const [
                                 DropdownMenuItem(
-                                  value: null,
                                   child: Text('All Devices'),
                                 ),
                                 DropdownMenuItem(
@@ -1193,7 +1189,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
           height: 300,
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
@@ -1327,7 +1323,7 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed ?? false) {
       try {
         // Await repository initialization before bulk acknowledge
         final repo = await ref.read(geofenceEventRepositoryProvider.future);
@@ -1491,13 +1487,10 @@ class _GeofenceEventsPageState extends ConsumerState<GeofenceEventsPage> {
       switch (_sortBy) {
         case 'timestamp':
           comparison = a.timestamp.compareTo(b.timestamp);
-          break;
         case 'type':
           comparison = a.eventType.compareTo(b.eventType);
-          break;
         case 'status':
           comparison = a.status.compareTo(b.status);
-          break;
         default:
           comparison = 0;
       }

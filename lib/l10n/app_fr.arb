@@ -270,5 +270,9 @@
   "allowsTheAppToDetectGeofenceEvents": "Permet à l'application de détecter les événements de géorepérage même lorsqu'elle est fermée. Sans cette autorisation, la surveillance ne fonctionne que lorsque l'application est ouverte.",
   "automaticallyAdjustsGeofenceCheckFrequency": "Ajuste automatiquement la fréquence de vérification du géorepérage en fonction du niveau de batterie et du mouvement de l'appareil pour économiser de l'énergie.",
   "chooseHowYouWantToBeNotified": "Choisissez comment vous souhaitez être notifié des événements de géorepérage. Les notifications locales fonctionnent hors ligne, les notifications push nécessitent une connexion réseau.",
-  "howOftenTheAppChecks": "À quelle fréquence l'application vérifie si les appareils sont à l'intérieur des géorepérages. Fréquence plus élevée = plus de consommation de batterie mais détection plus rapide."
+  "howOftenTheAppChecks": "À quelle fréquence l'application vérifie si les appareils sont à l'intérieur des géorepérages. Fréquence plus élevée = plus de consommation de batterie mais détection plus rapide.",
+  "tripDetails": "Détails du trajet",
+  "startTime": "Heure de début",
+  "endTime": "Heure de fin",
+  "follow": "Suivre"
 }

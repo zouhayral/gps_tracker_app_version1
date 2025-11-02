@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
@@ -12,6 +10,7 @@ import 'package:my_app_gps/features/localization/locale_provider.dart';
 import 'package:my_app_gps/features/notifications/view/notification_badge.dart';
 import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/services/traccar_connection_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persistent notification toggle provider (default ON)
 final notificationEnabledProvider = StateProvider<bool>((ref) {
@@ -193,13 +192,6 @@ class SettingsPage extends ConsumerWidget {
                 },
               );
             },
-          ),
-          ListTile(
-            leading: const Icon(Icons.language, color: Colors.blue),
-            title: Text(t.localeTest),
-            subtitle: Text(t.localeTestSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.safePush<void>(AppRoutes.localeTest),
           ),
           const Divider(height: 32),
           // === Logout Section ===

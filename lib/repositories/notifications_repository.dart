@@ -578,6 +578,9 @@ class NotificationsRepository {
   ///
   /// Only shows notifications for unread events with critical severity.
   /// Supports: overspeed, ignition on/off, device offline/online, geofence enter/exit
+  /// 
+  /// For backfilled events (reconnection): Shows notifications for events within
+  /// the last 30 minutes, even if marked as read, to ensure users see missed events
   Future<void> _showNotificationsForEvents(List<Event> events) async {
     try {
       final criticalTypes = [
@@ -591,10 +594,25 @@ class NotificationsRepository {
         'alarm',
       ];
 
+      // Time window for showing notifications on backfilled events
+      final notificationWindow = DateTime.now().subtract(const Duration(minutes: 30));
+
       // Filter events that should trigger notifications
       final notifiableEvents = events.where((event) {
-        return !event.isRead &&
-            criticalTypes.contains(event.type.toLowerCase());
+        // Must be a critical event type
+        if (!criticalTypes.contains(event.type.toLowerCase())) {
+          return false;
+        }
+        
+        // Recent events (within 30 min) should show regardless of read status
+        // This ensures missed events during disconnection are shown
+        final isRecent = event.timestamp.isAfter(notificationWindow);
+        if (isRecent) {
+          return true; // Show notification for recent events
+        }
+        
+        // Older events only if unread
+        return !event.isRead;
       }).toList();
 
       if (notifiableEvents.isEmpty) {
@@ -602,10 +620,18 @@ class NotificationsRepository {
         return;
       }
 
-      _log('🔔 Showing ${notifiableEvents.length} notifications');
+      // Log breakdown of recent vs older events
+      final recentCount = notifiableEvents.where(
+        (e) => e.timestamp.isAfter(notificationWindow)
+      ).length;
+      _log('🔔 Showing ${notifiableEvents.length} notifications ($recentCount recent, ${notifiableEvents.length - recentCount} older unread)');
 
       // Show individual notifications (deviceName already enriched)
       for (final event in notifiableEvents) {
+        final isRecent = event.timestamp.isAfter(notificationWindow);
+        if (isRecent && event.isRead) {
+          _log('📤 Showing notification for backfilled event: ${event.type} (${event.deviceName})');
+        }
         await LocalNotificationService.tryShowEventNotification(event);
       }
 
@@ -625,14 +651,27 @@ class NotificationsRepository {
   Future<void> addEvent(Event event) async {
     try {
       _log('addEvent called for ${event.type}');
-      // Deduplicate by id
-      if (_recentEventIds.contains(event.id)) {
-        _log('🔁 Skipping duplicate addEvent ${event.id}');
+      
+      // For recent events (within last hour), bypass duplicate check to ensure
+      // backfilled events are properly processed and notifications are shown
+      final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
+      final isRecent = event.timestamp.isAfter(oneHourAgo);
+      
+      // Deduplicate by id (but allow recent events through for notifications)
+      if (_recentEventIds.contains(event.id) && !isRecent) {
+        _log('🔁 Skipping duplicate addEvent ${event.id} (older than 1h)');
         if (kDebugMode) {
           DevDiagnostics.instance.incrementDedupSkipped();
         }
         return;
       }
+      
+      // For recent events that are duplicates, still show notification but skip caching
+      final isDuplicate = _recentEventIds.contains(event.id);
+      if (isDuplicate && isRecent) {
+        _log('🔄 Processing recent duplicate event ${event.id} for notifications only');
+      }
+      
       _recentEventIds.add(event.id);
       _newEventsSinceLastPersist++;
       // Auto-persist after threshold
@@ -643,6 +682,13 @@ class NotificationsRepository {
       // Enrich with device name and priority
       final enrichedList = await _enrichEventsWithDeviceNames([event]);
       final enriched = enrichedList.first;
+
+      // If this is a recent duplicate, only show notification, don't re-cache
+      if (isDuplicate && isRecent) {
+        _log('📤 Showing notification for recent duplicate event');
+        await _showNotificationsForEvents([enriched]);
+        return; // Skip caching and list emission
+      }
 
       // Persist to ObjectBox
       await _eventsDao.upsertMany([enriched.toEntity()]);

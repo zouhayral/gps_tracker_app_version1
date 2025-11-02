@@ -796,4 +796,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get howOftenTheAppChecks =>
       'How often the app checks if devices are inside geofences. Higher frequency = more battery usage but faster detection.';
+
+  @override
+  String get tripDetails => 'Trip Details';
+
+  @override
+  String get startTime => 'Start Time';
+
+  @override
+  String get endTime => 'End Time';
+
+  @override
+  String get follow => 'Follow';
 }

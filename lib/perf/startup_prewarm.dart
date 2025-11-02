@@ -195,7 +195,7 @@ class StartupPrewarm {
       RenderScheduler.addPostFrameCallback(() async {
         try {
           await _batchedAsyncWork(
-            () => MarkerIconManager.instance.preloadIcons(),
+            MarkerIconManager.instance.preloadIcons,
             maxDurationMs: 4,
           );
 
@@ -265,8 +265,8 @@ class StartupPrewarm {
 
       // Generate 1-ring of tiles (3x3 grid around center)
       final tilesToPrewarm = <(int x, int y, int z)>[];
-      for (int dx = -1; dx <= 1; dx++) {
-        for (int dy = -1; dy <= 1; dy++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        for (var dy = -1; dy <= 1; dy++) {
           tilesToPrewarm.add((
             centerTile.$1 + dx,
             centerTile.$2 + dy,
@@ -282,7 +282,7 @@ class StartupPrewarm {
       }
 
       // Prewarm tiles in batches to avoid blocking
-      int prewarmedCount = 0;
+      var prewarmedCount = 0;
       for (final batch in _batchList(tilesToPrewarm, 3)) {
         if (_isCancelled) break;
 
@@ -318,7 +318,7 @@ class StartupPrewarm {
   /// Prewarm a batch of tiles
   static Future<void> _prewarmTileBatch(List<(int x, int y, int z)> tiles) async {
     try {
-      final store = const FMTCStore('main');
+      const store = FMTCStore('main');
 
       for (final (x, y, z) in tiles) {
         if (_isCancelled) break;
@@ -382,7 +382,7 @@ class StartupPrewarm {
 
   /// Batch a list into chunks
   static Iterable<List<T>> _batchList<T>(List<T> list, int batchSize) sync* {
-    for (int i = 0; i < list.length; i += batchSize) {
+    for (var i = 0; i < list.length; i += batchSize) {
       yield list.sublist(i, math.min(i + batchSize, list.length));
     }
   }

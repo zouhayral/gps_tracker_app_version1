@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
-import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
@@ -10,6 +9,7 @@ import 'package:my_app_gps/features/geofencing/providers/geofence_optimizer_prov
 import 'package:my_app_gps/features/geofencing/providers/geofence_permission_provider.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
 import 'package:my_app_gps/features/geofencing/ui/widgets/permission_prompt_dialog.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Consolidated Geofence Settings Page
@@ -222,7 +222,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(t?.geofenceMonitoringStopped ?? '⏸️ Geofence monitoring stopped'),
-                        duration: Duration(seconds: 2),
+                        duration: const Duration(seconds: 2),
                       ),
                     );
                   }
@@ -312,7 +312,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(t?.foregroundOnlyModeActivated ?? '⚠️ Foreground-only mode activated'),
-                      duration: Duration(seconds: 2),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }
@@ -377,22 +377,18 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
         modeIcon = Icons.bolt_rounded;
         modeColor = Colors.grey;
         modeText = t?.optimizationDisabled ?? 'Optimization disabled';
-        break;
       case OptimizationMode.active:
         modeIcon = Icons.bolt_rounded;
         modeColor = Colors.green;
         modeText = '${t?.activeMode ?? 'Active mode'} (${currentInterval}s ${t?.interval ?? 'interval'})';
-        break;
       case OptimizationMode.idle:
         modeIcon = Icons.snooze_rounded;
         modeColor = Colors.orange;
         modeText = '${t?.idleMode ?? 'Idle mode'} (${currentInterval}s ${t?.interval ?? 'interval'})';
-        break;
       case OptimizationMode.batterySaver:
         modeIcon = Icons.battery_saver_rounded;
         modeColor = Colors.red;
         modeText = '${t?.batterySaver ?? 'Battery saver'} (${currentInterval}s ${t?.interval ?? 'interval'})';
-        break;
     }
 
     return Column(
@@ -439,7 +435,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(t?.adaptiveOptimizationDisabled ?? '⏸️ Adaptive optimization disabled'),
-                      duration: Duration(seconds: 2),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }
@@ -537,7 +533,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   // ==========================================================================
 
   /// Show notification type picker
-  void _showNotificationTypePicker(BuildContext context) async {
+  Future<void> _showNotificationTypePicker(BuildContext context) async {
     final types = ['Local only', 'Push only', 'Both (Local + Push)', 'Silent'];
     final descriptions = {
       'Local only': 'Show notifications only on this device',
@@ -593,7 +589,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   }
 
   /// Show evaluation frequency picker
-  void _showEvaluationFrequencyPicker(BuildContext context) async {
+  Future<void> _showEvaluationFrequencyPicker(BuildContext context) async {
     final modes = [
       'Fast (Real-time)',
       'Balanced (recommended)',
@@ -652,7 +648,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   }
 
   /// Reset all settings to defaults
-  void _resetToDefaults(BuildContext context) async {
+  Future<void> _resetToDefaults(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -674,7 +670,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
       ),
     );
 
-    if (confirm == true && mounted) {
+    if (confirm ?? false && mounted) {
       await _saveNotificationType('Local only');
       await _saveEvaluationMode('Balanced (recommended)');
 

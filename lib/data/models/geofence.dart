@@ -36,7 +36,7 @@ class Geofence {
     required this.name,
     required this.type,
     required this.enabled,
-    this.centerLat,
+    required this.createdAt, required this.updatedAt, this.centerLat,
     this.centerLng,
     this.radius,
     this.vertices,
@@ -45,8 +45,6 @@ class Geofence {
     this.onExit = true,
     this.dwellMs,
     this.notificationType = 'local',
-    required this.createdAt,
-    required this.updatedAt,
     this.syncStatus = 'synced',
     this.version = 1,
   });
@@ -79,7 +77,6 @@ class Geofence {
       centerLat: center.latitude,
       centerLng: center.longitude,
       radius: radius,
-      vertices: null,
       monitoredDevices: monitoredDevices,
       onEnter: onEnter,
       onExit: onExit,
@@ -88,7 +85,6 @@ class Geofence {
       createdAt: now,
       updatedAt: now,
       syncStatus: 'pending',
-      version: 1,
     );
   }
 
@@ -112,9 +108,6 @@ class Geofence {
       name: name,
       type: 'polygon',
       enabled: enabled,
-      centerLat: null,
-      centerLng: null,
-      radius: null,
       vertices: vertices,
       monitoredDevices: monitoredDevices,
       onEnter: onEnter,
@@ -124,7 +117,6 @@ class Geofence {
       createdAt: now,
       updatedAt: now,
       syncStatus: 'pending',
-      version: 1,
     );
   }
 
@@ -140,19 +132,12 @@ class Geofence {
       name: '',
       type: 'circle',
       enabled: false,
-      centerLat: 0.0,
-      centerLng: 0.0,
-      radius: 100.0,
-      vertices: null,
-      monitoredDevices: const [],
-      onEnter: true,
-      onExit: true,
-      dwellMs: null,
-      notificationType: 'local',
+      centerLat: 0,
+      centerLng: 0,
+      radius: 100,
       createdAt: now,
       updatedAt: now,
       syncStatus: 'pending',
-      version: 1,
     );
   }
 
@@ -195,7 +180,7 @@ class Geofence {
     }
 
     // Parse monitored devices from JSON array
-    List<String> monitoredDevices = [];
+    var monitoredDevices = <String>[];
     if (json['monitoredDevices'] != null ||
         json['monitored_devices'] != null) {
       try {
@@ -306,7 +291,7 @@ class Geofence {
     }
 
     // Parse monitored devices from JSON string
-    List<String> monitoredDevices = [];
+    var monitoredDevices = <String>[];
     if (map['monitored_devices'] != null) {
       try {
         final decoded = jsonDecode(map['monitored_devices'] as String) as List;
@@ -392,7 +377,7 @@ class Geofence {
     final attributes = entity.toDomain()['attributes'] as Map<String, dynamic>? ?? {};
     
     // Parse area WKT format
-    String type = 'circle';
+    var type = 'circle';
     double? centerLat;
     double? centerLng;
     double? radius;
@@ -439,7 +424,7 @@ class Geofence {
     }
 
     // Parse monitored devices
-    List<String> monitoredDevices = [];
+    var monitoredDevices = <String>[];
     if (attributes['monitoredDevices'] != null) {
       final devicesData = attributes['monitoredDevices'];
       if (devicesData is List) {
@@ -672,7 +657,7 @@ class Geofence {
     if (identical(a, b)) return true;
     if (a == null || b == null) return false;
     if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
+    for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
     }
     return true;

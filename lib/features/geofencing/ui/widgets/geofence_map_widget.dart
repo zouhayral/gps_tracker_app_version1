@@ -119,7 +119,7 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
   
   // Drawing state (editable mode)
   LatLng? _circleCenter;
-  double _circleRadius = 100.0;
+  double _circleRadius = 100;
   List<LatLng> _polygonVertices = [];
   
   // Map markers
@@ -205,14 +205,14 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
   /// Calculate appropriate zoom level for radius
   double _calculateZoomForRadius(double radius) {
     // Zoom level based on radius
-    if (radius < 50) return 18.0;
-    if (radius < 100) return 17.0;
-    if (radius < 200) return 16.0;
-    if (radius < 500) return 15.0;
-    if (radius < 1000) return 14.0;
-    if (radius < 2000) return 13.0;
-    if (radius < 5000) return 12.0;
-    return 11.0;
+    if (radius < 50) return 18;
+    if (radius < 100) return 17;
+    if (radius < 200) return 16;
+    if (radius < 500) return 15;
+    if (radius < 1000) return 14;
+    if (radius < 2000) return 13;
+    if (radius < 5000) return 12;
+    return 11;
   }
 
   @override
@@ -221,7 +221,7 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
     final isDark = theme.brightness == Brightness.dark;
     
     // Calculate initial zoom
-    double initialZoom = widget.initialZoom ?? 15.0;
+    var initialZoom = widget.initialZoom ?? 15.0;
     if (widget.geofence != null && widget.geofence!.radius != null) {
       initialZoom = _calculateZoomForRadius(widget.geofence!.radius!);
     }
@@ -358,7 +358,7 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
   /// Build instructions overlay for edit mode
   Widget _buildInstructionsOverlay(BuildContext context) {
     final theme = Theme.of(context);
-    String instructions = '';
+    var instructions = '';
     
     if (_circleCenter == null && _polygonVertices.isEmpty) {
       if (widget.geofence?.type == 'polygon') {
@@ -417,7 +417,7 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
     final theme = Theme.of(context);
     final geofence = widget.geofence!;
 
-    String info = '';
+    var info = '';
     if (geofence.type == 'circle' && geofence.radius != null) {
       info = 'Radius: ${_formatDistance(geofence.radius!)}';
     } else if (geofence.type == 'polygon' && geofence.vertices != null) {
@@ -555,7 +555,7 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
 
     // Add vertex markers in edit mode (polygon)
     if (widget.editable && _polygonVertices.isNotEmpty) {
-      for (int i = 0; i < _polygonVertices.length; i++) {
+      for (var i = 0; i < _polygonVertices.length; i++) {
         newMarkers.add(
           Marker(
             width: 40,
@@ -593,15 +593,12 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
           case 'entry':
             markerColor = Colors.green;
             markerIcon = Icons.login;
-            break;
           case 'exit':
             markerColor = Colors.red;
             markerIcon = Icons.logout;
-            break;
           case 'dwell':
             markerColor = Colors.orange;
             markerIcon = Icons.access_time;
-            break;
           default:
             markerColor = Colors.blue;
             markerIcon = Icons.place;
@@ -644,10 +641,10 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
     } else if (_getPolygonVertices().length >= 2) {
       final vertices = _getPolygonVertices();
       
-      double minLat = vertices.first.latitude;
-      double maxLat = vertices.first.latitude;
-      double minLng = vertices.first.longitude;
-      double maxLng = vertices.first.longitude;
+      var minLat = vertices.first.latitude;
+      var maxLat = vertices.first.latitude;
+      var minLng = vertices.first.longitude;
+      var maxLng = vertices.first.longitude;
 
       for (final vertex in vertices) {
         if (vertex.latitude < minLat) minLat = vertex.latitude;
@@ -675,8 +672,8 @@ class _GeofenceMapWidgetState extends State<GeofenceMapWidget> {
   /// Offset a LatLng by distance in meters
   LatLng _offsetLatLng(LatLng origin, double dx, double dy) {
     // Approximate: 111km per degree latitude
-    const double metersPerDegreeLat = 111320.0;
-    final double metersPerDegreeLng =
+    const metersPerDegreeLat = 111320;
+    final metersPerDegreeLng =
         111320.0 * (1 / (1 / (90.0 - origin.latitude.abs())));
 
     return LatLng(

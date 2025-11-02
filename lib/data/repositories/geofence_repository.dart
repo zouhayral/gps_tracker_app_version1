@@ -395,9 +395,7 @@ final geofenceRepositoryProvider = FutureProvider<GeofenceRepository>((ref) asyn
   final repository = GeofenceRepository(dao: dao);
   
   // Auto-dispose repository when provider is disposed
-  ref.onDispose(() {
-    repository.dispose();
-  });
+  ref.onDispose(repository.dispose);
   
   return repository;
 });

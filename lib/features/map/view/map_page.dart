@@ -49,6 +49,7 @@ import 'package:my_app_gps/features/map/widgets/map_info_boxes.dart';
 import 'package:my_app_gps/features/map/widgets/map_overlays.dart';
 import 'package:my_app_gps/features/map/widgets/map_search_bar.dart';
 import 'package:my_app_gps/features/notifications/view/notification_banner.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/map/map_tile_providers.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/perf/performance_debug_overlay.dart';
@@ -57,7 +58,6 @@ import 'package:my_app_gps/services/fmtc_initializer.dart';
 import 'package:my_app_gps/services/positions_service.dart';
 import 'package:my_app_gps/services/websocket_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:my_app_gps/l10n/app_localizations.dart';
 // Removed SmoothSheetController; using direct controller-driven logic
 // import 'package:my_app_gps/services/websocket_manager.dart';
 
@@ -227,7 +227,7 @@ class _MapPageState extends ConsumerState<MapPage>
   late final AdaptiveLodController _lodController;
   final CameraThrottle _cameraThrottle = CameraThrottle(); // Camera update throttling
   bool _isFirstMapReady = false; // Track first map ready for prewarm
-  double _currentFps = 60.0; // Current FPS for debug overlay
+  double _currentFps = 60; // Current FPS for debug overlay
 
   @override
   void initState() {
@@ -236,7 +236,6 @@ class _MapPageState extends ConsumerState<MapPage>
     // ADAPTIVE RENDERING: Initialize LOD controller and FPS monitoring
     _lodController = AdaptiveLodController(LodConfig.standard);
     _fpsMonitor = FpsMonitor(
-      window: const Duration(seconds: 2),
       onFps: (fps) {
         _currentFps = fps; // Update for debug overlay
         _lodController.updateByFps(fps);
@@ -476,7 +475,7 @@ class _MapPageState extends ConsumerState<MapPage>
     final listenedDeviceIds = <int>{};
     
     // Track if initial fit has been triggered
-    bool hasTriggeredInitialFit = false;
+    var hasTriggeredInitialFit = false;
     
     // Helper to setup position listeners for a device
     void setupPositionListener(int deviceId) {
@@ -648,6 +647,16 @@ class _MapPageState extends ConsumerState<MapPage>
       for (final entry in lastKnown.entries) {
         positions.putIfAbsent(entry.key, () => entry.value);
       }
+    }
+
+    // 🎯 OPTIMIZATION: Early return if no position data available
+    // Prevents unnecessary marker processing and cache operations
+    if (positions.isEmpty && devices.isNotEmpty) {
+      _log.debug(
+        '⏭️ Skipping marker update: no position data available for ${devices.length} devices '
+        '(waiting for initial position fetch)',
+      );
+      return;
     }
 
     final selInfo = _selectedIds.isEmpty ? 'none' : _selectedIds.join(',');
@@ -1339,8 +1348,8 @@ class _MapPageState extends ConsumerState<MapPage>
       );
 
       // ADAPTIVE RENDERING: Apply marker decimation based on LOD mode
-      List<MapMarkerData> finalMarkers = diffResult.markers;
-      final int markerCap = _lodController.markerCap();
+      var finalMarkers = diffResult.markers;
+      final markerCap = _lodController.markerCap();
       
       if (markerCap > 0 && finalMarkers.length > markerCap) {
         // Use distance-based clustering for spatial decimation
@@ -1349,7 +1358,6 @@ class _MapPageState extends ConsumerState<MapPage>
           markers: finalMarkers,
           positionGetter: (marker) => marker.position,
           maxCount: markerCap,
-          minDistanceMeters: 100,  // Minimum 100m separation
         );
         
         if (kDebugMode && MapDebugFlags.enablePerfMetrics) {
@@ -2202,7 +2210,6 @@ class _MapPageState extends ConsumerState<MapPage>
                       fps: _currentFps,
                       lodMode: _lodController.mode,
                       cameraThrottle: _cameraThrottle,
-                      showPrewarmStatus: true,
                     ),
 
                   // FMTC Diagnostics Overlay (debug-only, tap-to-toggle)

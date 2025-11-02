@@ -9,8 +9,7 @@ void main() {
 
     setUp(() {
       evaluator = GeofenceEvaluatorService(
-        boundaryToleranceMeters: 5.0,
-        dwellThreshold: const Duration(minutes: 2),
+        
       );
     });
 
@@ -25,13 +24,11 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
-          onExit: true,
+          radius: 100,
         );
 
         // Position inside circle
-        final position = const LatLng(34.0522, -118.2437);
+        const position = LatLng(34.0522, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -52,13 +49,11 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
-          onExit: true,
+          radius: 100,
         );
 
         // Position far outside circle (~1km away)
-        final position = const LatLng(34.0600, -118.2437);
+        const position = LatLng(34.0600, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -77,9 +72,7 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
-          onExit: true,
+          radius: 100,
         );
 
         final timestamp1 = DateTime.now();
@@ -114,13 +107,11 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
-          onExit: true,
+          radius: 100,
         );
 
         // Position at ~102m (just outside radius but within tolerance)
-        final position = const LatLng(34.0531, -118.2437);
+        const position = LatLng(34.0531, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -148,12 +139,10 @@ void main() {
             LatLng(34.0530, -118.2430),
             LatLng(34.0530, -118.2440),
           ],
-          onEnter: true,
-          onExit: true,
         );
 
         // Position inside polygon
-        final position = const LatLng(34.0525, -118.2435);
+        const position = LatLng(34.0525, -118.2435);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -178,12 +167,10 @@ void main() {
             LatLng(34.0530, -118.2430),
             LatLng(34.0530, -118.2440),
           ],
-          onEnter: true,
-          onExit: true,
         );
 
         // Position outside polygon
-        final position = const LatLng(34.0540, -118.2435);
+        const position = LatLng(34.0540, -118.2435);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -197,7 +184,7 @@ void main() {
       });
 
       test('bounding box optimization works', () {
-        final vertices = const [
+        const vertices = [
           LatLng(34.0520, -118.2440),
           LatLng(34.0520, -118.2430),
           LatLng(34.0530, -118.2430),
@@ -231,9 +218,7 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
-          onExit: true,
+          radius: 100,
           dwellMs: 120000, // 2 minutes
         );
 
@@ -270,9 +255,7 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
-          onExit: true,
+          radius: 100,
           dwellMs: 120000, // 2 minutes
         );
 
@@ -316,9 +299,7 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
-          onExit: true,
+          radius: 100,
           dwellMs: 120000, // 2 minutes
         );
 
@@ -380,8 +361,7 @@ void main() {
           userId: 'user1',
           name: 'Circle 1',
           center: const LatLng(34.0522, -118.2437),
-          radius: 50.0, // Smaller radius
-          onEnter: true,
+          radius: 50, // Smaller radius
         );
 
         final geofence2 = Geofence.circle(
@@ -389,12 +369,11 @@ void main() {
           userId: 'user1',
           name: 'Circle 2',
           center: const LatLng(34.0540, -118.2437), // Further away
-          radius: 50.0,
-          onEnter: true,
+          radius: 50,
         );
 
         // Position inside circle-1, outside circle-2
-        final position = const LatLng(34.0522, -118.2437);
+        const position = LatLng(34.0522, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -414,8 +393,7 @@ void main() {
           userId: 'user1',
           name: 'Circle 1',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
+          radius: 100,
         );
 
         final geofence2 = Geofence.circle(
@@ -423,12 +401,11 @@ void main() {
           userId: 'user1',
           name: 'Circle 2',
           center: const LatLng(34.0523, -118.2437),
-          radius: 100.0,
-          onEnter: true,
+          radius: 100,
         );
 
         // Position inside both circles
-        final position = const LatLng(34.05225, -118.2437);
+        const position = LatLng(34.05225, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -449,12 +426,11 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
+          radius: 100,
           monitoredDevices: const ['device2', 'device3'], // device1 not monitored
-          onEnter: true,
         );
 
-        final position = const LatLng(34.0522, -118.2437);
+        const position = LatLng(34.0522, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -473,12 +449,11 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
+          radius: 100,
           monitoredDevices: const ['device1', 'device2'],
-          onEnter: true,
         );
 
-        final position = const LatLng(34.0522, -118.2437);
+        const position = LatLng(34.0522, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -497,12 +472,10 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          monitoredDevices: const [], // Empty = monitor all
-          onEnter: true,
+          radius: 100,
         );
 
-        final position = const LatLng(34.0522, -118.2437);
+        const position = LatLng(34.0522, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -523,12 +496,11 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
+          radius: 100,
           onEnter: false, // Disabled
-          onExit: true,
         );
 
-        final position = const LatLng(34.0522, -118.2437);
+        const position = LatLng(34.0522, -118.2437);
         final timestamp = DateTime.now();
 
         final events = evaluator.evaluate(
@@ -547,8 +519,7 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
+          radius: 100,
           onExit: false, // Disabled
         );
 
@@ -584,8 +555,7 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
+          radius: 100,
         );
 
         evaluator.evaluate(
@@ -606,8 +576,7 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
+          radius: 100,
         );
 
         evaluator.evaluate(
@@ -629,8 +598,7 @@ void main() {
           userId: 'user1',
           name: 'Test Circle',
           center: const LatLng(34.0522, -118.2437),
-          radius: 100.0,
-          onEnter: true,
+          radius: 100,
         );
 
         evaluator.evaluate(
@@ -649,7 +617,7 @@ void main() {
 
     group('Test Utilities', () {
       test('testPointInPolygon works correctly', () {
-        final vertices = const [
+        const vertices = [
           LatLng(34.0520, -118.2440),
           LatLng(34.0520, -118.2430),
           LatLng(34.0530, -118.2430),
@@ -697,7 +665,6 @@ void main() {
         isInside: true,
         enterTimestamp: DateTime.now(),
         lastSeenTimestamp: DateTime.now(),
-        dwellEventSent: false,
       );
 
       final updated = state.copyWith(isInside: false);

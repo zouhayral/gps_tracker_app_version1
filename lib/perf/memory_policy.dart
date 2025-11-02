@@ -15,6 +15,7 @@
 /// - Heap drift: ≤+20 MB over 1 hour (down from +80 MB)
 /// - FMTC store size: Capped at policy limit
 /// - Idle frame overruns: <1%
+library;
 
 import 'dart:async';
 import 'dart:developer' as developer;
@@ -109,7 +110,6 @@ class MemoryPolicy {
     bitmapPoolMaxBytes: 30 * 1024 * 1024, // 30 MB
     bitmapPoolMaxEntries: 100,
     markerPoolMaxPerTier: 500,
-    enableAggressiveTrim: false,
   );
 
   /// Create policy adapted to current LOD mode

@@ -811,4 +811,16 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get howOftenTheAppChecks =>
       'À quelle fréquence l\'application vérifie si les appareils sont à l\'intérieur des géorepérages. Fréquence plus élevée = plus de consommation de batterie mais détection plus rapide.';
+
+  @override
+  String get tripDetails => 'Détails du trajet';
+
+  @override
+  String get startTime => 'Heure de début';
+
+  @override
+  String get endTime => 'Heure de fin';
+
+  @override
+  String get follow => 'Suivre';
 }

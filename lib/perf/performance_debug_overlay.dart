@@ -47,7 +47,7 @@ class PerformanceDebugOverlay extends StatelessWidget {
         color: Colors.black.withOpacity(0.7),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,

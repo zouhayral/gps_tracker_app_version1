@@ -22,8 +22,7 @@ class PermissionPromptDialog extends StatelessWidget {
   final String? message;
 
   const PermissionPromptDialog({
-    super.key,
-    required this.onOpenSettings,
+    required this.onOpenSettings, super.key,
     this.title,
     this.message,
   });
@@ -196,8 +195,7 @@ class PermissionPromptBanner extends StatelessWidget {
   final VoidCallback? onDismiss;
 
   const PermissionPromptBanner({
-    super.key,
-    required this.onOpenSettings,
+    required this.onOpenSettings, super.key,
     this.onDismiss,
   });
 
@@ -214,7 +212,6 @@ class PermissionPromptBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: colorScheme.error.withOpacity(0.3),
-          width: 1,
         ),
       ),
       child: Column(
@@ -293,7 +290,6 @@ class ForegroundOnlyBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: colorScheme.secondary.withOpacity(0.3),
-          width: 1,
         ),
       ),
       child: Row(

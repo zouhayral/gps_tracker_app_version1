@@ -13,7 +13,6 @@ import 'package:my_app_gps/features/geofencing/ui/geofence_list_page.dart';
 import 'package:my_app_gps/features/geofencing/ui/geofence_settings_page.dart';
 import 'package:my_app_gps/features/map/view/map_page.dart';
 import 'package:my_app_gps/features/notifications/view/notifications_page.dart';
-import 'package:my_app_gps/features/settings/view/locale_test_page.dart';
 import 'package:my_app_gps/features/settings/view/settings_page.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_page.dart';
 import 'package:my_app_gps/features/trips/view/trips_page.dart';
@@ -28,7 +27,6 @@ class AppRoutes {
   static const trips = '/trips';
   static const alerts = '/alerts';
   static const settings = '/settings';
-  static const localeTest = '/locale-test';
   
   /// Route for the analytics reports and statistics page.
   static const analytics = '/analytics';
@@ -87,12 +85,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.geofences,
         name: 'geofences',
         builder: (context, state) => const GeofenceListPage(),
-      ),
-      // Locale test route (for verifying localization setup)
-      GoRoute(
-        path: AppRoutes.localeTest,
-        name: 'locale-test',
-        builder: (context, state) => const LocaleTestPage(),
       ),
       // Analytics route (standalone, accessible from settings)
       GoRoute(

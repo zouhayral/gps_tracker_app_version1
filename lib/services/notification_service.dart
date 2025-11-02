@@ -86,9 +86,7 @@ class NotificationService {
 
     // iOS-specific initialization settings
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      
     );
 
     const initSettings = InitializationSettings(
@@ -103,7 +101,7 @@ class NotificationService {
         final payload = response.payload;
         if (payload != null) {
           // Try to use cached context first, then provided context, then global navigator key
-          BuildContext? navContext = _cachedContext ?? context;
+          final navContext = _cachedContext ?? context;
           
           if (navContext != null && navContext.mounted) {
             navContext.push(payload);
@@ -144,9 +142,6 @@ class NotificationService {
       'Geofence Alerts',
       description: 'Alerts for entry, exit, and dwell geofence events',
       importance: Importance.high,
-      playSound: true,
-      enableVibration: true,
-      showBadge: true,
     );
 
     await _local
@@ -222,8 +217,6 @@ class NotificationService {
       priority: Priority.high,
       ticker: 'Geofence Alert',
       color: _getEventColor(eventType),
-      enableVibration: true,
-      playSound: true,
       icon: '@mipmap/ic_launcher',
       largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
       styleInformation: BigTextStyleInformation(
@@ -239,7 +232,6 @@ class NotificationService {
         const AndroidNotificationAction(
           'dismiss',
           'Dismiss',
-          cancelNotification: true,
         ),
       ],
     );
@@ -332,7 +324,7 @@ class NotificationService {
   /// print('Pending notifications: ${pending.length}');
   /// ```
   Future<List<PendingNotificationRequest>> getPendingNotifications() async {
-    return await _local.pendingNotificationRequests();
+    return _local.pendingNotificationRequests();
   }
 
   /// Get list of active notifications.
@@ -350,7 +342,7 @@ class NotificationService {
     final androidPlugin = _local.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
-      return await androidPlugin.getActiveNotifications();
+      return androidPlugin.getActiveNotifications();
     }
     return [];
   }

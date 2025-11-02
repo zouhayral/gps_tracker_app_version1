@@ -270,5 +270,9 @@
   "allowsTheAppToDetectGeofenceEvents": "Allows the app to detect geofence events even when closed. Without this permission, monitoring only works while app is open.",
   "automaticallyAdjustsGeofenceCheckFrequency": "Automatically adjusts geofence check frequency based on battery level and device motion to save power.",
   "chooseHowYouWantToBeNotified": "Choose how you want to be notified about geofence events. Local notifications work offline, push requires network.",
-  "howOftenTheAppChecks": "How often the app checks if devices are inside geofences. Higher frequency = more battery usage but faster detection."
+  "howOftenTheAppChecks": "How often the app checks if devices are inside geofences. Higher frequency = more battery usage but faster detection.",
+  "tripDetails": "Trip Details",
+  "startTime": "Start Time",
+  "endTime": "End Time",
+  "follow": "Follow"
 }

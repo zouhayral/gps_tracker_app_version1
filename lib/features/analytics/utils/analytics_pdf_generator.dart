@@ -13,13 +13,13 @@ import 'package:my_app_gps/core/utils/app_logger.dart';
 /// with summary statistics, charts, and branding.
 class AnalyticsPdfGenerator {
   /// Brand accent color (lime green).
-  static final _accentColor = PdfColor.fromInt(0xFFb4e15c);
+  static const _accentColor = PdfColor.fromInt(0xFFb4e15c);
   
   /// Secondary color for backgrounds.
-  static final _lightGray = PdfColor.fromInt(0xFFF5F5F5);
+  static const _lightGray = PdfColor.fromInt(0xFFF5F5F5);
   
   /// Text color.
-  static final _darkGray = PdfColor.fromInt(0xFF424242);
+  static const _darkGray = PdfColor.fromInt(0xFF424242);
 
   /// Generates a PDF report from the given [AnalyticsReport].
   ///
@@ -132,7 +132,7 @@ class AnalyticsPdfGenerator {
           pw.SizedBox(height: 8),
           pw.Text(
             '${t.period}: ${dateFormat.format(report.startTime)} - ${dateFormat.format(report.endTime)}',
-            style: pw.TextStyle(
+            style: const pw.TextStyle(
               fontSize: 12,
               color: _darkGray,
             ),
@@ -163,7 +163,7 @@ class AnalyticsPdfGenerator {
         ),
         pw.SizedBox(height: 16),
         pw.Table(
-          border: pw.TableBorder.all(color: _lightGray, width: 1),
+          border: pw.TableBorder.all(color: _lightGray),
           children: [
             // Header row
             _buildTableRow(
@@ -209,8 +209,7 @@ class AnalyticsPdfGenerator {
   static pw.TableRow _buildTableRow(
     String label,
     String value, {
-    bool isHeader = false,
-    required pw.TextDirection textDirection,
+    required pw.TextDirection textDirection, bool isHeader = false,
   }) {
     final textStyle = pw.TextStyle(
       fontSize: isHeader ? 12 : 11,
@@ -258,9 +257,9 @@ class AnalyticsPdfGenerator {
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
-      decoration: pw.BoxDecoration(
+      decoration: const pw.BoxDecoration(
         color: _lightGray,
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+        borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -296,7 +295,7 @@ class AnalyticsPdfGenerator {
       children: [
         pw.Text(
           '$label:',
-          style: pw.TextStyle(
+          style: const pw.TextStyle(
             fontSize: 11,
             color: _darkGray,
           ),
@@ -329,7 +328,7 @@ class AnalyticsPdfGenerator {
       child: pw.Column(
         children: [
           pw.Icon(
-            pw.IconData(0xe4a7), // chart icon
+            const pw.IconData(0xe4a7), // chart icon
             size: 40,
             color: _lightGray,
           ),
@@ -356,11 +355,10 @@ class AnalyticsPdfGenerator {
     pw.TextDirection textDirection,
   ) {
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         pw.Text(
           '${t.generatedOn} ${dateFormat.format(now)}',
-          style: pw.TextStyle(
+          style: const pw.TextStyle(
             fontSize: 10,
             color: PdfColors.grey600,
           ),

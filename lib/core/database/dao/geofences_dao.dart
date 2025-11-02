@@ -214,7 +214,6 @@ class GeofencesDaoObjectBox implements GeofencesDaoBase {
         dwellDurationMs: event.dwellDurationMs,
         status: event.status,
         syncStatus: event.syncStatus,
-        attributesJson: '{}',
       );
       
       _eventBox.put(entity);

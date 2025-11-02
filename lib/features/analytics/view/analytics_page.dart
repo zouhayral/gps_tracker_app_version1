@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
-
 import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/analytics/controller/analytics_notifier.dart';
 import 'package:my_app_gps/features/analytics/controller/analytics_providers.dart';
@@ -13,6 +11,7 @@ import 'package:my_app_gps/features/analytics/widgets/stat_card.dart';
 import 'package:my_app_gps/features/analytics/widgets/trip_bar_chart.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/l10n/app_localizations.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Main analytics dashboard page showing comprehensive tracker statistics.
 ///
@@ -98,13 +97,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     switch (period) {
       case 'daily':
         notifier.loadDaily(deviceId);
-        break;
       case 'weekly':
         notifier.loadWeekly(deviceId);
-        break;
       case 'monthly':
         notifier.loadMonthly(deviceId);
-        break;
       case 'custom':
         final dateRange = ref.read(dateRangeProvider);
         if (dateRange != null) {
@@ -117,7 +113,6 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           // Fallback to daily if custom range not set
           notifier.loadDaily(deviceId);
         }
-        break;
     }
   }
 
@@ -227,7 +222,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           end: DateTime.now(),
         );
 
-    final DateTimeRange? picked = await showDateRangePicker(
+    final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now(),
@@ -357,7 +352,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   
                   // Show date picker for custom period
                   if (newPeriod == 'custom') {
-                    Future.microtask(() => _selectCustomDateRange());
+                    Future.microtask(_selectCustomDateRange);
                   }
                 },
                 style: ButtonStyle(
@@ -462,7 +457,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<int>(
-              value: currentDeviceId,
+              initialValue: currentDeviceId,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -851,13 +846,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     switch (period) {
       case 'daily':
         dataPoints = 24; // Hourly
-        break;
       case 'weekly':
         dataPoints = 7; // Daily
-        break;
       case 'monthly':
         dataPoints = 30; // Daily
-        break;
       default:
         dataPoints = 10;
     }
@@ -877,15 +869,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       case 'daily':
         dataPoints = 24;
         interval = const Duration(hours: 1);
-        break;
       case 'weekly':
         dataPoints = 7;
         interval = const Duration(days: 1);
-        break;
       case 'monthly':
         dataPoints = 30;
         interval = const Duration(days: 1);
-        break;
       default:
         dataPoints = 10;
         interval = Duration(
@@ -910,13 +899,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     switch (period) {
       case 'daily':
         bars = 24; // Hourly
-        break;
       case 'weekly':
         bars = 7; // Daily
-        break;
       case 'monthly':
         bars = 4; // Weekly
-        break;
       default:
         bars = 7;
     }
@@ -929,7 +915,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     final avgPerBar = totalTrips / bars;
     return List.generate(bars, (i) {
       final variation = (i % 2 == 0) ? 1 : -1;
-      return ((avgPerBar + variation).round()).clamp(0, totalTrips);
+      return (avgPerBar + variation).round().clamp(0, totalTrips);
     });
   }
 

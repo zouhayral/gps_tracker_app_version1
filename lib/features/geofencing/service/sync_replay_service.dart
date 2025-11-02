@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
-import '../../../data/repositories/geofence_event_repository.dart';
-import '../providers/geofence_providers.dart' as geofence_providers;
+import 'package:my_app_gps/data/repositories/geofence_event_repository.dart';
+import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart' as geofence_providers;
 
 /// Provider for SyncReplayService
 /// 
@@ -17,7 +17,7 @@ final syncReplayServiceProvider =
     geofence_providers.geofenceEventRepositoryProvider.future,
   );
   final service = SyncReplayService(repo);
-  ref.onDispose(() => service.dispose());
+  ref.onDispose(service.dispose);
   service.start();
   return service;
 });

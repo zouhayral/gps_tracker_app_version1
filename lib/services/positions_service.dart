@@ -309,18 +309,33 @@ class PositionsService {
     final out = <int, Position>{};
     final tasks = <Future<void>>[];
     final devicesWithoutPosId = <int>[];
+    final devicesWithPosIdFailed = <int>[];
 
     for (final d in devices) {
       final devId = d['id'];
       final posId = d['positionId'];
       if (devId is int && posId is int) {
         tasks.add(() async {
-          final p = await latestByPositionId(posId);
-          if (p != null) out[devId] = p;
+          try {
+            final p = await latestByPositionId(posId);
+            if (p != null) {
+              out[devId] = p;
+            } else {
+              devicesWithPosIdFailed.add(devId);
+              _log.warning('⚠️ Position fetch returned null for device $devId (positionId: $posId)');
+            }
+          } catch (e, st) {
+            devicesWithPosIdFailed.add(devId);
+            _log.error('❌ Position fetch failed for device $devId (positionId: $posId): $e\n$st');
+          }
         }());
       } else if (devId is int) {
         // Track devices without positionId for fallback fetch
         devicesWithoutPosId.add(devId);
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('[positionsService] ℹ️ Device $devId has no positionId (will use fallback)');
+        }
       }
     }
     await Future.wait(tasks);
@@ -330,21 +345,35 @@ class PositionsService {
       print(
         '[positionsService] ✅ Fetched ${out.length} via positionId, ${devicesWithoutPosId.length} without positionId',
       );
+      if (devicesWithPosIdFailed.isNotEmpty) {
+        // ignore: avoid_print
+        print(
+          '[positionsService] ⚠️ Failed to fetch ${devicesWithPosIdFailed.length} positions: ${devicesWithPosIdFailed.join(", ")}',
+        );
+      }
     }
 
     // Fallback: Fetch last positions for devices without positionId
     if (devicesWithoutPosId.isNotEmpty) {
-      final fallbackPositions = await fetchLatestPositions(
-        deviceIds: devicesWithoutPosId,
-      );
-      for (final p in fallbackPositions) {
-        out[p.deviceId] = p;
-      }
-      if (kDebugMode) {
-        // ignore: avoid_print
-        print(
-          '[positionsService] 🔄 Fallback fetch: ${fallbackPositions.length} positions for devices without positionId',
+      try {
+        final fallbackPositions = await fetchLatestPositions(
+          deviceIds: devicesWithoutPosId,
         );
+        for (final p in fallbackPositions) {
+          out[p.deviceId] = p;
+        }
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print(
+            '[positionsService] 🔄 Fallback fetch: ${fallbackPositions.length} positions for devices without positionId',
+          );
+        }
+      } catch (e, st) {
+        _log.error('❌ Fallback position fetch failed for ${devicesWithoutPosId.length} devices: $e\n$st');
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('[positionsService] ❌ Fallback fetch failed: $e');
+        }
       }
     }
 
@@ -352,6 +381,22 @@ class PositionsService {
     _lastBulkFetchTime = DateTime.now();
     
     _log.debug('Bulk fetch complete: ${out.length} positions');
+    
+    // 🎯 DIAGNOSTIC: Log warning if no positions were fetched for any devices
+    if (out.isEmpty && devices.isNotEmpty) {
+      _log.warning(
+        '⚠️ DIAGNOSTIC: Fetched 0 positions for ${devices.length} devices. '
+        'Devices without positionId: ${devicesWithoutPosId.length}, '
+        'Failed fetches: ${devicesWithPosIdFailed.length}',
+      );
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print(
+          '[positionsService] 🔍 DIAGNOSTIC: Check if devices are online and reporting positions. '
+          'Device IDs: ${devices.map((d) => d['id']).join(", ")}',
+        );
+      }
+    }
 
     return out;
   }

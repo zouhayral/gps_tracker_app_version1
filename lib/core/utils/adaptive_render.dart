@@ -7,6 +7,7 @@
 /// - Throttle tile/marker refresh cadence
 /// - Downscale heavy icon assets
 /// Then restore full fidelity when FPS recovers.
+library;
 
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -42,7 +43,7 @@ class FpsMonitor {
 
   final _samples = <FrameTiming>[];
   bool _started = false;
-  double _lastFps = 60.0;
+  double _lastFps = 60;
 
   /// Start monitoring frame timings
   void start() {
@@ -70,7 +71,7 @@ class FpsMonitor {
 
     // Remove samples outside the rolling window
     // Note: FrameTiming doesn't provide absolute timestamps, so we keep a fixed window of samples
-    final maxSamples = (window.inSeconds * 60).ceil(); // Assume ~60 FPS max
+    final maxSamples = window.inSeconds * 60; // Assume ~60 FPS max
     if (_samples.length > maxSamples) {
       _samples.removeRange(0, _samples.length - maxSamples);
     }
@@ -86,7 +87,7 @@ class FpsMonitor {
         _samples.length;
 
     // Convert to FPS, capped at 120
-    final fps = avgMicros <= 0 ? 120.0 : min(120.0, 1e6 / avgMicros);
+    final fps = (avgMicros <= 0 ? 120.0 : min(120, 1e6 / avgMicros)).toDouble();
 
     // Avoid chatty updates - only notify on significant changes (±2 FPS)
     if ((fps - _lastFps).abs() >= 2.0) {
@@ -166,11 +167,11 @@ class LodConfig {
 
   /// Recommended default configuration for typical devices
   static const LodConfig standard = LodConfig(
-    dropFpsLow: 50.0,
-    raiseFpsHigh: 58.0,
+    dropFpsLow: 50,
+    raiseFpsHigh: 58,
     markerCapLow: 400,
     markerCapMedium: 900,
-    polySimplifyLow: 3.0,
+    polySimplifyLow: 3,
     polySimplifyMedium: 1.5,
     markerUpdateIntervalLow: Duration(milliseconds: 120),
     tileThrottleLowMs: 150,
@@ -178,11 +179,11 @@ class LodConfig {
 
   /// Aggressive configuration for low-end devices
   static const LodConfig lowEnd = LodConfig(
-    dropFpsLow: 45.0,
-    raiseFpsHigh: 55.0,
+    dropFpsLow: 45,
+    raiseFpsHigh: 55,
     markerCapLow: 250,
     markerCapMedium: 600,
-    polySimplifyLow: 5.0,
+    polySimplifyLow: 5,
     polySimplifyMedium: 2.5,
     markerUpdateIntervalLow: Duration(milliseconds: 200),
     tileThrottleLowMs: 250,
@@ -190,12 +191,12 @@ class LodConfig {
 
   /// Conservative configuration for high-end devices
   static const LodConfig highEnd = LodConfig(
-    dropFpsLow: 55.0,
-    raiseFpsHigh: 58.0,
+    dropFpsLow: 55,
+    raiseFpsHigh: 58,
     markerCapLow: 600,
     markerCapMedium: 1200,
-    polySimplifyLow: 2.0,
-    polySimplifyMedium: 1.0,
+    polySimplifyLow: 2,
+    polySimplifyMedium: 1,
     markerUpdateIntervalLow: Duration(milliseconds: 80),
     tileThrottleLowMs: 100,
   );
@@ -243,7 +244,6 @@ class AdaptiveLodController with ChangeNotifier {
         if (fps < config.dropFpsLow) {
           _mode = RenderMode.medium;
         }
-        break;
 
       case RenderMode.medium:
         if (fps < config.dropFpsLow - 5) {
@@ -251,13 +251,11 @@ class AdaptiveLodController with ChangeNotifier {
         } else if (fps > config.raiseFpsHigh) {
           _mode = RenderMode.high;
         }
-        break;
 
       case RenderMode.low:
         if (fps > config.raiseFpsHigh + 2) {
           _mode = RenderMode.medium;
         }
-        break;
     }
 
     if (_mode != previousMode) {
@@ -374,7 +372,7 @@ class AdaptiveLodController with ChangeNotifier {
 class FpsAwareNotifier<T> extends ValueNotifier<T> {
   FpsAwareNotifier(super.value);
 
-  double _fps = 60.0;
+  double _fps = 60;
   double get fps => _fps;
 
   void updateWithFps(T newValue, double newFps) {

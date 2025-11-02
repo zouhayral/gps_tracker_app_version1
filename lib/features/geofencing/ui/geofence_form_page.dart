@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -88,7 +90,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
   // Circle properties
   LatLng? _circleCenter;
-  double _circleRadius = 100.0; // meters
+  double _circleRadius = 100; // meters
 
   // Polygon properties
   List<LatLng> _polygonVertices = [];
@@ -97,7 +99,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
   bool _onEnter = true;
   bool _onExit = true;
   bool _enableDwell = false;
-  double _dwellMinutes = 5.0;
+  double _dwellMinutes = 5;
 
   // Devices
   Set<String> _selectedDevices = {};
@@ -680,7 +682,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
                               value: isSelected,
                               onChanged: (value) {
                                 setState(() {
-                                  if (value == true) {
+                                  if (value ?? false) {
                                     _selectedDevices.add(deviceId);
                                   } else {
                                     _selectedDevices.remove(deviceId);
@@ -917,7 +919,6 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
         createdAt: widget.mode == GeofenceFormMode.create ? now : DateTime.now(),
         updatedAt: now,
         syncStatus: 'pending',
-        version: 1,
       );
 
       if (widget.mode == GeofenceFormMode.create) {
@@ -950,7 +951,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
           debugPrint('[SafeNav] Skipped navigation: context not mounted after save');
           return;
         }
-        context.safePop<void>();
+        unawaited(context.safePop<void>());
       }
     } catch (e) {
       if (mounted) {
@@ -989,7 +990,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
       ),
     );
 
-    if (confirmed == true && mounted) {
+    if ((confirmed ?? false) && mounted) {
       try {
         // Wait for repository to be ready
         final repo = await ref.read(geofenceRepositoryProvider.future);
@@ -1014,7 +1015,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
             debugPrint('[SafeNav] Skipped navigation: context not mounted after delete');
             return;
           }
-          context.safePop<void>();
+          unawaited(context.safePop<void>());
         }
       } catch (e) {
         if (mounted) {
@@ -1086,7 +1087,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
   Future<void> _usePhoneLocation() async {
     try {
       // Check location service
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (mounted) {
           _showError('Location services are disabled. Please enable GPS.');
@@ -1095,7 +1096,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
       }
 
       // Check permission
-      LocationPermission permission = await Geolocator.checkPermission();
+      var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
@@ -1167,7 +1168,7 @@ class _GeofenceFormPageState extends ConsumerState<GeofenceFormPage> {
 
         // Fetch positions for all devices
         final positionsService = ref.read(positionsServiceProvider);
-        final List<Map<String, dynamic>> deviceLocations = [];
+        final deviceLocations = <Map<String, dynamic>>[];
 
         for (final device in devices) {
           try {
