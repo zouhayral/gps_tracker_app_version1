@@ -88,14 +88,23 @@ class MarkerLayerOptionsCache {
   }
 
   /// Generate cache key from markers
+  ///
+  /// Includes id, selection state, and rounded coordinates to ensure
+  /// cached marker widgets are reused only when their positions haven't
+  /// changed materially. Rounding to 5 decimals (~1.1m) avoids excessive
+  /// churn due to tiny animation deltas while still updating when markers
+  /// move noticeably.
   String _generateCacheKey(List<MapMarkerData> markers) {
     if (markers.isEmpty) return 'empty';
 
     // Create a hash based on marker IDs and selection state
-    // This ensures we get a new cache entry when markers change
+    // and their (rounded) coordinates. This ensures we get a new cache
+    // entry when markers change identity, selection, or move sufficiently.
     final buffer = StringBuffer();
     for (final m in markers) {
-      buffer.write('${m.id}_${m.isSelected ? '1' : '0'}_');
+      final lat = m.position.latitude.isFinite ? m.position.latitude.toStringAsFixed(5) : 'nan';
+      final lon = m.position.longitude.isFinite ? m.position.longitude.toStringAsFixed(5) : 'nan';
+      buffer.write('${m.id}_${m.isSelected ? '1' : '0'}_${lat}_${lon}_');
     }
 
     return buffer.toString().hashCode.toString();

@@ -8,8 +8,7 @@ import 'package:my_app_gps/repositories/trip_repository.dart';
 /// Provider for AnalyticsRepository.
 final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
   final api = ref.watch(traccarApiProvider);
-  final tripRepo = ref.watch(tripRepositoryProvider);
-  return AnalyticsRepository(api, tripRepo);
+  return AnalyticsRepository(api, ref);
 });
 
 /// Repository for aggregating tracking data into analytics reports.
@@ -20,10 +19,10 @@ final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
 class AnalyticsRepository {
   static final _log = 'AnalyticsRepository'.logger;
 
-  const AnalyticsRepository(this._api, this._tripRepo);
+  const AnalyticsRepository(this._api, this._ref);
 
   final TraccarApi _api;
-  final TripRepository _tripRepo;
+  final Ref _ref;
 
   /// Fetches a daily analytics report for a specific date and device.
   ///
@@ -38,15 +37,13 @@ class AnalyticsRepository {
   /// Returns a zeroed report if any error occurs.
   Future<AnalyticsReport> fetchDailyReport(DateTime date, int deviceId) async {
     try {
-      // Create UTC dates to ensure consistent timezone handling
-      // The user's selected date should cover the full 24 hours in UTC
-      final from = DateTime.utc(date.year, date.month, date.day, 0, 0, 0);
-      final to = DateTime.utc(date.year, date.month, date.day, 23, 59, 59);
+      final from = DateTime(date.year, date.month, date.day);
+      // Use exclusive end bound at next midnight to match Traccar expectations
+      final to = from.add(const Duration(days: 1));
 
       _log.debug(
         'Fetching daily report: deviceId=$deviceId, '
-        'date=${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}, '
-        'from=$from, to=$to (UTC)',
+        'from=$from, to=$to',
       );
 
       return await _fetchAndAggregateReport(deviceId, from, to);
@@ -75,13 +72,12 @@ class AnalyticsRepository {
     int deviceId,
   ) async {
     try {
-      // Use UTC to avoid timezone conversion issues
-      final from = DateTime.utc(start.year, start.month, start.day, 0, 0, 0);
+      final from = DateTime(start.year, start.month, start.day);
       final to = from.add(const Duration(days: 7));
 
       _log.debug(
         'Fetching weekly report: deviceId=$deviceId, '
-        'from=$from, to=$to (UTC)',
+        'from=$from, to=$to',
       );
 
       return await _fetchAndAggregateReport(deviceId, from, to);
@@ -110,13 +106,12 @@ class AnalyticsRepository {
     int deviceId,
   ) async {
     try {
-      // Use UTC to avoid timezone conversion issues
-      final from = DateTime.utc(start.year, start.month, start.day, 0, 0, 0);
+      final from = DateTime(start.year, start.month, start.day);
       final to = from.add(const Duration(days: 30));
 
       _log.debug(
         'Fetching monthly report: deviceId=$deviceId, '
-        'from=$from, to=$to (UTC)',
+        'from=$from, to=$to',
       );
 
       return await _fetchAndAggregateReport(deviceId, from, to);
@@ -130,96 +125,60 @@ class AnalyticsRepository {
     }
   }
 
-  /// Fetches an analytics report for a custom date range.
-  ///
-  /// Parameters:
-  /// - [from]: Start date and time of the report period
-  /// - [to]: End date and time of the report period
-  /// - [deviceId]: The ID of the device to analyze
-  ///
-  /// Returns an [AnalyticsReport] with aggregated statistics for the specified range.
-  /// Returns a zeroed report if any error occurs.
-  Future<AnalyticsReport> fetchCustomReport(
-    DateTime from,
-    DateTime to,
-    int deviceId,
-  ) async {
-    try {
-      _log.debug(
-        'Fetching custom report: deviceId=$deviceId, '
-        'from=$from, to=$to',
-      );
-
-      return await _fetchAndAggregateReport(deviceId, from, to);
-    } catch (e, st) {
-      _log.error(
-        'fetchCustomReport failed for deviceId=$deviceId, from=$from, to=$to',
-        error: e,
-        stackTrace: st,
-      );
-      return _createZeroedReport(from, to);
-    }
-  }
-
   /// Internal helper that fetches all data sources in parallel and aggregates them.
   Future<AnalyticsReport> _fetchAndAggregateReport(
     int deviceId,
     DateTime from,
     DateTime to,
   ) async {
-    // Fetch data sources separately to maintain proper types
-    final summaryData = await _api.getSummaryReport(deviceId, from, to);
-    final trips = await _tripRepo.fetchTrips(deviceId: deviceId, from: from, to: to);
-    final positionsData = await _api.getPositions(deviceId, from, to);
+    // Fetch trips using TripRepository to ensure parity with Trips page
+    final tripRepo = _ref.read(tripRepositoryProvider);
+    final trips = await tripRepo.fetchTrips(deviceId: deviceId, from: from, to: to);
+
+    // In parallel, fetch summary and positions for speed/fuel when available
+    final results = await Future.wait([
+      _api.getSummaryReport(deviceId, from, to),
+      _api.getPositions(deviceId, from, to),
+    ]);
+    final summaryData = results[0];
+    final positionsData = results[1];
 
     _log.debug(
       'Data fetched: ${summaryData.length} summaries, '
       '${trips.length} trips, ${positionsData.length} positions',
     );
 
-    // Calculate total distance from trips (most accurate)
-    var totalDistanceKm = 0.0;
-    if (trips.isNotEmpty) {
-      totalDistanceKm = trips.fold<double>(
-        0,
-        (sum, trip) => sum + trip.distanceKm, // Already in km
-      );
-      _log.debug('Distance from trips: $totalDistanceKm km');
-    }
+    // Aggregate distance from summary or trips
+    // Primary distance/trips from TripRepository (matches Trips page)
+    var totalDistanceKm = trips.fold<double>(0.0, (s, t) => s + t.distanceKm);
+    var tripCount = trips.length;
 
-    // Fallback: Get distance from summary if no trips
-    if (totalDistanceKm == 0 && summaryData.isNotEmpty) {
-      totalDistanceKm = summaryData.fold<double>(
-        0,
-        (sum, item) {
-          final dist = item['distance'];
-          if (dist != null) {
-            return sum + (dist is num ? dist.toDouble() / 1000.0 : 0.0);
-          }
-          return sum;
-        },
-      );
-      _log.debug('Distance from summary: $totalDistanceKm km');
-    }
-
-    // Fallback: Calculate distance from positions if still 0
+    // Fallback: Calculate distance from positions if summary/trips returned 0
     if (totalDistanceKm == 0 && positionsData.isNotEmpty) {
       totalDistanceKm = _calculateDistanceFromPositions(positionsData);
-      _log.debug('Distance from positions: $totalDistanceKm km');
+      _log.debug(
+        '[AnalyticsRepository] Calculated distance from positions: $totalDistanceKm km',
+      );
     }
 
     // Compute speed statistics from positions
     final speedStats = _computeSpeedStats(positionsData);
 
-    // Trip count from TripRepository (accurate, handles API errors)
-    final tripCount = trips.length;
+    // No position-based fallback for trips; keep parity with Trips page
 
     // Extract fuel usage if available
     final fuelUsed = _extractFuelUsed(summaryData);
 
+    // Determine display end time: if 'to' is an exclusive midnight bound,
+    // show 23:59:59 of the previous day for readability.
+    DateTime displayEnd = to;
+    if (to.hour == 0 && to.minute == 0 && to.second == 0 && to.millisecond == 0 && to.microsecond == 0) {
+      displayEnd = to.subtract(const Duration(seconds: 1));
+    }
+
     final report = AnalyticsReport(
       startTime: from,
-      endTime: to,
+      endTime: displayEnd,
       totalDistanceKm: totalDistanceKm,
       avgSpeed: speedStats.avgSpeed,
       maxSpeed: speedStats.maxSpeed,
@@ -231,6 +190,9 @@ class AnalyticsRepository {
 
     return report;
   }
+
+  /// Computes total distance from summary or trips data.
+  // Removed legacy distance aggregation from raw summary/trips maps.
 
   /// Computes speed statistics (average and max) from positions data.
   ({double avgSpeed, double maxSpeed}) _computeSpeedStats(
@@ -304,11 +266,11 @@ class AnalyticsRepository {
   /// provide distance data. It computes the distance between consecutive
   /// GPS positions.
   double _calculateDistanceFromPositions(List<dynamic> positions) {
-    var total = 0.0;
+    double total = 0.0;
     
     for (var i = 1; i < positions.length; i++) {
-      final prev = positions[i - 1] as Map<String, dynamic>;
-      final curr = positions[i] as Map<String, dynamic>;
+      final prev = positions[i - 1];
+      final curr = positions[i];
       
       final lat1 = prev['latitude'];
       final lon1 = prev['longitude'];
@@ -348,4 +310,32 @@ class AnalyticsRepository {
 
   /// Converts degrees to radians.
   double _deg2rad(double deg) => deg * pi / 180;
+
+  // Removed legacy trip-count estimation from raw positions; we rely on TripRepository for parity.
+
+  /// Fetches analytics report for an explicit range, inclusive of the 'to' day.
+  ///
+  /// From is normalized to start of day; To is treated as inclusive and expanded
+  /// to the start of the next day for API queries (exclusive upper bound).
+  Future<AnalyticsReport> fetchRangeReport(
+    DateTime from,
+    DateTime to,
+    int deviceId,
+  ) async {
+    try {
+      final fromNorm = DateTime(from.year, from.month, from.day);
+      final toExclusive = DateTime(to.year, to.month, to.day).add(const Duration(days: 1));
+
+      _log.debug(
+        'Fetching range report: deviceId=$deviceId, from=$fromNorm, toExclusive=$toExclusive',
+      );
+
+      return await _fetchAndAggregateReport(deviceId, fromNorm, toExclusive);
+    } catch (e, st) {
+      _log.error('fetchRangeReport failed', error: e, stackTrace: st);
+      final fromNorm = DateTime(from.year, from.month, from.day);
+      final toNorm = DateTime(to.year, to.month, to.day, 23, 59, 59);
+      return _createZeroedReport(fromNorm, toNorm);
+    }
+  }
 }

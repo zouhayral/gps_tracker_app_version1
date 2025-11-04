@@ -182,7 +182,8 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
       builder: (context) {
         // Use SafeArea to avoid system status bar intrusion
         return SafeArea(
-          minimum: const EdgeInsets.only(top: 8),
+          // Reduce top inset by 3px so the banner aligns tighter with the system status bar
+          minimum: const EdgeInsets.only(top: 5),
           child: Material(
             color: Colors.transparent,
             child: Container(
@@ -571,8 +572,19 @@ class FlutterMapAdapterState extends ConsumerState<FlutterMapAdapter>
         // If provider id changed, clear cached tile providers to force fresh instances
   if (_lastProviderId != provider.id) {
           if (kDebugMode) {
-            debugPrint('[MAP_REBUILD] 🔁 Provider changed ${_lastProviderId ?? 'null'} → ${provider.id}; clearing tile provider cache');
+            debugPrint('[MAP_REBUILD] 🔁 Provider changed ${_lastProviderId ?? 'null'} → ${provider.id}');
           }
+          
+          // Dispose all tile providers in cache before clearing
+          if (_tileProviderCache.isNotEmpty) {
+            final disposedCount = _tileProviderCache.length;
+            // Note: TileProvider interface doesn't have dispose(), but clearing
+            // the cache releases references and allows GC to reclaim memory
+            if (kDebugMode) {
+              debugPrint('[TileProvider] Cleanup complete: $disposedCount providers released for GC');
+            }
+          }
+          
           _tileProviderCache.clear();
           _lastProviderId = provider.id;
           // Ensure subsequent providers are created with correct loading strategy

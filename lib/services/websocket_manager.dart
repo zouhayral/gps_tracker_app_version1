@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:my_app_gps/core/services/connection_notification_service.dart';
+import 'package:my_app_gps/core/lifecycle/stream_lifecycle_manager.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
-import 'package:my_app_gps/core/network/reconnection_coordinator.dart';
+import 'package:my_app_gps/core/utils/backoff_manager.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/services/traccar_socket_service.dart';
 
@@ -52,11 +52,17 @@ class WebSocketState {
 class WebSocketManager extends Notifier<WebSocketState> {
   static final _log = 'WebSocket'.logger;
   
-  // Centralized reconnection coordinator
-  final ReconnectionCoordinator _coordinator = ReconnectionCoordinator.instance;
+  // 🧹 LIFECYCLE: Unified stream and timer manager
+  final _lifecycle = StreamLifecycleManager(name: 'WebSocketManager');
+  
+  // 🎯 PHASE 9: Use BackoffManager for exponential reconnection delays
+  final _backoff = BackoffManager();
   
   // Toggle to enable very verbose heartbeat logs
   static bool verboseSocketLogs = false;
+  // Optional lightweight ping every [_pingEvery] (disabled on web servers that don't support it)
+  bool _pingEnabled = true;
+  Duration _pingEvery = const Duration(seconds: 30);
 
   // Test-mode toggle: when true, do not auto-connect or schedule timers
   // Set from tests: WebSocketManagerEnhanced.testMode = true;
@@ -64,6 +70,7 @@ class WebSocketManager extends Notifier<WebSocketState> {
 
   StreamSubscription<TraccarSocketMessage>? _socketSub;
   Timer? _reconnectTimer;
+  Timer? _healthTimer; // Periodic health monitor (single-shot rearm)
   int _retryCount = 0;
   bool _disposed = false;
   bool _intentionalDisconnect = false;
@@ -71,6 +78,10 @@ class WebSocketManager extends Notifier<WebSocketState> {
   DateTime? _lastEventAt;
   bool _socketAvailable = true;
   DateTime? _lastResumeTime; // Track last resume call for debouncing
+  DateTime? _lastForceReconnectTime; // Debounce force reconnects
+  bool _isConnecting = false; // Prevent overlapping connects
+  DateTime? _lastPingAt; // Track last ping time for rate-limiting
+  int _pingCount = 0; // Diagnostics: number of app-layer pings sent
 
   late final TraccarSocketService _socketService;
 
@@ -96,15 +107,12 @@ class WebSocketManager extends Notifier<WebSocketState> {
       _socketAvailable = false;
     }
 
-    // Configure coordinator connector once
-    _coordinator.setConnector(_connectOnce);
-
     // Defer connection to after build completes to avoid reading uninitialized providers
     if (!testMode && _socketAvailable) {
       Future.microtask(() {
         if (!_disposed && !_intentionalDisconnect) {
-          // Kick off centralized reconnection flow
-          unawaited(_coordinator.trigger('init'));
+          _connect();
+          _startHealthMonitor();
         }
       });
     } else {
@@ -117,55 +125,56 @@ class WebSocketManager extends Notifier<WebSocketState> {
     return const WebSocketState(status: WebSocketStatus.connecting);
   }
 
-  /// Single connection attempt used by ReconnectionCoordinator.
-  /// Returns true if connected successfully, false otherwise.
-  Future<bool> _connectOnce() async {
-    if (_disposed || _intentionalDisconnect) return false;
-    if (testMode) return false;
+  /// Connect or reconnect to WebSocket
+  Future<void> _connect() async {
+    if (_disposed || _intentionalDisconnect) return;
+    if (testMode) return;
     if (!_socketAvailable) {
       _log.warning('Socket provider unavailable; skipping connect');
-      return false;
+      return;
     }
+
+    // Prevent overlapping connection attempts
+    if (_isConnecting || state.status == WebSocketStatus.connecting) {
+      _log.debug('Connect skipped: already connecting');
+      return;
+    }
+
+    // Cancel any pending reconnect timer
+    _reconnectTimer?.cancel();
 
     state = state.copyWith(status: WebSocketStatus.connecting);
     _log.debug('Connecting... (attempt ${_retryCount + 1})');
 
     try {
+      _isConnecting = true;
       // Cancel existing subscription if any
       await _socketSub?.cancel();
 
-      // Connect to Traccar WebSocket (handles authentication internally)
-      _socketSub = _socketService.connect().listen(
-        _handleSocketMessage,
-        onError: (Object error) {
-          _log.error('Socket error', error: error);
+      // Connect to Traccar WebSocket (handles authentication internally) - TRACKED
+      _socketSub = _lifecycle.track(
+        _socketService.connect().listen(
+          _handleSocketMessage,
+          onError: (Object error) {
+            _log.error('Socket error', error: error);
+            _scheduleReconnect(error.toString());
+          },
+          onDone: () {
+            if (!_disposed && !_intentionalDisconnect) {
+              _log.warning('Connection closed by server');
+              _scheduleReconnect('Connection closed');
+            }
+          },
           
-          // 🔔 Show connection lost notification
-          unawaited(
-            ConnectionNotificationService.instance.showDisconnected(),
-          );
-          
-          // Delegate to coordinator (no local timers)
-          unawaited(_coordinator.trigger('error:$error'));
-        },
-        onDone: () {
-          if (!_disposed && !_intentionalDisconnect) {
-            _log.warning('Connection closed by server');
-            
-            // 🔔 Show connection lost notification
-            unawaited(
-              ConnectionNotificationService.instance.showDisconnected(),
-            );
-            
-            unawaited(_coordinator.trigger('onDone'));
-          }
-        },
-        
+        ),
       );
 
       _retryCount = 0;
       _lastSuccessfulConnect = DateTime.now();
       _lastEventAt = DateTime.now();
+      
+      // 🎯 PHASE 9: Reset backoff on successful connection
+      _backoff.reset();
 
       state = state.copyWith(
         status: WebSocketStatus.connected,
@@ -175,17 +184,14 @@ class WebSocketManager extends Notifier<WebSocketState> {
       );
 
       _log.info('✅ Connected successfully');
-      
-      // 🔔 Show connection restored notification
-      unawaited(
-        ConnectionNotificationService.instance.showReconnected(),
-      );
-      
-      return true;
+      // Ensure health monitor is running when connected
+      _startHealthMonitor();
     } catch (e) {
       _log.error('Connection failed', error: e);
-      // Do not schedule locally; return false to let coordinator back off
-      return false;
+      _scheduleReconnect(e.toString());
+    }
+    finally {
+      _isConnecting = false;
     }
   }
 
@@ -206,16 +212,6 @@ class WebSocketManager extends Notifier<WebSocketState> {
           onPosition!(pos);
         }
       }
-      
-      // 🔔 Optional: Show data sync notification for first position update
-      // This is throttled internally to avoid spam
-      if (msg.positions!.isNotEmpty) {
-        unawaited(
-          ConnectionNotificationService.instance.showDataSynced(
-            deviceCount: msg.positions!.length,
-          ),
-        );
-      }
     } else if (msg.type == 'connected') {
       _log.debug('Connection confirmed');
     } else if (verboseSocketLogs) {
@@ -223,25 +219,67 @@ class WebSocketManager extends Notifier<WebSocketState> {
     }
   }
 
-  // Local scheduling removed in favor of ReconnectionCoordinator
+  /// Schedule reconnection with exponential backoff
+  void _scheduleReconnect(String error) {
+    if (_disposed || _intentionalDisconnect) return;
+    if (testMode) return;
+    if (!_socketAvailable) return;
+
+    _retryCount++;
+
+    state = state.copyWith(
+      status: WebSocketStatus.retrying,
+      retryCount: _retryCount,
+      error: error,
+    );
+
+    // 🎯 PHASE 9: Use BackoffManager for exponential delay
+    final delay = _backoff.nextDelay();
+    _log.warning('⏳ Retry #$_retryCount in ${delay.inSeconds}s', error: error);
+
+    _reconnectTimer = _lifecycle.trackTimer(
+      Timer(delay, () {
+        if (!_disposed && !_intentionalDisconnect) {
+          _connect();
+        }
+      }),
+    );
+  }
 
   /// Manually trigger reconnection (call when app resumes or map page opens)
   Future<void> forceReconnect() async {
     _log.info('🔄 Force reconnect requested');
     _intentionalDisconnect = false;
     _retryCount = 0;
+    _reconnectTimer?.cancel();
+    
+    // 🎯 PHASE 9: Reset backoff on manual reconnect
+    _backoff.reset();
+
+    // Debounce force reconnects to avoid "Already connected" spam
+    final now = DateTime.now();
+    if (_lastForceReconnectTime != null) {
+      final since = now.difference(_lastForceReconnectTime!);
+      if (since < const Duration(milliseconds: 500)) {
+        _log.debug('⏭️ Force reconnect debounced (${since.inMilliseconds}ms)');
+        return;
+      }
+    }
+    _lastForceReconnectTime = now;
 
     if (isConnected) {
       _log.debug('Already connected, skipping');
       return;
     }
-    await _coordinator.trigger('force');
+
+    await _connect();
   }
 
   /// Suspend connection (call when app goes to background)
   void suspend() {
     _log.debug('⏸️ Suspending connection');
     _intentionalDisconnect = true;
+    _reconnectTimer?.cancel();
     _socketSub?.cancel();
     _socketSub = null;
     state = state.copyWith(status: WebSocketStatus.disconnected);
@@ -264,7 +302,7 @@ class WebSocketManager extends Notifier<WebSocketState> {
     _intentionalDisconnect = false;
 
     if (!isConnected) {
-      await _coordinator.trigger('resume');
+      await forceReconnect();
     } else {
       _log.debug('Already connected');
     }
@@ -284,6 +322,14 @@ class WebSocketManager extends Notifier<WebSocketState> {
           ? DateTime.now().difference(_lastEventAt!)
           : Duration.zero;
 
+      // More proactive reconnection: if socket is connected but silent for >25s, reconnect.
+      if (timeSinceEvent > const Duration(seconds: 25)) {
+        _log.warning('🏥 Health check: silent for ${timeSinceEvent.inSeconds}s → reconnecting');
+        forceReconnect();
+        return;
+      }
+
+      // Legacy guard: long-lived connection with no activity
       if (timeSinceConnect > const Duration(minutes: 5) &&
           timeSinceEvent > const Duration(minutes: 2)) {
         _log.warning('🏥 Health check: no activity detected, reconnecting...');
@@ -295,8 +341,12 @@ class WebSocketManager extends Notifier<WebSocketState> {
   void _dispose() {
     _disposed = true;
     _intentionalDisconnect = true;
-    _reconnectTimer?.cancel();
-    _socketSub?.cancel();
+    
+    // 🧹 LIFECYCLE: Dispose all tracked resources (_socketSub, _reconnectTimer)
+    _lifecycle.disposeAll();
+    _lifecycle.logStatus();
+    _stopHealthMonitor();
+    
     _log.debug('🗑️ Disposed');
   }
 
@@ -329,7 +379,66 @@ class WebSocketManager extends Notifier<WebSocketState> {
       'timeSinceLastEvent': _lastEventAt != null
           ? DateTime.now().difference(_lastEventAt!).inSeconds
           : null,
+      'pingEnabled': _pingEnabled,
+      'pingEverySeconds': _pingEvery.inSeconds,
+      'lastPingAt': _lastPingAt?.toIso8601String(),
+      'pingCount': _pingCount,
     };
+  }
+
+  // ---- Health monitor & ping -------------------------------------------------
+  void _startHealthMonitor() {
+    if (_disposed || testMode) return;
+    // Single-shot timer that re-arms itself every 10 seconds
+    _healthTimer?.cancel();
+    _healthTimer = _lifecycle.trackTimer(
+      Timer(const Duration(seconds: 10), () {
+        try {
+          if (!_disposed && !_intentionalDisconnect) {
+            // 1) Check liveness and reconnect on silence >25s (kept per requirement)
+            checkHealth();
+            // 2) Optional ping to keep connection healthy (esp. web where pingInterval isn't available)
+            if (_pingEnabled && isConnected) {
+              final now = DateTime.now();
+              if (_lastPingAt == null || now.difference(_lastPingAt!) >= _pingEvery) {
+                _lastPingAt = now;
+                try {
+                  _socketService.ping();
+                  if (verboseSocketLogs) {
+                    _log.debug('🫧 Ping sent');
+                  }
+                  _pingCount++;
+                } catch (e) {
+                  // Non-fatal
+                  _log.debug('Ping failed: $e');
+                }
+              }
+            }
+          }
+        } finally {
+          // Re-arm regardless
+          if (!_disposed && !_intentionalDisconnect) {
+            _startHealthMonitor();
+          }
+        }
+      }),
+    );
+  }
+
+  void _stopHealthMonitor() {
+    _healthTimer?.cancel();
+    _healthTimer = null;
+  }
+
+  /// Configure optional ping behavior (enabled by default; 30s interval)
+  void configurePing({bool? enabled, Duration? every}) {
+    if (enabled != null) _pingEnabled = enabled;
+    if (every != null) _pingEvery = every;
+    if (_pingEnabled) {
+      _startHealthMonitor();
+    } else {
+      // Keep health monitor running for silence checks; only pings are disabled
+    }
   }
 }
 

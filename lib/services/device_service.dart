@@ -1,7 +1,60 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/services/auth_service.dart';
+
+// ============================================================================
+// 🎯 ASYNC JSON PARSING (STEP 2.2)
+// ============================================================================
+
+/// Top-level function for isolate-based device parsing
+/// This must be top-level to work with compute()
+/// 
+/// Accepts either:
+/// - String: Raw JSON that needs decoding + parsing
+/// - List<dynamic>: Already decoded JSON that needs parsing
+List<Map<String, dynamic>> _parseDevices(dynamic jsonData) {
+  List<dynamic> jsonList;
+  
+  // Step 1: Decode JSON if needed
+  if (jsonData is String) {
+    try {
+      final decoded = jsonDecode(jsonData);
+      if (decoded is List) {
+        jsonList = decoded;
+      } else {
+        return []; // Not a list, return empty
+      }
+    } catch (_) {
+      return []; // JSON decode failed, return empty
+    }
+  } else if (jsonData is List) {
+    jsonList = jsonData;
+  } else {
+    return []; // Unexpected type, return empty
+  }
+  
+  // Step 2: Parse device maps and add lastUpdateDt
+  final devices = <Map<String, dynamic>>[];
+  for (final item in jsonList) {
+    if (item is Map<String, dynamic>) {
+      try {
+        final m = Map<String, dynamic>.from(item);
+        final lu = m['lastUpdate'];
+        if (lu is String) {
+          final dt = DateTime.tryParse(lu);
+          if (dt != null) m['lastUpdateDt'] = dt.toUtc();
+        }
+        devices.add(m);
+      } catch (_) {
+        // Skip malformed items silently in isolate
+      }
+    }
+  }
+  return devices;
+}
 
 final deviceServiceProvider = Provider<DeviceService>((ref) {
   final dio = ref.watch(dioProvider); // reuse dio with cookie manager
@@ -11,6 +64,51 @@ final deviceServiceProvider = Provider<DeviceService>((ref) {
 class DeviceService {
   DeviceService(this._dio);
   final Dio _dio;
+  
+  // ----------------------------------------------------------------------------
+  // 🔁 Lightweight transient-error retry for GET /api/devices
+  // ----------------------------------------------------------------------------
+  // - Retries 2-3 times on timeouts/connection errors and 502/503/504
+  // - Preserves gzip + keep-alive defaults by not changing HttpClient adapter
+  Future<Response<T>> _getWithRetry<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    int maxAttempts = 3,
+    CancelToken? cancelToken,
+  }) async {
+    int attempt = 0;
+    Duration delay = const Duration(milliseconds: 300);
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        return await _dio.get<T>(
+          path,
+          queryParameters: queryParameters,
+          options: options,
+          cancelToken: cancelToken,
+        );
+      } on DioException catch (e) {
+        final status = e.response?.statusCode;
+        final isTimeout = e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            e.type == DioExceptionType.sendTimeout;
+        final isConn = e.type == DioExceptionType.connectionError;
+        final isRetryableStatus = status == 502 || status == 503 || status == 504;
+        if (attempt < maxAttempts && (isTimeout || isConn || isRetryableStatus)) {
+          final jitter = Duration(milliseconds: 50 * attempt);
+          if (kDebugMode) {
+            debugPrint('[HTTP][RETRY] GET $path attempt#$attempt failed (status=$status type=${e.type.name}) → retrying in ${delay.inMilliseconds + jitter.inMilliseconds}ms');
+          }
+          await Future<void>.delayed(delay + jitter);
+          delay *= 2;
+          continue;
+        }
+        rethrow;
+      }
+    }
+    throw StateError('GET $path failed without DioException');
+  }
   
   // 🎯 PHASE 2 TASK 2: Cache with TTL throttling
   static const _cacheTTL = Duration(minutes: 3);
@@ -52,18 +150,34 @@ class DeviceService {
       );
     }
     
-    final resp = await _dio.get<List<dynamic>>('/api/devices');
+  final resp = await _getWithRetry<List<dynamic>>('/api/devices');
     final data = resp.data;
     if (data is List) {
-      final devices = data.whereType<Map<String, dynamic>>().map((e) {
-        final m = Map<String, dynamic>.from(e);
-        final lu = m['lastUpdate'];
-        if (lu is String) {
-          final dt = DateTime.tryParse(lu);
-          if (dt != null) m['lastUpdateDt'] = dt.toUtc();
+      // 🎯 ASYNC PARSING: Calculate payload size
+      final payloadBytes = utf8.encode(jsonEncode(data)).length;
+      
+      List<Map<String, dynamic>> devices;
+      if (payloadBytes > 1024) {
+        // Large payload: use isolate-based parsing
+        if (kDebugMode) {
+          debugPrint('[ASYNC_PARSE] Payload Size: $payloadBytes bytes (using compute)');
         }
-        return m;
-      }).toList();
+        devices = await compute(_parseDevices, data);
+      } else {
+        // Small payload: synchronous parsing is faster
+        if (kDebugMode) {
+          debugPrint('[ASYNC_PARSE] Payload Size: $payloadBytes bytes (synchronous)');
+        }
+        devices = data.whereType<Map<String, dynamic>>().map((e) {
+          final m = Map<String, dynamic>.from(e);
+          final lu = m['lastUpdate'];
+          if (lu is String) {
+            final dt = DateTime.tryParse(lu);
+            if (dt != null) m['lastUpdateDt'] = dt.toUtc();
+          }
+          return m;
+        }).toList();
+      }
       
       // 🎯 Update cache
       _cachedDevices = devices;

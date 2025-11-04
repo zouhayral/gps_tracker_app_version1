@@ -346,6 +346,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get viewDetails => 'عرض التفاصيل';
 
   @override
+  String get tripDetails => 'تفاصيل الرحلة';
+
+  @override
+  String get startTime => 'وقت البدء';
+
+  @override
+  String get endTime => 'وقت الانتهاء';
+
+  @override
+  String get follow => 'متابعة';
+
+  @override
   String get alertsTitle => 'التنبيهات';
 
   @override

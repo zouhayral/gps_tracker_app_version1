@@ -34,6 +34,11 @@ dependencies:
   cookie_jar: ^4.0.8
   cupertino_icons: ^1.0.8
   dio: ^5.7.0
+  # Firebase dependencies for performance monitoring and crash reporting
+  firebase_core: ^2.24.0
+  firebase_performance: ^0.9.3+8
+  firebase_crashlytics: ^3.4.8
+  firebase_analytics: ^10.7.4
   dio_cookie_manager: ^3.1.1
   firebase_core: ^3.10.0
   firebase_messaging: ^15.1.6

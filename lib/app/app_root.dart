@@ -6,19 +6,23 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/performance/icon_precache_service.dart';
 import 'package:my_app_gps/data/models/event.dart';
 // Debug HUD disabled globally; overlay imports removed
-import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
-import 'package:my_app_gps/features/auth/controller/auth_state.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
-import 'package:my_app_gps/features/geofencing/service/geofence_background_service.dart';
+import 'package:my_app_gps/features/geofencing/service/geofence_position_feeder.dart';
+import 'package:my_app_gps/features/geofencing/diagnostics/geofence_health_overlay.dart';
 import 'package:my_app_gps/features/localization/locale_provider.dart';
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
+
 import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/repositories/trip_repository.dart';
 import 'package:my_app_gps/services/notification_service.dart';
 import 'package:my_app_gps/theme/app_theme.dart';
+
+// Debug toggle for Geofence Health overlay
+const bool _showGeofenceOverlay = true;
 
 /// Lifecycle observer to automatically clean up expired trip cache
 /// when the app goes to background or becomes inactive
@@ -55,8 +59,6 @@ class AppRoot extends ConsumerStatefulWidget {
 class _AppRootState extends ConsumerState<AppRoot> {
   StreamSubscription<Map<String, dynamic>>? _eventSub;
   _TripRepositoryLifecycleObserver? _lifecycleObserver;
-  bool _bridgeInitialized = false; // Track if bridge listener is set up
-  bool _geofenceServiceInitialized = false; // Track if geofence service auto-start is set up
   
   @override
   void initState() {
@@ -97,12 +99,67 @@ class _AppRootState extends ConsumerState<AppRoot> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         precacheCommonMarkers(context);
+        
+        // ✨ NEW OPTIMIZATION: Precache Material Icon glyphs
+        IconPrecacheService.instance.warmup(context);
       }
     });
 
     // Kick off notifications boot initializer (await DAOs then init repo)
     // ignore: unused_result
     ref.read(notificationsBootInitializer);
+    
+    // 🎯 Initialize geofence notification bridge
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        try {
+          // Watch the provider to ensure it's initialized
+          ref.read(geofenceNotificationBridgeProvider);
+          if (kDebugMode) {
+            debugPrint('[AppRoot] 🔔 Geofence notification bridge initializing');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[AppRoot] ⚠️ Failed to initialize geofence notifications: $e');
+          }
+        }
+        
+        // 🎯 Initialize geofence position feeder
+        // This connects VehicleDataRepository position updates to GeofenceMonitor
+        try {
+          ref.read(geofencePositionFeederProvider);
+          if (kDebugMode) {
+            debugPrint('[AppRoot] 📍 Geofence position feeder initializing');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[AppRoot] ⚠️ Failed to initialize geofence position feeder: $e');
+          }
+        }
+
+        // ▶️ Ensure geofence monitor auto-starts for authenticated users
+        try {
+          ref.read(geofenceAutoMonitorProvider);
+          if (kDebugMode) {
+            debugPrint('[AppRoot] 🚀 Geofence auto-monitor initializer wired');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[AppRoot] ⚠️ Failed to wire auto-monitor initializer: $e');
+          }
+        }
+
+        // 🛰 Attach Geofence Health overlay in debug
+        if (kDebugMode && _showGeofenceOverlay) {
+          try {
+            GeofenceHealthOverlay.attach(context);
+            debugPrint('[AppRoot] 🛰 Geofence Health overlay attached');
+          } catch (e) {
+            debugPrint('[AppRoot] ⚠️ Failed to attach Geofence Health overlay: $e');
+          }
+        }
+      }
+    });
   }
 
   @override
@@ -168,117 +225,6 @@ class _AppRootState extends ConsumerState<AppRoot> {
       debugCheckHasDirectionality(context),
       'Directionality missing: AppRoot must be under a MaterialApp/Directionality',
     );
-    
-    // 🎯 Initialize geofence notification bridge
-    // CRITICAL: ref.listen MUST be called in build method, not initState
-    // Use state tracking to prevent re-registering listener on every build
-    if (!_bridgeInitialized) {
-      ref.listen(geofenceNotificationBridgeProvider, (previous, next) {
-        next.when(
-          data: (bridge) {
-            if (kDebugMode) {
-              debugPrint('[AppRoot] 🔔 Geofence notification bridge attached: ${bridge.isAttached}');
-            }
-          },
-          loading: () {
-            if (kDebugMode) {
-              debugPrint('[AppRoot] 🔄 Geofence notification bridge loading...');
-            }
-          },
-          error: (error, stack) {
-            if (kDebugMode) {
-              debugPrint('[AppRoot] ❌ Failed to initialize geofence notifications: $error');
-            }
-          },
-        );
-      });
-      _bridgeInitialized = true;
-    }
-    
-    // 🚀 Auto-start geofence background service when user logs in
-    // This monitors position updates and triggers geofence notifications
-    if (!_geofenceServiceInitialized) {
-      ref.listen(authNotifierProvider, (previous, next) {
-        // Start service when user becomes authenticated
-        if (next is AuthAuthenticated) {
-          final userId = next.userId.toString();
-          if (kDebugMode) {
-            debugPrint('[AppRoot] 🎯 User authenticated, starting geofence background service for user: $userId');
-          }
-          
-          // Start background service asynchronously
-          unawaited(
-            Future<void>.delayed(const Duration(seconds: 1), () async {
-              try {
-                final serviceAsync = ref.read(geofenceBackgroundServiceProvider);
-                await serviceAsync.when(
-                  data: (service) async {
-                    if (!service.isRunning) {
-                      await service.start(userId: userId);
-                      if (kDebugMode) {
-                        debugPrint('[AppRoot] ✅ Geofence background service started successfully');
-                      }
-                    }
-                  },
-                  loading: () async {
-                    if (kDebugMode) {
-                      debugPrint('[AppRoot] 🔄 Waiting for geofence background service...');
-                    }
-                  },
-                  error: (error, stack) async {
-                    if (kDebugMode) {
-                      debugPrint('[AppRoot] ❌ Failed to start geofence background service: $error');
-                    }
-                  },
-                );
-              } catch (e) {
-                if (kDebugMode) {
-                  debugPrint('[AppRoot] ❌ Exception starting geofence service: $e');
-                }
-              }
-            }),
-          );
-        }
-        
-        // Stop service when user logs out
-        if (next is AuthUnauthenticated && previous is AuthAuthenticated) {
-          if (kDebugMode) {
-            debugPrint('[AppRoot] 🛑 User logged out, stopping geofence background service');
-          }
-          
-          // Stop service asynchronously
-          unawaited(
-            Future<void>(() async {
-              try {
-                final serviceAsync = ref.read(geofenceBackgroundServiceProvider);
-                await serviceAsync.when(
-                  data: (service) async {
-                    if (service.isRunning) {
-                      await service.stop();
-                      if (kDebugMode) {
-                        debugPrint('[AppRoot] ✅ Geofence background service stopped');
-                      }
-                    }
-                  },
-                  loading: () async {},
-                  error: (error, stack) async {
-                    if (kDebugMode) {
-                      debugPrint('[AppRoot] ⚠️ Error stopping geofence service: $error');
-                    }
-                  },
-                );
-              } catch (e) {
-                if (kDebugMode) {
-                  debugPrint('[AppRoot] ⚠️ Exception stopping geofence service: $e');
-                }
-              }
-            }),
-          );
-        }
-      });
-      _geofenceServiceInitialized = true;
-    }
-    
     final router = ref.watch(goRouterProvider);
     final currentLocale = ref.watch(localeProvider);
     

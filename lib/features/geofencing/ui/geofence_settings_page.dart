@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/core/utils/shared_prefs_holder.dart';
 import 'package:my_app_gps/features/auth/controller/auth_notifier.dart';
 import 'package:my_app_gps/features/auth/controller/auth_state.dart';
@@ -8,8 +10,8 @@ import 'package:my_app_gps/features/geofencing/models/geofence_optimizer_state.d
 import 'package:my_app_gps/features/geofencing/providers/geofence_optimizer_provider.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_permission_provider.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
+import 'package:my_app_gps/features/geofencing/service/geofence_position_feeder.dart';
 import 'package:my_app_gps/features/geofencing/ui/widgets/permission_prompt_dialog.dart';
-import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Consolidated Geofence Settings Page
@@ -95,6 +97,26 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
       appBar: AppBar(
         title: Text(t?.geofenceSettings ?? 'Geofence Settings'),
         actions: [
+          // Debug diagnostics button
+          if (kDebugMode)
+            IconButton(
+              icon: const Icon(Icons.bug_report),
+              tooltip: 'Print Diagnostics',
+              onPressed: () {
+                final controller = ref.read(geofenceMonitorProvider.notifier);
+                controller.printDiagnostics();
+                
+                // Just initialize the feeder to check if it's accessible
+                ref.read(geofencePositionFeederProvider);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('📋 Diagnostics printed to console - check debug output'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.info_outline),
             tooltip: t?.aboutGeofenceSettings ?? 'About Geofence Settings',
@@ -208,7 +230,6 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                 final controller = ref.read(geofenceMonitorProvider.notifier);
                 if (value) {
                   await controller.start(userId);
-                  if (!context.mounted) return;
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -219,7 +240,6 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   }
                 } else {
                   await controller.stop();
-                  if (!context.mounted) return;
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -230,7 +250,6 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   }
                 }
               } catch (e) {
-                if (!context.mounted) return;
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -288,7 +307,6 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                 // User wants to enable background access
                 final granted = await permActions.requestBackground();
 
-                if (!context.mounted) return;
                 if (!granted && mounted) {
                   // Show education dialog if denied
                   await showDialog<void>(
@@ -312,7 +330,6 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                 }
               } else {
                 // User toggled off background access
-                if (!context.mounted) return;
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -382,18 +399,22 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
         modeIcon = Icons.bolt_rounded;
         modeColor = Colors.grey;
         modeText = t?.optimizationDisabled ?? 'Optimization disabled';
+        break;
       case OptimizationMode.active:
         modeIcon = Icons.bolt_rounded;
         modeColor = Colors.green;
         modeText = '${t?.activeMode ?? 'Active mode'} (${currentInterval}s ${t?.interval ?? 'interval'})';
+        break;
       case OptimizationMode.idle:
         modeIcon = Icons.snooze_rounded;
         modeColor = Colors.orange;
         modeText = '${t?.idleMode ?? 'Idle mode'} (${currentInterval}s ${t?.interval ?? 'interval'})';
+        break;
       case OptimizationMode.batterySaver:
         modeIcon = Icons.battery_saver_rounded;
         modeColor = Colors.red;
         modeText = '${t?.batterySaver ?? 'Battery saver'} (${currentInterval}s ${t?.interval ?? 'interval'})';
+        break;
     }
 
     return Column(
@@ -416,31 +437,34 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
               if (v) {
                 try {
                   await optimizerActions.start();
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(t?.adaptiveOptimizationEnabled ?? '✅ Adaptive optimization enabled'),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(t?.adaptiveOptimizationEnabled ?? '✅ Adaptive optimization enabled'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
                 } catch (e) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${t?.failedToStartOptimizer ?? '❌ Failed to start optimizer'}: $e'),
-                      duration: const Duration(seconds: 3),
-                    ),
-                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${t?.failedToStartOptimizer ?? '❌ Failed to start optimizer'}: $e'),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
                 }
               } else {
                 await optimizerActions.stop();
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(t?.adaptiveOptimizationDisabled ?? '⏸️ Adaptive optimization disabled'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(t?.adaptiveOptimizationDisabled ?? '⏸️ Adaptive optimization disabled'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
               }
             },
           ),
@@ -535,7 +559,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
   // ==========================================================================
 
   /// Show notification type picker
-  Future<void> _showNotificationTypePicker(BuildContext context) async {
+  void _showNotificationTypePicker(BuildContext context) async {
     final types = ['Local only', 'Push only', 'Both (Local + Push)', 'Silent'];
     final descriptions = {
       'Local only': 'Show notifications only on this device',
@@ -577,20 +601,21 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
       ),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       await _saveNotificationType(result);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Notification type set to: $result'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Notification type set to: $result'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
   /// Show evaluation frequency picker
-  Future<void> _showEvaluationFrequencyPicker(BuildContext context) async {
+  void _showEvaluationFrequencyPicker(BuildContext context) async {
     final modes = [
       'Fast (Real-time)',
       'Balanced (recommended)',
@@ -635,20 +660,21 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
       ),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       await _saveEvaluationMode(result);
-      if (!context.mounted) return;
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Evaluation frequency set to: $result'),
             duration: const Duration(seconds: 2),
           ),
         );
+      }
     }
   }
 
   /// Reset all settings to defaults
-  Future<void> _resetToDefaults(BuildContext context) async {
+  void _resetToDefaults(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -670,18 +696,18 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
       ),
     );
 
-    if (!context.mounted) return;
-    if (confirm ?? false) {
+    if (confirm == true && mounted) {
       await _saveNotificationType('Local only');
       await _saveEvaluationMode('Balanced (recommended)');
 
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Settings reset to defaults'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Settings reset to defaults'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 

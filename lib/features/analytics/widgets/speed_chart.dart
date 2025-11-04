@@ -134,8 +134,8 @@ class _SpeedChartState extends State<SpeedChart> {
             show: true,
             gradient: LinearGradient(
               colors: [
-                lineColor.withValues(alpha: 0.3),
-                lineColor.withValues(alpha: 0),
+                lineColor.withOpacity(0.3),
+                lineColor.withOpacity(0),
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -166,7 +166,7 @@ class _SpeedChartState extends State<SpeedChart> {
         });
       },
       touchTooltipData: LineTouchTooltipData(
-        getTooltipColor: (touchedSpot) => lineColor.withValues(alpha: 0.9),
+        getTooltipColor: (touchedSpot) => lineColor.withOpacity(0.9),
         tooltipRoundedRadius: 8,
         tooltipPadding: const EdgeInsets.all(8),
         tooltipMargin: 8,
@@ -195,6 +195,7 @@ class _SpeedChartState extends State<SpeedChart> {
 
   FlGridData _buildGridData() {
     return FlGridData(
+      drawVerticalLine: true,
       horizontalInterval: _calculateHorizontalInterval(),
       verticalInterval: _calculateVerticalInterval(),
       getDrawingHorizontalLine: (value) {

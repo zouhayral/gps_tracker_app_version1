@@ -8,7 +8,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/database/dao/trip_snapshots_dao.dart';
 import 'package:my_app_gps/core/database/dao/trips_dao.dart';
+import 'package:my_app_gps/core/data/services/cached_trips_dao.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
+import 'package:my_app_gps/core/lifecycle/stream_lifecycle_manager.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/data/models/position.dart' as model;
 import 'package:my_app_gps/data/models/trip.dart';
@@ -17,6 +19,8 @@ import 'package:my_app_gps/data/models/trip_snapshot.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/trips/models/trip_filter.dart';
 import 'package:my_app_gps/services/auth_service.dart';
+import 'package:my_app_gps/features/trips/debug/trip_adaptive_tuner.dart';
+import 'package:my_app_gps/features/trips/debug/trip_metrics.dart';
 
 /// Top-level function for isolate-based trip parsing with JSON decoding
 /// This function must be top-level (not a method) to work with compute()
@@ -89,17 +93,70 @@ class TripRepository {
   // Keeping Ref for DAO and future integrations (e.g., device lookups, prefs)
   final Ref _ref;
 
+  // 🧹 LIFECYCLE: Unified stream and subscription manager
+  final _lifecycle = StreamLifecycleManager(name: 'TripRepository');
+  bool _disposed = false;
+
   // In-memory cache for network responses
   final Map<String, _CachedTripResponse> _cache = {};
+  // Lightweight content signatures to detect unchanged payloads
+  final Map<String, String> _cacheSignatures = {};
+  int _cacheHits = 0;
+  int _cacheMisses = 0;
+  int _reuseUnchanged = 0;
+
+  // Live metrics stream for diagnostics overlay
+  final _metricsController = StreamController<TripCacheMetrics>.broadcast();
+  Stream<TripCacheMetrics> get metricsStream => _metricsController.stream;
+  void _emitMetrics() {
+    // Best-effort: ignore if closed
+    if (_metricsController.isClosed) return;
+    _metricsController.add(
+      TripCacheMetrics(_cacheHits, _cacheMisses, _reuseUnchanged),
+    );
+  }
+
+  // Expose current metrics via getters
+  int get cacheHits => _cacheHits;
+  int get cacheMisses => _cacheMisses;
+  int get reuseUnchanged => _reuseUnchanged;
+
+  // Append a performance sample to the timeline (max 60 entries)
+  void _appendPerfSample({double parseDurationMs = 0}) {
+    try {
+      final notifier = _ref.read(tripPerfTimelineProvider.notifier);
+      final current = List<TripPerfSample>.from(notifier.state);
+      if (current.length >= 60) {
+        current.removeAt(0);
+      }
+      current.add(
+        TripPerfSample(
+          timestamp: DateTime.now(),
+          parseDurationMs: parseDurationMs,
+          cacheHits: _cacheHits,
+          cacheMisses: _cacheMisses,
+          reuse: _reuseUnchanged,
+        ),
+      );
+      notifier.state = List<TripPerfSample>.unmodifiable(current);
+    } catch (_) {
+      // ignore if provider not available in this context
+    }
+  }
   
   // Track ongoing requests to prevent duplicates
   final Map<String, Future<List<Trip>>> _ongoingRequests = {};
   
-  // Cache TTL: 2 minutes
-  static const Duration _cacheTTL = Duration(minutes: 2);
+  // Default Cache TTL: 2 minutes (overridden by adaptive runtime config)
+  static const Duration _defaultCacheTTL = Duration(minutes: 2);
 
   // TASK 4: Last used filter for prefetch on resume
   TripFilter? _lastUsedFilter;
+
+  // Concurrency control: limit to 3 active network requests
+  static const int _maxConcurrentRequests = 3;
+  int _activeFetches = 0;
+  final List<Completer<void>> _fetchQueue = [];
 
   Future<List<Trip>> fetchTrips({
     required int deviceId,
@@ -115,31 +172,22 @@ class TripRepository {
 
     final cacheKey = _buildCacheKey(deviceId, from, to);
     final sw = Stopwatch()..start();
-    
-    // Track metrics
-    if (kDebugMode) {
-      DevDiagnostics.instance.startTripLoad();
-      DevDiagnostics.instance.recordTripApiCall();
-    }
 
     // 1. Check cache first
     final cached = _cache[cacheKey];
-    if (cached != null && !cached.isExpired(_cacheTTL)) {
+    final ttl = _effectiveCacheTtl();
+    if (cached != null && !cached.isExpired(ttl)) {
       final age = DateTime.now().difference(cached.timestamp).inSeconds;
-      _log.debug('🎯 Returning ${cached.trips.length} trips (age: ${age}s, TTL: ${_cacheTTL.inSeconds}s)');
-      
-      if (kDebugMode) {
-        DevDiagnostics.instance.recordTripCacheHit();
-        DevDiagnostics.instance.endTripLoad();
-      }
-      
+      _cacheHits++;
+      _log.debug('Trip cache hit — returning ${cached.trips.length} trips (age: ${age}s, TTL: ${ttl.inSeconds}s, hits=$_cacheHits misses=$_cacheMisses)');
+      _emitMetrics();
+      _appendPerfSample();
       return cached.trips;
     }
-    
-    // Cache miss
-    if (kDebugMode) {
-      DevDiagnostics.instance.recordTripCacheMiss();
-    }
+  _cacheMisses++;
+    _log.debug('Trip cache miss (key: $cacheKey, hits=$_cacheHits misses=$_cacheMisses)');
+    _emitMetrics();
+  _appendPerfSample();
 
     // 2. Check for ongoing request (throttling)
     final ongoing = _ongoingRequests[cacheKey];
@@ -148,7 +196,10 @@ class TripRepository {
       return ongoing;
     }
 
-    // 3. Create new request with retry logic
+    // 3. Acquire concurrency slot before making network request
+    await _acquireFetchSlot();
+
+    // 4. Create new request with retry logic
     final requestFuture = _fetchTripsWithRetry(
       deviceId: deviceId,
       from: from,
@@ -185,17 +236,30 @@ class TripRepository {
       sw.stop();
       _log.debug('⏱️ Fetch completed in ${sw.elapsedMilliseconds}ms');
       
-      // Track metrics
-      if (kDebugMode) {
-        DevDiagnostics.instance.endTripLoad();
+      // Skip cache write for empty results to reduce memory waste
+      if (trips.isNotEmpty) {
+        // If content signature matches previous, reuse cached trips (no change)
+        final newSig = _signatureOfTrips(trips);
+        final prevSig = _cacheSignatures[cacheKey];
+        final prevCached = _cache[cacheKey];
+        if (prevSig != null && newSig == prevSig && prevCached != null) {
+          _reuseUnchanged++;
+          _log.debug('Skipped unchanged result overwrite — reusing cached result (key: $cacheKey, count=${prevCached.trips.length})');
+          _emitMetrics();
+          _appendPerfSample();
+          return prevCached.trips;
+        }
+        _cacheSignatures[cacheKey] = newSig;
+        _cache[cacheKey] = _CachedTripResponse(
+          trips: trips,
+          timestamp: DateTime.now(),
+        );
+        _log.debug('💾 Stored ${trips.length} trips (key: $cacheKey)');
+        _emitMetrics();
+        _appendPerfSample();
+      } else {
+        _log.debug('⏭️ Skipping cache write for empty result');
       }
-      
-      // Cache the result
-      _cache[cacheKey] = _CachedTripResponse(
-        trips: trips,
-        timestamp: DateTime.now(),
-      );
-      _log.debug('💾 Stored ${trips.length} trips (key: $cacheKey)');
       
       return trips;
     }).catchError((Object error, StackTrace stackTrace) {
@@ -212,8 +276,9 @@ class TripRepository {
       _log.debug('❌ No cache available, returning empty');
       return <Trip>[];
     }).whenComplete(() {
-      // Remove from ongoing requests
+      // Remove from ongoing requests and release concurrency slot
       _ongoingRequests.remove(cacheKey);
+      _releaseFetchSlot();
     });
 
     // Track ongoing request
@@ -224,6 +289,15 @@ class TripRepository {
   /// Build cache key from request parameters
   String _buildCacheKey(int deviceId, DateTime from, DateTime to) {
     return '$deviceId|${_toUtcIso(from)}|${_toUtcIso(to)}';
+  }
+
+  /// Compute a small signature string for a list of trips to detect unchanged content
+  String _signatureOfTrips(List<Trip> trips) {
+    if (trips.isEmpty) return 'len:0';
+    final first = trips.first;
+    final last = trips.last;
+    // Use only stable fields to avoid noisy diffs
+    return 'len:${trips.length}|f:${first.id}:${first.startTime.toUtc().toIso8601String()}|l:${last.id}:${last.endTime.toUtc().toIso8601String()}';
   }
 
   /// TASK 4: Check if device is online
@@ -322,11 +396,23 @@ class TripRepository {
     required int attempts, CancelToken? cancelToken,
   }) async {
     var attempt = 0;
-    var delay = const Duration(seconds: 1);
+    var delay = const Duration(milliseconds: 400);
+
+    bool _isTransient(Object e) {
+      if (e is DioException) {
+        final status = e.response?.statusCode;
+        final timeout = e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            e.type == DioExceptionType.sendTimeout;
+        final conn = e.type == DioExceptionType.connectionError;
+        final retryableStatus = status == 502 || status == 503 || status == 504;
+        return timeout || conn || retryableStatus;
+      }
+      return false;
+    }
 
     while (attempt < attempts) {
       attempt++;
-      
       try {
         _log.debug('🔄 Attempt $attempt/$attempts');
         return await _fetchTripsNetwork(
@@ -336,18 +422,18 @@ class TripRepository {
           cancelToken: cancelToken,
         );
       } catch (e) {
-        if (attempt >= attempts) {
-          _log.warning('❌ All $attempts attempts failed');
+        if (attempt >= attempts || !_isTransient(e)) {
+          _log.warning('❌ Giving up (attempt=$attempt, transient=${_isTransient(e)})');
           rethrow;
         }
-        
-        _log.debug('⏳ Attempt $attempt failed, retrying in ${delay.inSeconds}s: $e');
-        await Future<void>.delayed(delay);
-        delay *= 2; // Exponential backoff: 1s, 2s, 4s
+        final jitter = Duration(milliseconds: 60 * attempt);
+        _log.debug('⏳ Transient failure, retrying in ${delay.inMilliseconds + jitter.inMilliseconds}ms');
+        await Future<void>.delayed(delay + jitter);
+        delay *= 2; // 400ms → 800ms → 1600ms
       }
     }
 
-    return <Trip>[];
+    return const <Trip>[];
   }
 
   /// Core network fetch logic
@@ -395,6 +481,7 @@ class TripRepository {
       }
 
       _log.debug('⇢ URL=$resolved');
+      // NOTE: We don't change HttpClientAdapter so gzip and keep-alive remain enabled by default
       final response = await dio.get<dynamic>(
         url,
         queryParameters: params,
@@ -488,18 +575,34 @@ class TripRepository {
   /// - JSON decoding (when String input)
   /// - Trip.fromJson() parsing (always)
   Future<List<Trip>> _parseTripsInBackground(dynamic data) async {
-    // Determine if we should use isolate based on data size
-    final shouldUseIsolate = data is String 
-        ? data.length > 500  // Use isolate for large JSON strings
-        : (data is List && data.length > 10); // Use isolate for large lists
+    // 🎯 ASYNC PARSING: Calculate payload size
+    int payloadBytes = 0;
+    try {
+      if (data is String) {
+        payloadBytes = utf8.encode(data).length;
+      } else if (data is List) {
+        payloadBytes = utf8.encode(jsonEncode(data)).length;
+      }
+    } catch (_) {
+      // Ignore payload size calculation errors
+    }
+    
+    // Determine if we should use isolate based on data size (threshold: 1 KB)
+    final shouldUseIsolate = payloadBytes > 1024;
     
     if (!shouldUseIsolate) {
       // Small data: parse synchronously (isolate overhead not worth it)
+      if (kDebugMode) {
+        debugPrint('[ASYNC_PARSE] Payload Size: $payloadBytes bytes (synchronous)');
+      }
       return _parseTripsIsolate(data);
     }
     
     // Large data: offload to isolate
     final itemCount = data is String ? 'unknown' : (data as List).length;
+    if (kDebugMode) {
+      debugPrint('[ASYNC_PARSE] Payload Size: $payloadBytes bytes (using compute)');
+    }
     _log.debug('🔄 Parsing $itemCount trips in background isolate (with JSON decoding: ${data is String})');
     final stopwatch = Stopwatch()..start();
     
@@ -507,6 +610,7 @@ class TripRepository {
     
     stopwatch.stop();
     _log.debug('✅ Background parsing completed in ${stopwatch.elapsedMilliseconds}ms');
+  _appendPerfSample(parseDurationMs: stopwatch.elapsedMilliseconds.toDouble());
     
     return trips;
   }
@@ -570,52 +674,18 @@ class TripRepository {
   }
 
   /// Safe cached trips lookup from DAO; returns empty list on error.
-  /// 
-  /// Parameters:
-  /// - [limit]: Maximum number of trips to return (default: 50 for initial page load)
-  /// - [offset]: Number of trips to skip for pagination
   Future<List<Trip>> getCachedTrips(
-    int deviceId,
-    DateTime from,
-    DateTime to, {
-    int limit = 50,
-    int offset = 0,
-  }) async {
+      int deviceId, DateTime from, DateTime to,) async {
     try {
-      // Track DB query
-      if (kDebugMode) {
-        DevDiagnostics.instance.recordTripDbQuery();
-      }
-      
-      final dao = await _ref.read(tripsDaoProvider.future);
-      final cached = await dao.getByDeviceInRange(
-        deviceId,
-        from,
-        to,
-        limit: limit,
-        offset: offset,
-      );
+      final dao = await _ref.read(cachedTripsDaoProvider.future);
+      final cached = await dao.getByDeviceInRange(deviceId, from, to);
       if (cached.isEmpty) return const <Trip>[];
-      // Already domain Trip models from DAO; return directly
-      return List<Trip>.unmodifiable(cached);
+      return cached
+          .map((e) => Trip.fromJson(e.toDomain()))
+          .toList(growable: false);
     } catch (e) {
       _log.warning('Cache lookup failed', error: e);
       return const <Trip>[];
-    }
-  }
-
-  /// Get total count of cached trips for a device in a date range
-  Future<int> getCachedTripsCount(
-    int deviceId,
-    DateTime from,
-    DateTime to,
-  ) async {
-    try {
-      final dao = await _ref.read(tripsDaoProvider.future);
-      return await dao.countByDeviceInRange(deviceId, from, to);
-    } catch (e) {
-      _log.warning('Cache count failed', error: e);
-      return 0;
     }
   }
 
@@ -624,8 +694,9 @@ class TripRepository {
   /// OPTIMIZATION: Skip cleanup if no expired entries exist
   void cleanupExpiredCache() {
     // OPTIMIZATION: Guard clause - check for expired entries before cleanup
-    final expired = _cache.entries
-        .where((entry) => entry.value.isExpired(_cacheTTL))
+  final ttl = _effectiveCacheTtl();
+  final expired = _cache.entries
+    .where((entry) => entry.value.isExpired(ttl))
         .toList();
     
     if (expired.isEmpty) {
@@ -634,16 +705,32 @@ class TripRepository {
     }
     
     // Proceed with cleanup
-    final before = _cache.length;
-    _cache.removeWhere((key, cached) => cached.isExpired(_cacheTTL));
+  final before = _cache.length;
+  _cache.removeWhere((key, cached) => cached.isExpired(ttl));
     final after = _cache.length;
     
     _log.debug('🧹 Removed ${before - after} expired entries ($after remain)');
   }
 
+  // Resolve effective TTL from adaptive runtime config, with safe fallback
+  Duration _effectiveCacheTtl() {
+    try {
+      // Prefer the provider's state if available
+      final params = _ref.read(adaptiveRuntimeConfigProvider);
+      return params.ttl;
+    } catch (_) {
+      // If provider not initialized or in non-Riverpod context, use global snapshot
+      try {
+        return currentRuntimeParams.ttl;
+      } catch (_) {
+        return _defaultCacheTTL;
+      }
+    }
+  }
+
   Future<void> cleanupOldTrips() async {
     try {
-      final tripsDao = await _ref.read(tripsDaoProvider.future);
+      final tripsDao = await _ref.read(cachedTripsDaoProvider.future);
       final snapshotsDao = await _ref.read(tripSnapshotsDaoProvider.future);
       final now = DateTime.now().toUtc();
       final cutoff = now.subtract(const Duration(days: 30));
@@ -732,7 +819,7 @@ class TripRepository {
   }) async {
     final sw = Stopwatch()..start();
     try {
-      final dao = await _ref.read(tripsDaoProvider.future);
+      final dao = await _ref.read(cachedTripsDaoProvider.future);
       final result = await dao.getAggregatesByDay(from, to);
       return result;
     } catch (e) {
@@ -800,10 +887,141 @@ class TripRepository {
     final m = d.month.toString().padLeft(2, '0');
     return '$y-$m';
   }
+
+  /// Acquire a slot in the concurrency pool (max 3 concurrent requests)
+  Future<void> _acquireFetchSlot() async {
+    if (_activeFetches < _maxConcurrentRequests) {
+      _activeFetches++;
+      _log.debug('🚀 Acquired fetch slot ($_activeFetches/$_maxConcurrentRequests active)');
+      return;
+    }
+
+    // Wait in queue
+    final completer = Completer<void>();
+    _fetchQueue.add(completer);
+    _log.debug('⏳ Queued for fetch slot (${_fetchQueue.length} waiting, $_activeFetches/$_maxConcurrentRequests active)');
+    await completer.future;
+  }
+
+  /// Release a slot in the concurrency pool
+  void _releaseFetchSlot() {
+    _activeFetches--;
+    _log.debug('✅ Released fetch slot ($_activeFetches/$_maxConcurrentRequests active)');
+
+    // Process queue
+    if (_fetchQueue.isNotEmpty) {
+      final completer = _fetchQueue.removeAt(0);
+      _activeFetches++;
+      completer.complete();
+      _log.debug('🚀 Assigned queued request ($_activeFetches/$_maxConcurrentRequests active, ${_fetchQueue.length} waiting)');
+    }
+  }
+
+  /// Batch fetch trips for multiple devices with concurrency limit
+  /// Returns a Map of deviceId -> List<Trip>
+  Future<Map<int, List<Trip>>> fetchTripsForDevices({
+    required List<int> deviceIds,
+    required DateTime from,
+    required DateTime to,
+    CancelToken? cancelToken,
+  }) async {
+    if (deviceIds.isEmpty) return {};
+
+    _log.debug('📦 Batch fetching trips for ${deviceIds.length} devices');
+    final sw = Stopwatch()..start();
+    final results = <int, List<Trip>>{};
+
+    // Process in chunks of 3 to respect concurrency limit
+    for (var i = 0; i < deviceIds.length; i += _maxConcurrentRequests) {
+      final chunk = deviceIds.skip(i).take(_maxConcurrentRequests).toList();
+      _log.debug('🔄 Processing chunk ${i ~/ _maxConcurrentRequests + 1} (${chunk.length} devices)');
+
+      final futures = chunk.map((deviceId) async {
+        try {
+          final trips = await fetchTrips(
+            deviceId: deviceId,
+            from: from,
+            to: to,
+            cancelToken: cancelToken,
+          );
+          return MapEntry(deviceId, trips);
+        } catch (e) {
+          _log.warning('Failed to fetch trips for device $deviceId', error: e);
+          return MapEntry(deviceId, <Trip>[]);
+        }
+      });
+
+      final chunkResults = await Future.wait(futures);
+      for (final entry in chunkResults) {
+        results[entry.key] = entry.value;
+      }
+    }
+
+    sw.stop();
+    final totalTrips = results.values.fold<int>(0, (sum, trips) => sum + trips.length);
+    _log.debug('📦 Batch fetch complete: $totalTrips trips from ${results.length} devices in ${sw.elapsedMilliseconds}ms');
+
+    return results;
+  }
+
+  /// 🧹 LIFECYCLE: Dispose all resources
+  void dispose() {
+    if (_disposed) {
+      _log.debug('⚠️ Double dispose prevented');
+      return;
+    }
+    _disposed = true;
+
+    _log.debug('🛑 Disposing TripRepository');
+
+    // Dispose lifecycle manager (cancels all tracked subscriptions/timers)
+    _lifecycle.disposeAll();
+
+    // Clear caches
+    _cache.clear();
+    _ongoingRequests.clear();
+
+    // Clear concurrency queue
+    for (final completer in _fetchQueue) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          StateError('TripRepository disposed while request was queued'),
+        );
+      }
+    }
+    _fetchQueue.clear();
+
+    // Close metrics controller
+    try {
+      _metricsController.close();
+    } catch (_) {}
+
+    // Log final status
+    _lifecycle.logStatus();
+
+    _log.debug('✅ TripRepository disposed');
+  }
 }
 
 /// Provider for TripRepository (singleton per container)
 final tripRepositoryProvider = Provider<TripRepository>((ref) {
   final dio = ref.watch(dioProvider);
-  return TripRepository(dio: dio, ref: ref);
+  final repo = TripRepository(dio: dio, ref: ref);
+  ref.onDispose(repo.dispose);
+  return repo;
+});
+
+/// Lightweight metrics model for diagnostics overlay
+class TripCacheMetrics {
+  final int hits;
+  final int misses;
+  final int reuse;
+  const TripCacheMetrics(this.hits, this.misses, this.reuse);
+  double get reuseRate => (hits + misses) == 0 ? 0.0 : (reuse / (hits + misses));
+}
+
+/// Riverpod stream provider for live trip cache metrics
+final tripCacheMetricsProvider = StreamProvider<TripCacheMetrics>((ref) {
+  final repo = ref.watch(tripRepositoryProvider);
+  return repo.metricsStream;
 });

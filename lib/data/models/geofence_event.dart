@@ -7,7 +7,6 @@ import 'package:latlong2/latlong.dart';
 ///   • REST/WebSocket JSON
 ///   • SQLite Map storage
 ///   • UI-friendly data (icon, color, formatted message)
-@immutable
 class GeofenceEvent {
   final String id;
   final String geofenceId;
@@ -67,7 +66,7 @@ class GeofenceEvent {
       longitude: location.longitude,
       syncStatus: 'pending',
       createdAt: now,
-  attributes: const {'priority': 'high'},
+      attributes: {'priority': 'high'},
     );
   }
 
@@ -94,7 +93,7 @@ class GeofenceEvent {
       longitude: location.longitude,
       syncStatus: 'pending',
       createdAt: now,
-  attributes: const {'priority': 'high'},
+      attributes: {'priority': 'high'},
     );
   }
 
@@ -123,7 +122,7 @@ class GeofenceEvent {
       syncStatus: 'pending',
       createdAt: now,
       dwellDurationMs: dwellDurationMs,
-  attributes: const {'priority': 'default'},
+      attributes: {'priority': 'default'},
     );
   }
 

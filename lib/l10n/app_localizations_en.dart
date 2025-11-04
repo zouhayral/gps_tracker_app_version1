@@ -347,6 +347,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get viewDetails => 'View Details';
 
   @override
+  String get tripDetails => 'Trip Details';
+
+  @override
+  String get startTime => 'Start Time';
+
+  @override
+  String get endTime => 'End Time';
+
+  @override
+  String get follow => 'Follow';
+
+  @override
   String get alertsTitle => 'Alerts';
 
   @override

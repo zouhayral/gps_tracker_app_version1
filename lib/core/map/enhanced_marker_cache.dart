@@ -35,6 +35,11 @@ class EnhancedMarkerCache {
   final Map<String, MapMarkerData> _cache = {};
   final Map<String, _MarkerSnapshot> _snapshots = {};
 
+  // OPTIMIZATION TASK 3: Marker lookup by ID for O(1) access
+  // Provides fast access to individual markers without linear search
+  // Synchronized with _cache during updates
+  final Map<String, MapMarkerData> _markerLookup = {};
+
   // Throttling
   DateTime? _lastUpdate;
   static const _minUpdateInterval = Duration(milliseconds: 300);
@@ -58,9 +63,12 @@ class EnhancedMarkerCache {
     // First time creation - always rebuild
     if (oldSnap == null) return true;
 
-    // Note: Do not early-return solely on identical timestamp.
-    // Selection changes or other state changes must still trigger a rebuild
-    // even if the timestamp remains the same.
+    // ✅ Check selection change first (visual state change that needs immediate update)
+    final sameSelection = oldSnap.isSelected == newSnap.isSelected;
+    if (!sameSelection) return true; // Selection changed - always rebuild
+
+    // ✅ Skip if timestamp identical (no new position data)
+    if (oldSnap.timestamp == newSnap.timestamp) return false;
 
     // ✅ Skip if position delta < 0.000001° (~10 cm)
     final samePosition = (oldSnap.lat - newSnap.lat).abs() < 0.000001 &&
@@ -71,10 +79,8 @@ class EnhancedMarkerCache {
                       oldSnap.speed == newSnap.speed &&
                       oldSnap.course == newSnap.course;
 
-    final sameSelection = oldSnap.isSelected == newSnap.isSelected;
-
     // Only rebuild if something meaningful changed
-    if (samePosition && sameState && sameSelection) return false;
+    if (samePosition && sameState) return false;
 
     // ⚡ Otherwise, rebuild marker
     return true;
@@ -124,7 +130,7 @@ class EnhancedMarkerCache {
     final removed = <String>[];
   var modified = 0; // updates where snapshot changed but marker already existed
     final processedIds = <String>{};
-    final q = query.trim().toLowerCase();
+  // Query is handled by the suggestions UI; markers remain visible regardless of query.
 
     // Process devices with positions
     for (final p in positions.values) {
@@ -138,17 +144,9 @@ class EnhancedMarkerCache {
               ?.toString() ??
           '';
 
-      // Filter: show only selected devices when there are selections
-      if (selectedIds.isNotEmpty && !selectedIds.contains(deviceId)) {
-        continue;
-      }
-
-      // Filter by query if not selected
-      if (q.isNotEmpty &&
-          !name.toLowerCase().contains(q) &&
-          !selectedIds.contains(deviceId)) {
-        continue;
-      }
+      // NOTE: Do not filter out non-selected devices or non-matching queries.
+      // We keep all devices visible on the map to support multi-select without hiding others.
+      // Selection and query are used only for marker highlighting and suggestions, not visibility gating.
 
       if (_valid(p.latitude, p.longitude)) {
         final engineOn = _asTrue(p.attributes['ignition']) ||
@@ -189,6 +187,7 @@ class EnhancedMarkerCache {
 
           _cache[markerId] = marker;
           _snapshots[markerId] = snapshot;
+          _markerLookup[markerId] = marker; // OPTIMIZATION: Sync lookup map
           updated.add(marker);
 
           if (existingSnapshot == null) {
@@ -236,17 +235,9 @@ class EnhancedMarkerCache {
 
       final name = d['name']?.toString() ?? '';
 
-      // Filter: show only selected devices when there are selections
-      if (selectedIds.isNotEmpty && !selectedIds.contains(deviceId)) {
-        continue;
-      }
-
-      // Filter by query if not selected
-      if (q.isNotEmpty &&
-          !name.toLowerCase().contains(q) &&
-          !selectedIds.contains(deviceId)) {
-        continue;
-      }
+      // NOTE: Do not filter out non-selected devices or non-matching queries.
+      // We keep all devices visible on the map to support multi-select without hiding others.
+      // Selection and query are used only for marker highlighting and suggestions, not visibility gating.
 
       final lat = _asDouble(d['latitude']);
       final lon = _asDouble(d['longitude']);
@@ -292,6 +283,7 @@ class EnhancedMarkerCache {
 
           _cache[markerId] = marker;
           _snapshots[markerId] = snapshot;
+          _markerLookup[markerId] = marker; // OPTIMIZATION: Sync lookup map
           updated.add(marker);
 
           if (existingSnapshot == null) {
@@ -317,6 +309,7 @@ class EnhancedMarkerCache {
     for (final id in toRemove) {
       _cache.remove(id);
       _snapshots.remove(id);
+      _markerLookup.remove(id); // OPTIMIZATION: Sync lookup map
       removed.add(id);
     }
 
@@ -436,6 +429,49 @@ class EnhancedMarkerCache {
   void clear() {
     _cache.clear();
     _snapshots.clear();
+    _markerLookup.clear(); // OPTIMIZATION: Clear lookup map
+  }
+
+  /// OPTIMIZATION TASK 3: Get cached marker by ID (O(1) lookup)
+  /// 
+  /// Provides fast access to individual markers without linear search through _cache.
+  /// Returns null if marker doesn't exist in cache.
+  /// 
+  /// **Performance**: O(1) vs O(n) for _cache.values.firstWhere()
+  /// **Use case**: Device info panels, marker selection, hover states
+  /// 
+  /// Usage:
+  /// ```dart
+  /// final marker = EnhancedMarkerCache.instance.getCachedMarkerById('123');
+  /// if (marker != null) {
+  ///   // Use cached marker data
+  /// }
+  /// ```
+  MapMarkerData? getCachedMarkerById(String markerId) {
+    return _markerLookup[markerId];
+  }
+
+  /// OPTIMIZATION TASK 3: Get multiple markers by IDs (batched O(1) lookups)
+  /// 
+  /// Efficiently retrieves multiple markers without iterating entire cache.
+  /// Skips IDs not found in cache (returns only existing markers).
+  /// 
+  /// **Performance**: O(k) where k = markerIds.length
+  /// **Use case**: Multi-selection info panels, batch operations
+  /// 
+  /// Usage:
+  /// ```dart
+  /// final markers = EnhancedMarkerCache.instance.getCachedMarkersByIds(['1', '2', '3']);
+  /// ```
+  List<MapMarkerData> getCachedMarkersByIds(Iterable<String> markerIds) {
+    final result = <MapMarkerData>[];
+    for (final id in markerIds) {
+      final marker = _markerLookup[id];
+      if (marker != null) {
+        result.add(marker);
+      }
+    }
+    return result;
   }
 
   /// Get cache statistics
@@ -443,6 +479,7 @@ class EnhancedMarkerCache {
     return {
       'cached_markers': _cache.length,
       'snapshots': _snapshots.length,
+      'lookup_entries': _markerLookup.length, // OPTIMIZATION: Include lookup stats
     };
   }
 

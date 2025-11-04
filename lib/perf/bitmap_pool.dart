@@ -48,12 +48,13 @@ class CachedBitmap {
 /// LRU Bitmap Pool for decoded image caching
 class BitmapPool {
   BitmapPool({
-    this.maxEntries = 50,
-    this.maxSizeBytes = 20 * 1024 * 1024, // 20 MB default
-  });
+    int maxEntries = 50,
+    int maxSizeBytes = 20 * 1024 * 1024, // 20 MB default
+  })  : _maxEntries = maxEntries,
+        _maxSizeBytes = maxSizeBytes;
 
-  final int maxEntries;
-  final int maxSizeBytes;
+  int _maxEntries;
+  int _maxSizeBytes;
 
   final Map<String, CachedBitmap> _cache = {};
   int _totalSizeBytes = 0;
@@ -118,7 +119,7 @@ class BitmapPool {
 
   /// Evict least-recently-used entries if over capacity
   Future<void> _evictIfNeeded() async {
-    while (_cache.length > maxEntries || _totalSizeBytes > maxSizeBytes) {
+    while (_cache.length > _maxEntries || _totalSizeBytes > _maxSizeBytes) {
       if (_cache.isEmpty) break;
 
       // Find LRU entry
@@ -182,9 +183,9 @@ class BitmapPool {
     final hitRate = _hits + _misses > 0 ? _hits / (_hits + _misses) : 0.0;
     return {
       'entries': _cache.length,
-      'maxEntries': maxEntries,
+      'maxEntries': _maxEntries,
       'sizeBytes': _totalSizeBytes,
-      'maxSizeBytes': maxSizeBytes,
+      'maxSizeBytes': _maxSizeBytes,
       'sizeMB': _totalSizeBytes / (1024 * 1024),
       'hits': _hits,
       'misses': _misses,
@@ -197,8 +198,8 @@ class BitmapPool {
   void _logStats() {
     final stats = getStats();
     debugPrint(
-      '[BitmapPool] 📊 Stats: ${stats['entries']}/${stats['maxEntries']} entries, '
-      '${_formatBytes(stats['sizeBytes'] as int)} / ${_formatBytes(maxSizeBytes)}, '
+  '[BitmapPool] 📊 Stats: ${stats['entries']}/${stats['maxEntries']} entries, '
+  '${_formatBytes(stats['sizeBytes'] as int)} / ${_formatBytes(_maxSizeBytes)}, '
       'Hit rate: ${((stats['hitRate'] as double) * 100).toStringAsFixed(1)}% '
       '(${stats['hits']} hits, ${stats['misses']} misses, ${stats['evictions']} evictions)',
     );
@@ -217,6 +218,23 @@ class BitmapPool {
       _logStats();
     }
     clear();
+  }
+
+  /// Reconfigure limits without clearing the entire pool.
+  /// Shrinks incrementally and retains most-recently-used entries.
+  void reconfigure({required int maxEntries, required int maxSizeBytes}) {
+    _maxEntries = maxEntries;
+    _maxSizeBytes = maxSizeBytes;
+    // Trigger eviction to meet new limits without clearing everything.
+    // Best-effort; ignore async wait by not awaiting.
+    // ignore: discarded_futures
+    _evictIfNeeded();
+    if (kDebugMode) {
+      debugPrint(
+        '[BitmapPool] 🔧 Reconfigured in-place: $_maxEntries entries, '
+        '${(_maxSizeBytes / (1024 * 1024)).toStringAsFixed(1)}MB max',
+      );
+    }
   }
 }
 
@@ -237,20 +255,15 @@ class BitmapPoolManager {
     required int maxEntries,
     required int maxSizeBytes,
   }) {
-    // If pool exists and config changed, clear and recreate
+    // If pool exists, reconfigure in-place to avoid jank.
     if (_instance != null) {
-      final oldStats = _instance!.getStats();
-      if (oldStats['maxEntries'] != maxEntries ||
-          oldStats['maxSizeBytes'] != maxSizeBytes) {
-        _instance!.dispose();
-        _instance = null;
-      }
+      _instance!.reconfigure(maxEntries: maxEntries, maxSizeBytes: maxSizeBytes);
+    } else {
+      _instance = BitmapPool(
+        maxEntries: maxEntries,
+        maxSizeBytes: maxSizeBytes,
+      );
     }
-
-    _instance ??= BitmapPool(
-      maxEntries: maxEntries,
-      maxSizeBytes: maxSizeBytes,
-    );
 
     if (kDebugMode) {
       debugPrint(

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+
 import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/analytics/controller/analytics_notifier.dart';
 import 'package:my_app_gps/features/analytics/controller/analytics_providers.dart';
@@ -11,7 +14,6 @@ import 'package:my_app_gps/features/analytics/widgets/stat_card.dart';
 import 'package:my_app_gps/features/analytics/widgets/trip_bar_chart.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/l10n/app_localizations.dart';
-import 'package:share_plus/share_plus.dart';
 
 /// Main analytics dashboard page showing comprehensive tracker statistics.
 ///
@@ -24,10 +26,10 @@ class AnalyticsPage extends ConsumerStatefulWidget {
 }
 
 class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
-  String? _lastPeriod;
-  int? _lastDeviceId;
-  DateTime? _lastSelectedDate;
-  DateTimeRange? _lastDateRange;
+  // Debounce timer to coalesce rapid filter/provider changes into a single load
+  Timer? _reloadDebounce;
+  // Manual Riverpod listeners to avoid build-only ref.listen assertion
+  final List<ProviderSubscription<dynamic>> _listenerCleanups = [];
 
   @override
   void initState() {
@@ -36,6 +38,28 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeDevice();
     });
+
+    // Listen to period changes and device selection changes with debounce
+    // Use listenManual here since we're outside build()
+    final periodSub = ref.listenManual<String>(
+      reportPeriodProvider,
+      (previous, next) {
+        if (previous != next) {
+          _debouncedLoad();
+        }
+      },
+    );
+    _listenerCleanups.add(periodSub);
+
+    final deviceSub = ref.listenManual<int?>(
+      selectedDeviceIdProvider,
+      (previous, next) {
+        if (previous != next && next != null) {
+          _debouncedLoad();
+        }
+      },
+    );
+    _listenerCleanups.add(deviceSub);
   }
 
   /// Initialize device selection on page load.
@@ -95,31 +119,90 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     }
 
     final period = ref.read(reportPeriodProvider);
-    final selectedDate = ref.read(selectedDateProvider);
     final notifier = ref.read(analyticsNotifierProvider.notifier);
+    final effectiveRange = ref.read(effectiveDateRangeProvider);
 
-    AppLogger.debug('Loading $period report for device $deviceId with date: $selectedDate');
+    AppLogger.debug('Loading $period report for device $deviceId');
 
-    switch (period) {
-      case 'daily':
-        notifier.loadDaily(deviceId, date: selectedDate);
-      case 'weekly':
-        notifier.loadWeekly(deviceId, endDate: selectedDate);
-      case 'monthly':
-        notifier.loadMonthly(deviceId, endDate: selectedDate);
-      case 'custom':
-        final dateRange = ref.read(dateRangeProvider);
-        if (dateRange != null) {
-          notifier.loadCustomRange(
-            deviceId,
-            dateRange.start,
-            dateRange.end,
-          );
-        } else {
-          // Fallback to daily if custom range not set
-          notifier.loadDaily(deviceId, date: selectedDate);
-        }
+    if (effectiveRange != null) {
+      // Always fetch using the effective range derived from the selected filter
+      notifier.loadRange(deviceId, effectiveRange.start, effectiveRange.end);
+      return;
     }
+
+    // Fallback: if effective range is null (shouldn't happen), use daily
+    notifier.loadDaily(deviceId);
+  }
+
+  // Debounced loader to avoid multiple fetches when several filter fields change
+  void _debouncedLoad({Duration delay = const Duration(milliseconds: 200)}) {
+    _reloadDebounce?.cancel();
+    _reloadDebounce = Timer(delay, _loadReport);
+  }
+
+  @override
+  void dispose() {
+    // Cancel manual listeners
+    for (final sub in _listenerCleanups) {
+      sub.close();
+    }
+    _listenerCleanups.clear();
+    _reloadDebounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _openModernDateRangePicker() async {
+    final currentRange = ref.read(effectiveDateRangeProvider);
+    final initialRange = currentRange ??
+        DateTimeRange(
+          start: DateTime.now().subtract(const Duration(days: 7)),
+          end: DateTime.now(),
+        );
+
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      initialDateRange: initialRange,
+      builder: (context, child) {
+        // Apply a modern look similar to Settings (rounded, tonal primary)
+        final theme = Theme.of(context);
+        return Theme(
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(
+              primary: const Color(0xFFb4e15c),
+              surface: theme.colorScheme.surface,
+              onSurface: theme.colorScheme.onSurface,
+            ),
+            dialogTheme: theme.dialogTheme.copyWith(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            ),
+            datePickerTheme: theme.datePickerTheme.copyWith(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              headerBackgroundColor: theme.colorScheme.primaryContainer,
+              headerForegroundColor: theme.colorScheme.onPrimaryContainer,
+              rangePickerHeaderHeadlineStyle: theme.textTheme.titleLarge,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      final normalized = DateTimeRange(
+        start: DateTime(picked.start.year, picked.start.month, picked.start.day),
+        end: DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59),
+      );
+      ref.read(dateRangeProvider.notifier).state = normalized;
+      ref.read(reportPeriodProvider.notifier).state = 'custom';
+      _debouncedLoad();
+    }
+  }
+
+  String _formatRange(DateTimeRange range) {
+    final f = DateFormat('d/M/yyyy');
+    return '${f.format(range.start)} - ${f.format(range.end)}';
   }
 
   Future<void> _handleRefresh() async {
@@ -220,93 +303,14 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     }
   }
 
-  Future<void> _selectCustomDateRange() async {
-    final currentRange = ref.read(dateRangeProvider);
-    final initialRange = currentRange ??
-        DateTimeRange(
-          start: DateTime.now().subtract(const Duration(days: 7)),
-          end: DateTime.now(),
-        );
+  // Custom date range picker removed with calendar UI
 
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now(),
-      initialDateRange: initialRange,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: const Color(0xFFb4e15c),
-                ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      ref.read(dateRangeProvider.notifier).state = picked;
-      _loadReport();
-    }
-  }
-
-  Future<void> _selectSingleDate() async {
-    final currentDate = ref.read(selectedDateProvider) ?? DateTime.now();
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: currentDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: const Color(0xFFb4e15c),
-                ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      ref.read(selectedDateProvider.notifier).state = picked;
-      // No need to call _loadReport() as the listener will trigger it
-    }
-  }
+  // (Reverted) _openTripFilterDialog removed
 
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
-
-    // Check if key values changed and reload
-    final currentPeriod = ref.watch(reportPeriodProvider);
-    final currentDeviceId = ref.watch(selectedDeviceIdProvider);
-    final currentDate = ref.watch(selectedDateProvider);
-    final currentDateRange = ref.watch(dateRangeProvider);
-
-    // Trigger reload if values changed
-    if (_lastPeriod != null && _lastPeriod != currentPeriod) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadReport());
-    }
-    if (_lastDeviceId != null && _lastDeviceId != currentDeviceId && currentDeviceId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadReport());
-    }
-    if (_lastSelectedDate != currentDate) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadReport());
-    }
-    if (_lastDateRange != currentDateRange) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadReport());
-    }
-
-    // Update last values
-    _lastPeriod = currentPeriod;
-    _lastDeviceId = currentDeviceId;
-    _lastSelectedDate = currentDate;
-    _lastDateRange = currentDateRange;
 
     return Scaffold(
       appBar: AppBar(
@@ -344,10 +348,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildFilters(ColorScheme colorScheme) {
-    final t = AppLocalizations.of(context)!;
-    final period = ref.watch(reportPeriodProvider);
-    final periodLabel = ref.watch(periodLabelProvider);
     final deviceId = ref.watch(selectedDeviceIdProvider);
+    final effectiveRange = ref.watch(effectiveDateRangeProvider);
 
     return Card(
       elevation: 2,
@@ -356,105 +358,97 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Period Selector
-            Text(
-              t.period,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SegmentedButton<String>(
-                segments: [
-                  ButtonSegment(
-                    value: 'daily',
-                    label: Text(t.day, style: const TextStyle(fontSize: 13)),
-                    icon: const Icon(Icons.today, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: 'weekly',
-                    label: Text(t.week, style: const TextStyle(fontSize: 13)),
-                    icon: const Icon(Icons.view_week, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: 'monthly',
-                    label: Text(t.month, style: const TextStyle(fontSize: 13)),
-                    icon: const Icon(Icons.calendar_month, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: 'custom',
-                    label: Text(t.custom, style: const TextStyle(fontSize: 12)),
-                    icon: const Icon(Icons.date_range, size: 16),
-                  ),
-                ],
-                selected: {period},
-                onSelectionChanged: (Set<String> selected) {
-                  final newPeriod = selected.first;
-                  ref.read(reportPeriodProvider.notifier).state = newPeriod;
-                  
-                  // Show date picker for custom period
-                  if (newPeriod == 'custom') {
-                    Future.microtask(_selectCustomDateRange);
-                  }
-                },
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) {
-                      return const Color(0xFFb4e15c);
-                    }
-                    return null;
-                  }),
-                  foregroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) {
-                      return Colors.black87;
-                    }
-                    return null;
-                  }),
-                  padding: WidgetStateProperty.all(
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
+            // Modern date range field (calendar) styled like Settings
+            InkWell(
+              onTap: _openModernDateRangePicker,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorScheme.outline.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_month, color: colorScheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        effectiveRange != null
+                            ? _formatRange(effectiveRange)
+                            : '—',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.edit,
+                        size: 16,
+                        color: colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+
             const SizedBox(height: 12),
-            
-            // Period label with date range
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 16,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      periodLabel,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+            // Calendar/Period controls removed per request
+            const SizedBox(height: 4),
+            // Quick actions: Today / Yesterday (parity with Trips filter)
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: () {
+                      final now = DateTime.now();
+                      final start = DateTime(now.year, now.month, now.day);
+                      final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+                      ref.read(reportPeriodProvider.notifier).state = 'daily';
+                      ref.read(dateRangeProvider.notifier).state = DateTimeRange(start: start, end: end);
+                      _debouncedLoad();
+                    },
+                    icon: const Icon(Icons.today),
+                    label: const Text('Today'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                   ),
-                  // Show edit button for all periods
-                  IconButton(
-                    icon: const Icon(Icons.edit_calendar, size: 16),
-                    onPressed: period == 'custom' 
-                      ? _selectCustomDateRange 
-                      : _selectSingleDate,
-                    tooltip: period == 'custom' ? t.editPeriod : 'Select date',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: () {
+                      final now = DateTime.now();
+                      final y = now.subtract(const Duration(days: 1));
+                      final start = DateTime(y.year, y.month, y.day);
+                      final end = DateTime(y.year, y.month, y.day, 23, 59, 59);
+                      ref.read(reportPeriodProvider.notifier).state = 'custom';
+                      ref.read(dateRangeProvider.notifier).state = DateTimeRange(start: start, end: end);
+                      _debouncedLoad();
+                    },
+                    icon: const Icon(Icons.history),
+                    label: const Text('Yesterday'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
 
             // Device selector
@@ -473,12 +467,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     return devicesAsync.when(
       data: (devices) {
         if (devices.isEmpty) {
-            return Container(
+          return Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
+              color: Colors.orange.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              border: Border.all(color: Colors.orange.withOpacity(0.3)),
             ),
             child: Row(
               children: [
@@ -541,9 +535,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       error: (error, stack) => Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.1),
+          color: Colors.red.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
         ),
         child: Row(
           children: [
@@ -788,7 +782,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ],
             ),
             const SizedBox(height: 16),
-            child,
+            RepaintBoundary(child: child),
           ],
         ),
       ),
@@ -883,7 +877,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
   // Mock data generators (replace with real data from API in future)
   List<double> _generateSpeedData(String period, AnalyticsReport report) {
-  // TODO(owner): Replace with actual speed data from positions API
+    // TODO: Replace with actual speed data from positions API
     // For now, generate sample data based on avg/max speed
     final avgSpeed = report.avgSpeed;
     final maxSpeed = report.maxSpeed;
@@ -938,7 +932,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   List<int> _generateTripCounts(String period, AnalyticsReport report) {
-  // TODO(owner): Replace with actual trip distribution data
+    // TODO: Replace with actual trip distribution data
     final totalTrips = report.tripCount;
     
     int bars;
@@ -960,7 +954,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     // Distribute trips across bars (mock distribution)
     final avgPerBar = totalTrips / bars;
     return List.generate(bars, (i) {
-      final variation = i.isEven ? 1 : -1;
+      final variation = (i % 2 == 0) ? 1 : -1;
       return (avgPerBar + variation).round().clamp(0, totalTrips);
     });
   }

@@ -351,6 +351,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get viewDetails => 'Voir les détails';
 
   @override
+  String get tripDetails => 'Détails du trajet';
+
+  @override
+  String get startTime => 'Heure de début';
+
+  @override
+  String get endTime => 'Heure de fin';
+
+  @override
+  String get follow => 'Suivre';
+
+  @override
   String get alertsTitle => 'Alertes';
 
   @override

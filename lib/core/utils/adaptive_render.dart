@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:my_app_gps/perf/bitmap_pool.dart';
 import 'package:my_app_gps/perf/marker_widget_pool.dart';
+import 'package:my_app_gps/core/map/marker_scheduler.dart';
 
 /// Callback for FPS updates
 typedef FpsListener = void Function(double fps);
@@ -71,7 +72,7 @@ class FpsMonitor {
 
     // Remove samples outside the rolling window
     // Note: FrameTiming doesn't provide absolute timestamps, so we keep a fixed window of samples
-    final maxSamples = window.inSeconds * 60; // Assume ~60 FPS max
+    final maxSamples = (window.inSeconds * 60); // Assume ~60 FPS max
     if (_samples.length > maxSamples) {
       _samples.removeRange(0, _samples.length - maxSamples);
     }
@@ -87,12 +88,15 @@ class FpsMonitor {
         _samples.length;
 
     // Convert to FPS, capped at 120
-    final fps = (avgMicros <= 0 ? 120.0 : min(120, 1e6 / avgMicros)).toDouble();
+  // Use double math consistently so types match _lastFps (double)
+  final double fps = avgMicros <= 0
+    ? 120.0
+    : min(120.0, 1e6 / avgMicros);
 
     // Avoid chatty updates - only notify on significant changes (±2 FPS)
     if ((fps - _lastFps).abs() >= 2.0) {
-      _lastFps = fps;
-      onFps?.call(fps);
+  _lastFps = fps;
+  onFps?.call(fps);
     }
   }
 
@@ -179,14 +183,18 @@ class LodConfig {
 
   /// Aggressive configuration for low-end devices
   static const LodConfig lowEnd = LodConfig(
-    dropFpsLow: 45,
+    // Tuned for devices that frequently drop below 50 FPS. More conservative
+    // to reduce GPU fragment load and raster thread pressure.
+    dropFpsLow: 48,
     raiseFpsHigh: 55,
-    markerCapLow: 250,
-    markerCapMedium: 600,
-    polySimplifyLow: 5,
+    markerCapLow: 220,
+    markerCapMedium: 520,
+    polySimplifyLow: 6,
     polySimplifyMedium: 2.5,
+    // Keep motion/UI cadence modest to reduce jank
     markerUpdateIntervalLow: Duration(milliseconds: 200),
-    tileThrottleLowMs: 250,
+    // Increase camera/tile throttling on low-end devices
+    tileThrottleLowMs: 280,
   );
 
   /// Conservative configuration for high-end devices
@@ -229,6 +237,11 @@ class AdaptiveLodController with ChangeNotifier {
   int _modeChangeCount = 0;
   int get modeChangeCount => _modeChangeCount;
 
+  // Grace period handling: require sustained condition for mode changes
+  static const Duration _gracePeriod = Duration(seconds: 3);
+  RenderMode? _pendingTarget;
+  DateTime? _pendingSince;
+
   /// Update render mode based on current FPS
   /// 
   /// Implements hysteresis to prevent thrashing:
@@ -237,41 +250,82 @@ class AdaptiveLodController with ChangeNotifier {
   /// - Low → Medium requires recovery above raise threshold
   /// - Medium → High requires further recovery
   void updateByFps(double fps) {
+    final now = DateTime.now();
     final previousMode = _mode;
 
+    // Determine desired target based on thresholds (hysteresis included)
+    RenderMode desired = _mode;
     switch (_mode) {
       case RenderMode.high:
-        if (fps < config.dropFpsLow) {
-          _mode = RenderMode.medium;
-        }
-
+        if (fps < config.dropFpsLow) desired = RenderMode.medium;
       case RenderMode.medium:
         if (fps < config.dropFpsLow - 5) {
-          _mode = RenderMode.low;
+          desired = RenderMode.low;
         } else if (fps > config.raiseFpsHigh) {
-          _mode = RenderMode.high;
+          desired = RenderMode.high;
         }
-
       case RenderMode.low:
-        if (fps > config.raiseFpsHigh + 2) {
-          _mode = RenderMode.medium;
+        if (fps > config.raiseFpsHigh + 2) desired = RenderMode.medium;
+    }
+
+    if (desired != _mode) {
+      // Start or continue grace window for this target
+      if (_pendingTarget != desired) {
+        _pendingTarget = desired;
+        _pendingSince = now;
+        if (kDebugMode) {
+          debugPrint('[AdaptiveLOD] ⏳ Pending mode: ${_mode.name} → ${desired.name} (grace ${_gracePeriod.inSeconds}s)');
         }
+      } else {
+        final elapsed = now.difference(_pendingSince ?? now);
+        if (elapsed >= _gracePeriod) {
+          _mode = desired;
+          _pendingTarget = null;
+          _pendingSince = null;
+        }
+      }
+    } else {
+      // Clear any pending change if current mode matches desired
+      _pendingTarget = null;
+      _pendingSince = null;
     }
 
     if (_mode != previousMode) {
       _modeChangeCount++;
       if (kDebugMode) {
-        debugPrint(
-          '[AdaptiveLOD] 🔄 Mode changed: ${previousMode.name} → ${_mode.name} '
-          '(FPS: ${fps.toStringAsFixed(1)})',
-        );
+        debugPrint('[AdaptiveLOD] 🎯 Detail level adjusted: ${previousMode.name} → ${_mode.name} [FPS: ${fps.toStringAsFixed(1)}]');
       }
-      
-      // Reconfigure pools for new mode
+      // Reconfigure pools for new mode (in-place shrinking instead of clearing)
       configurePools();
-      
       notifyListeners();
     }
+  }
+
+  // Optional: marker scheduler reference for dynamic debounce/verbose tuning
+  MarkerUpdateScheduler? _markerScheduler;
+  void setMarkerScheduler(MarkerUpdateScheduler scheduler) {
+    _markerScheduler = scheduler;
+  }
+
+  /// FPS change hook that both updates render mode and tunes the marker
+  /// scheduling debounce/verbosity for smoother performance on low-FPS devices.
+  void onFpsChanged(double fps) {
+    // Tune scheduler based on current FPS bands
+    if (_markerScheduler != null) {
+      if (fps < 25) {
+        _markerScheduler!.setVerbose(true);
+        _markerScheduler!.updateDebounce(const Duration(milliseconds: 450));
+      } else if (fps <= 45) {
+        _markerScheduler!.setVerbose(false);
+        _markerScheduler!.updateDebounce(const Duration(milliseconds: 320));
+      } else {
+        _markerScheduler!.setVerbose(false);
+        _markerScheduler!.updateDebounce(const Duration(milliseconds: 250));
+      }
+    }
+
+    // Update LOD mode hysteresis after scheduler tuning
+    updateByFps(fps);
   }
 
   /// Get maximum marker count for current mode
@@ -302,6 +356,18 @@ class AdaptiveLodController with ChangeNotifier {
         RenderMode.low => config.tileThrottleLowMs,
       };
 
+  /// Recommended marker motion tick interval for the current LOD mode.
+  ///
+  /// Rationale:
+  /// - High: 0 (no additional throttling; UI can choose its own cadence)
+  /// - Medium: ~160ms provides smoother perception without saturating GPU
+  /// - Low: defer to config's low-mode interval (often 200ms)
+  Duration recommendedMotionInterval() => switch (_mode) {
+        RenderMode.high => Duration.zero,
+        RenderMode.medium => const Duration(milliseconds: 160),
+        RenderMode.low => config.markerUpdateIntervalLow,
+      };
+
   /// Configure pooling systems based on current LOD mode
   void configurePools() {
     // Configure marker widget pool based on mode
@@ -328,6 +394,10 @@ class AdaptiveLodController with ChangeNotifier {
         '[AdaptiveLOD] ⚙️ Configured pools for ${_mode.name} mode: '
         'markers=$maxMarkersPerTier/tier, bitmaps=${bitmapPoolConfig.maxEntries} entries',
       );
+      debugPrint('[AdaptiveLOD] 🧠 GPU/Raster guidance: '
+          'Lower marker caps and higher tile throttling reduce fragment shader load and '
+          'raster thread bursts on low-FPS devices. Consider pairing with a motion tick '
+          'interval of ${recommendedMotionInterval().inMilliseconds}ms for smoother animations.');
     }
   }
 

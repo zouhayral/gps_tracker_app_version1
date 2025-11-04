@@ -52,7 +52,7 @@ class MapBottomSheet extends StatefulWidget {
 
 class MapBottomSheetState extends State<MapBottomSheet>
     with SingleTickerProviderStateMixin {
-  late final ValueNotifier<double> _fractionNotifier;
+  late double _fraction;
   double _dragStart = 0;
   double _startFraction = 0;
   bool _isDragging = false;
@@ -62,46 +62,38 @@ class MapBottomSheetState extends State<MapBottomSheet>
   @override
   void initState() {
     super.initState();
-    _fractionNotifier = ValueNotifier<double>(
-      widget.initialFraction.clamp(
-        widget.minFraction,
-        widget.maxFraction,
-      ),
+    _fraction = widget.initialFraction.clamp(
+      widget.minFraction,
+      widget.maxFraction,
     );
-  }
-
-  @override
-  void dispose() {
-    _fractionNotifier.dispose();
-    super.dispose();
   }
 
   /// Programmatically expand the sheet to maximum height with spring animation
   void expand() {
-    _animDuration = const Duration(milliseconds: 280);
-    _animCurve = Curves.easeOutBack;
+    _animDuration = const Duration(milliseconds: 500);
+    _animCurve = Curves.easeInOutCubic;
     HapticFeedback.selectionClick();
-    _fractionNotifier.value = widget.maxFraction;
+    setState(() => _fraction = widget.maxFraction);
   }
 
   /// Programmatically collapse the sheet to minimum height with spring animation
   void collapse() {
-    _animDuration = const Duration(milliseconds: 280);
-    _animCurve = Curves.easeOutBack;
+    _animDuration = const Duration(milliseconds: 500);
+    _animCurve = Curves.easeInOutCubic;
     HapticFeedback.selectionClick();
-    _fractionNotifier.value = widget.minFraction;
+    setState(() => _fraction = widget.minFraction);
   }
 
   /// Check if the sheet is currently expanded
-  bool get isExpanded => _fractionNotifier.value >= (widget.minFraction + widget.maxFraction) / 2;
+  bool get isExpanded => _fraction >= (widget.minFraction + widget.maxFraction) / 2;
 
   /// Check if the sheet is currently collapsed
   bool get isCollapsed => !isExpanded;
 
   void _onDragStart(DragStartDetails d) {
     _dragStart = d.globalPosition.dy;
-    _startFraction = _fractionNotifier.value;
-    _isDragging = true;
+    _startFraction = _fraction;
+    setState(() => _isDragging = true);
     // Instant reaction while dragging - no animation delay
     _animDuration = Duration.zero;
   }
@@ -114,12 +106,10 @@ class MapBottomSheetState extends State<MapBottomSheet>
       widget.minFraction,
       widget.maxFraction,
     );
-    // Direct value update - no setState, no full rebuild
-    _fractionNotifier.value = newFraction;
+    setState(() => _fraction = newFraction);
   }
 
   void _onDragEnd(DragEndDetails d) {
-    _isDragging = false;
     final velocity = d.primaryVelocity ?? 0;
 
     double target;
@@ -133,100 +123,131 @@ class MapBottomSheetState extends State<MapBottomSheet>
     } else {
       // Slow drag -> snap to nearest state
       final midpoint = (widget.minFraction + widget.maxFraction) / 2;
-      target = (_fractionNotifier.value < midpoint) ? widget.minFraction : widget.maxFraction;
+      target = (_fraction < midpoint) ? widget.minFraction : widget.maxFraction;
     }
 
     HapticFeedback.selectionClick();
     // Smooth settle after drag ends
-    _animDuration = const Duration(milliseconds: 220);
-    _animCurve = Curves.easeOutCubic;
-    _fractionNotifier.value = target;
+    _animDuration = const Duration(milliseconds: 450);
+    _animCurve = Curves.easeInOutCubic;
+    setState(() {
+      _isDragging = false;
+      _fraction = target;
+    });
   }
 
   void _onTap() {
     final midpoint = (widget.minFraction + widget.maxFraction) / 2;
-    final target = (_fractionNotifier.value < midpoint) ? widget.maxFraction : widget.minFraction;
+    final target = (_fraction < midpoint) ? widget.maxFraction : widget.minFraction;
     HapticFeedback.selectionClick();
-    _animDuration = const Duration(milliseconds: 260);
-    _animCurve = Curves.easeOutBack;
-    _fractionNotifier.value = target;
+    _animDuration = const Duration(milliseconds: 500);
+    _animCurve = Curves.easeInOutCubic;
+    setState(() => _fraction = target);
   }
 
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final midpoint = (widget.minFraction + widget.maxFraction) / 2;
+    final isCollapsed = _fraction <= widget.minFraction + 0.01; // Almost fully collapsed
+    final isFullyExpanded = _fraction >= widget.maxFraction - 0.01; // Almost fully expanded
+    
+    // Only show decorations when NOT dragging and fully expanded (not during any transition)
+    final showDecorations = !_isDragging && isFullyExpanded;
 
     return Align(
       alignment: Alignment.bottomCenter,
-      child: GestureDetector(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 90), // Add padding for floating bottom nav bar
+        child: GestureDetector(
         onVerticalDragStart: _onDragStart,
         onVerticalDragUpdate: _onDragUpdate,
         onVerticalDragEnd: _onDragEnd,
         onTap: _onTap,
         behavior: HitTestBehavior.translucent,
-        child: ValueListenableBuilder<double>(
-          valueListenable: _fractionNotifier,
-          builder: (context, fraction, child) {
-            final isExpanded = fraction > midpoint;
+        child: AnimatedContainer(
+          duration: _animDuration,
+          curve: _animCurve,
+          height: screenHeight * _fraction,
+          decoration: BoxDecoration(
+            color: isCollapsed ? Colors.transparent : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            // CRITICAL FIX: Always provide border (even if transparent) to prevent interpolation
+            border: showDecorations
+                ? Border.all(color: widget.borderColor, width: 2)
+                : Border.all(color: Colors.transparent, width: 0), // Use transparent instead of null
+            // CRITICAL FIX: Always provide empty shadow array instead of null
+            // to prevent interpolation issues during AnimatedContainer transitions
+            // Switching between null and [shadow] caused negative blur radius errors
+            boxShadow: showDecorations
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 10.0,
+                      offset: const Offset(0, -3),
+                      spreadRadius: 0.0,
+                    ),
+                  ]
+                : const [], // Use empty array instead of null
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final available = constraints.biggest.height.clamp(0.0, double.infinity);
+              // Adapt the grab handle size/margins to avoid overflow on tiny heights
+              // Ensure all values are positive and reasonable
+              final handleHeight = (available * 0.15).clamp(0.0, double.infinity);
+              final safeHandleHeight = handleHeight.clamp(4.0, 8.0);
+              final handleVMargin = (available * 0.10).clamp(6.0, 12.0);
 
-            return AnimatedContainer(
-              duration: _animDuration,
-              curve: _animCurve,
-              height: screenHeight * fraction,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                border: Border.all(color: widget.borderColor, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 10,
-                    offset: const Offset(0, -3),
+              // When collapsed, show only the drag handle
+              if (isCollapsed) {
+                return Column(
+                  children: [
+                    SizedBox(height: handleVMargin),
+                    // Drag handle only when collapsed
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 56,
+                      height: safeHandleHeight,
+                      decoration: BoxDecoration(
+                        color: widget.collapsedColor,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              // When expanded, show handle + content
+              return Column(
+                children: [
+                  SizedBox(height: handleVMargin),
+                  // Drag handle when expanded
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 56,
+                    height: safeHandleHeight,
+                    decoration: BoxDecoration(
+                      color: widget.expandedColor,
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                  ),
+                  SizedBox(height: handleVMargin),
+                  // Content area - visible only when expanded
+                  Expanded(
+                    child: ClipRect(
+                      child: SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        child: widget.child,
+                      ),
+                    ),
                   ),
                 ],
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final available = constraints.biggest.height;
-                  // Adapt the grab handle size/margins to avoid overflow on tiny heights
-                  final handleHeight = available.clamp(0, double.infinity) * 0.15;
-                  final safeHandleHeight = handleHeight.clamp(2.0, 8.0);
-                  final handleVMargin = (available * 0.10).clamp(4.0, 10.0);
-
-                  return Column(
-                    children: [
-                      SizedBox(height: handleVMargin),
-                      // Drag handle that changes color based on state
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 56,
-                        height: safeHandleHeight,
-                        decoration: BoxDecoration(
-                          color: isExpanded
-                              ? widget.expandedColor
-                              : widget.collapsedColor,
-                          borderRadius: BorderRadius.circular(40),
-                        ),
-                      ),
-                      SizedBox(height: handleVMargin),
-                      // Ensure content never overflows: make it scrollable when space is tight
-                      Expanded(
-                        child: ClipRect(
-                          child: SingleChildScrollView(
-                            physics: const ClampingScrollPhysics(),
-                            padding: EdgeInsets.zero,
-                            child: widget.child,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
+        ), // Close Padding
       ),
     );
   }

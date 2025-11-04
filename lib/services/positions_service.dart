@@ -9,6 +9,51 @@ import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 
+// ============================================================================
+// 🎯 ASYNC JSON PARSING (STEP 2.2)
+// ============================================================================
+
+/// Top-level function for isolate-based position parsing
+/// This must be top-level to work with compute()
+/// 
+/// Accepts either:
+/// - String: Raw JSON that needs decoding + parsing
+/// - List<dynamic>: Already decoded JSON that needs parsing
+List<Position> _parsePositions(dynamic jsonData) {
+  List<dynamic> jsonList;
+  
+  // Step 1: Decode JSON if needed (offloading json.decode from main thread)
+  if (jsonData is String) {
+    try {
+      final decoded = jsonDecode(jsonData);
+      if (decoded is List) {
+        jsonList = decoded;
+      } else {
+        return []; // Not a list, return empty
+      }
+    } catch (_) {
+      return []; // JSON decode failed, return empty
+    }
+  } else if (jsonData is List) {
+    jsonList = jsonData;
+  } else {
+    return []; // Unexpected type, return empty
+  }
+  
+  // Step 2: Parse Position objects from JSON list
+  final positions = <Position>[];
+  for (final item in jsonList) {
+    if (item is Map<String, dynamic>) {
+      try {
+        positions.add(Position.fromJson(item));
+      } catch (_) {
+        // Skip malformed items silently in isolate
+      }
+    }
+  }
+  return positions;
+}
+
 /// Provider for positions service (raw access + probing utilities).
 final positionsServiceProvider = Provider<PositionsService>((ref) {
   final dio = ref.watch(dioProvider);
@@ -20,6 +65,58 @@ class PositionsService {
   
   PositionsService(this._dio);
   final Dio _dio;
+  
+  // ----------------------------------------------------------------------------
+  // 🔁 Lightweight transient-error retry wrapper for Dio GET requests
+  // ----------------------------------------------------------------------------
+  // - Retries only on transient network conditions and 5xx like 502/503/504
+  // - Uses small exponential backoff with jitter (300ms, 600ms, 1200ms)
+  // - Preserves gzip + connection pooling defaults by NOT overriding adapters
+  Future<Response<T>> _getWithRetry<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    int maxAttempts = 3,
+    CancelToken? cancelToken,
+  }) async {
+    int attempt = 0;
+    Duration delay = const Duration(milliseconds: 300);
+    DioException? lastError;
+
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        return await _dio.get<T>(
+          path,
+          queryParameters: queryParameters,
+          options: options,
+          cancelToken: cancelToken,
+        );
+      } on DioException catch (e) {
+        lastError = e;
+        final status = e.response?.statusCode;
+        final isTimeout = e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            e.type == DioExceptionType.sendTimeout;
+        final isConn = e.type == DioExceptionType.connectionError;
+        final isRetryableStatus = status == 502 || status == 503 || status == 504;
+
+        // Only retry on transient errors
+        if (attempt < maxAttempts && (isTimeout || isConn || isRetryableStatus)) {
+          final jitter = Duration(milliseconds: 50 * attempt);
+          if (kDebugMode) {
+            debugPrint('[HTTP][RETRY] GET $path attempt#$attempt failed (status=$status type=${e.type.name}) → retrying in ${delay.inMilliseconds + jitter.inMilliseconds}ms');
+          }
+          await Future<void>.delayed(delay + jitter);
+          delay *= 2; // exponential backoff
+          continue;
+        }
+        // Non-retryable or attempts exhausted
+        rethrow;
+      }
+    }
+    throw lastError ?? StateError('Unknown Dio error without exception');
+  }
   // In-memory latest position cache
   final Map<int, Position> _latestCache = {};
   final Map<int, DateTime> _latestCacheTime = {};
@@ -54,13 +151,74 @@ class PositionsService {
     }
   }
 
+  /// Fetch history positions for a device in a time range and parse into Position objects.
+  /// Uses an isolate for large payloads to avoid blocking the UI thread.
+  Future<List<Position>> fetchHistoryPositions({
+    required int deviceId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final raw = await fetchHistoryRaw(deviceId: deviceId, from: from, to: to);
+    if (raw.isEmpty) return const <Position>[];
+
+    // Estimate payload size to decide whether to use isolate
+    int payloadBytes = 0;
+    try {
+      payloadBytes = utf8.encode(jsonEncode(raw)).length;
+    } catch (_) {
+      // ignore sizing errors
+    }
+
+    if (payloadBytes > 1024) {
+      if (kDebugMode) {
+        debugPrint('[ASYNC_PARSE] History Payload Size: $payloadBytes bytes (compute)');
+      }
+      return compute(_parsePositions, raw);
+    }
+
+    if (kDebugMode) {
+      debugPrint('[ASYNC_PARSE] History Payload Size: $payloadBytes bytes (sync)');
+    }
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(Position.fromJson)
+        .toList();
+  }
+
+  /// Convenience: fetch positions since a given timestamp (to now).
+  Future<List<Position>> fetchPositionsSince({
+    required int deviceId,
+    required DateTime since,
+    DateTime? to,
+  }) async {
+    final end = to ?? DateTime.now().toUtc();
+    // Guard: ensure sane window (non-negative, max 12h)
+    var start = since.toUtc();
+    if (!start.isBefore(end)) {
+      start = end.subtract(const Duration(minutes: 5));
+    }
+    const maxWindow = Duration(hours: 12);
+    if (end.difference(start) > maxWindow) {
+      start = end.subtract(maxWindow);
+    }
+    final list = await fetchHistoryPositions(deviceId: deviceId, from: start, to: end);
+    // Return early if empty (no need to sort)
+    if (list.isEmpty) return list;
+    // Clone to ensure mutability before sorting (list might be const or unmodifiable)
+    final mutable = List<Position>.of(list);
+    // Sort ascending by time for deterministic processing
+    mutable.sort((a, b) => a.deviceTime.compareTo(b.deviceTime));
+    return mutable;
+  }
+
   /// Fetch raw history positions list for a device and time range.
   Future<List<dynamic>> fetchHistoryRaw({
     required int deviceId,
     required DateTime from,
     required DateTime to,
   }) async {
-    final resp = await _dio.get<List<dynamic>>(
+    // Note: Keep gzip + pooling defaults (Dart HttpClient enables gzip + keep-alive by default)
+    final resp = await _getWithRetry<List<dynamic>>(
       '/api/positions',
       queryParameters: {
         'deviceId': deviceId,
@@ -70,7 +228,16 @@ class PositionsService {
       options: Options(headers: const {'Accept': 'application/json'}),
     );
     final data = resp.data;
-    if (data is List) return data;
+    if (data is List) {
+      // 🎯 ASYNC PARSING: Calculate payload size
+      final payloadBytes = utf8.encode(jsonEncode(data)).length;
+      
+      if (payloadBytes > 1024 && kDebugMode) {
+        debugPrint('[ASYNC_PARSE] History Payload Size: $payloadBytes bytes (device: $deviceId)');
+      }
+      
+      return data;
+    }
     throw StateError('Unexpected positions response type: ${data.runtimeType}');
   }
 
@@ -156,17 +323,34 @@ class PositionsService {
   }) async {
     // First try aggregated latest endpoint variant
     try {
-      final resp = await _dio.get<List<dynamic>>(
+      final resp = await _getWithRetry<List<dynamic>>(
         '/api/positions',
         queryParameters: const {'latest': 'true'},
         options: Options(headers: const {'Accept': 'application/json'}),
       );
       final data = resp.data;
       if (data is List) {
-        final list = data
-            .whereType<Map<String, dynamic>>()
-            .map(Position.fromJson)
-            .toList();
+        // 🎯 ASYNC PARSING: Calculate payload size
+        final payloadBytes = utf8.encode(jsonEncode(data)).length;
+        
+        List<Position> list;
+        if (payloadBytes > 1024) {
+          // Large payload: use isolate-based parsing
+          if (kDebugMode) {
+            debugPrint('[ASYNC_PARSE] Payload Size: $payloadBytes bytes (using compute)');
+          }
+          list = await compute(_parsePositions, data);
+        } else {
+          // Small payload: synchronous parsing is faster
+          if (kDebugMode) {
+            debugPrint('[ASYNC_PARSE] Payload Size: $payloadBytes bytes (synchronous)');
+          }
+          list = data
+              .whereType<Map<String, dynamic>>()
+              .map(Position.fromJson)
+              .toList();
+        }
+        
         final nowTs = DateTime.now().toUtc();
         for (final p in list) {
           _latestCache[p.deviceId] = p;
@@ -261,28 +445,39 @@ class PositionsService {
   }
 
   /// Fetch a single Position by Traccar position id.
+  /// 
+  /// **Note:** Traccar API doesn't support GET /api/positions/:id (returns 405).
+  /// Instead, we use GET /api/positions?id=:id which is the correct endpoint.
   Future<Position?> latestByPositionId(int id) async {
     try {
-      final resp = await _dio.get<Map<String, dynamic>>('/api/positions/$id');
+      final resp = await _getWithRetry<List<dynamic>>(
+        '/api/positions',
+        queryParameters: {'id': id},
+      );
       final data = resp.data;
-      if (data == null) return null;
-      return Position.fromJson(data);
-    } on DioException catch (e) {
-      // Log network errors at debug level (not error - these are expected)
-      if (e.response?.statusCode == 404) {
-        _log.debug('Position $id not found (404)');
-      } else if (e.response?.statusCode != null) {
-        _log.debug('Failed to fetch position $id: HTTP ${e.response?.statusCode}');
-      } else {
-        _log.debug('Failed to fetch position $id: ${e.type}');
+      if (data == null || data.isEmpty) {
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('[positionsService] Position $id returned empty');
+        }
+        return null;
+      }
+      // API returns array with single item
+      final posData = data.first;
+      if (posData is Map<String, dynamic>) {
+        return Position.fromJson(posData);
       }
       return null;
-    } on FormatException catch (e) {
-      // JSON parsing errors - server might be returning HTML
-      _log.warning('Invalid JSON response for position $id: ${e.message}');
+    } on DioException catch (e) {
+      // Log detailed error for debugging
+      _log.error(
+        'Failed to fetch position $id: ${e.type.name} '
+        'status=${e.response?.statusCode} '
+        'message=${e.message}',
+      );
       return null;
     } catch (e) {
-      _log.debug('Unexpected error fetching position $id: $e');
+      _log.error('Unexpected error fetching position $id', error: e);
       return null;
     }
   }
@@ -328,7 +523,8 @@ class PositionsService {
     for (final d in devices) {
       final devId = d['id'];
       final posId = d['positionId'];
-      if (devId is int && posId is int) {
+      // Guard: some backends report positionId=0 or negative when unavailable
+      if (devId is int && posId is int && posId > 0) {
         tasks.add(() async {
           final p = await latestByPositionId(posId);
           if (p != null) out[devId] = p;
@@ -397,6 +593,80 @@ class PositionsService {
     _cacheMisses = 0;
     _bulkFetchThrottled = 0;
     _log.debug('Cache cleared');
+  }
+
+  /// Adaptive REST fallback polling stream used when WebSocket is offline.
+  ///
+  /// Behavior:
+  /// - Polls `fetchLatestPositions` for the provided [deviceIds]
+  /// - Starts at [baseInterval] (default 10s) and doubles on consecutive empty/failed polls
+  ///   up to [maxInterval] (default 120s)
+  /// - Resets back to [baseInterval] immediately when any data arrives
+  /// - Stops automatically when [isWebSocketOnline] returns true
+  ///
+  /// This is optional; the repository already includes a similar fallback.
+  /// Exposed here for targeted consumers and testing.
+  Stream<List<Position>> fallbackPollLatestAdaptive({
+    required List<int> deviceIds,
+    bool Function()? isWebSocketOnline,
+    Duration baseInterval = const Duration(seconds: 10),
+    Duration maxInterval = const Duration(seconds: 120),
+    bool emitEmptyOnStop = false,
+  }) {
+    final controller = StreamController<List<Position>>.broadcast();
+    Timer? timer;
+    var interval = baseInterval;
+    var closed = false;
+
+    void scheduleNext() {
+      if (closed) return;
+      timer?.cancel();
+      timer = Timer(interval, () async {
+        if (closed) return;
+        // Stop if WebSocket is back
+        if (isWebSocketOnline?.call() == true) {
+          if (emitEmptyOnStop && !controller.isClosed) {
+            controller.add(const <Position>[]);
+          }
+          await controller.close();
+          return;
+        }
+        try {
+          final list = await fetchLatestPositions(deviceIds: deviceIds);
+          if (list.isNotEmpty) {
+            // Emit and reset backoff
+            if (!controller.isClosed) controller.add(list);
+            interval = baseInterval;
+          } else {
+            // Backoff (double up to max)
+            final nextMs = (interval.inMilliseconds * 2)
+                .clamp(baseInterval.inMilliseconds, maxInterval.inMilliseconds);
+            // Add small jitter (±10%) to avoid thundering herd
+            final jitter = (nextMs * 0.1).toInt();
+            final adjusted = (nextMs - jitter) + (jitter ~/ 2);
+            interval = Duration(milliseconds: adjusted);
+          }
+        } catch (e) {
+          // Treat as empty result: backoff
+          final nextMs = (interval.inMilliseconds * 2)
+              .clamp(baseInterval.inMilliseconds, maxInterval.inMilliseconds);
+          final jitter = (nextMs * 0.1).toInt();
+          final adjusted = (nextMs - jitter) + (jitter ~/ 2);
+          interval = Duration(milliseconds: adjusted);
+        } finally {
+          scheduleNext();
+        }
+      });
+    }
+
+    controller.onListen = scheduleNext;
+    controller.onCancel = () {
+      closed = true;
+      timer?.cancel();
+      timer = null;
+    };
+
+    return controller.stream;
   }
 }
 

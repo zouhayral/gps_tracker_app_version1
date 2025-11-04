@@ -1,15 +1,15 @@
 import 'dart:convert';
 
 
-import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
+
+import 'package:my_app_gps/core/database/entities/geofence_entity.dart';
 
 /// Domain model representing a geofence for location-based monitoring.
 /// Converts between:
 ///   • REST/WebSocket JSON
 ///   • ObjectBox GeofenceEntity
 ///   • UI-friendly data (validation, formatted display)
-@immutable
 class Geofence {
   final String id;
   final String userId;
@@ -169,14 +169,10 @@ class Geofence {
             ? jsonDecode(json['vertices'] as String) as List
             : json['vertices'] as List;
         vertices = verticesData
-            .map((v) {
-              final map = v as Map<String, dynamic>;
-              final latRaw = map['lat'] ?? map['latitude'];
-              final lngRaw = map['lng'] ?? map['longitude'] ?? map['lon'];
-              final lat = latRaw is num ? latRaw.toDouble() : double.parse(latRaw.toString());
-              final lng = lngRaw is num ? lngRaw.toDouble() : double.parse(lngRaw.toString());
-              return LatLng(lat, lng);
-            })
+            .map((v) => LatLng(
+                  (v['lat'] ?? v['latitude']) as double,
+                  (v['lng'] ?? v['longitude'] ?? v['lon']) as double,
+                ))
             .toList();
       } catch (_) {
         vertices = null;
@@ -285,21 +281,10 @@ class Geofence {
     List<LatLng>? vertices;
     if (map['vertices'] != null) {
       try {
-        final verticesData = jsonDecode(map['vertices'] as String) as List<dynamic>;
-        vertices = verticesData.map((v) {
-          final mv = v is Map ? v.cast<String, dynamic>() : <String, dynamic>{};
-          final latVal = mv['lat'];
-          final lngVal = mv['lng'];
-          final lat =
-              latVal is num ? latVal.toDouble() : (latVal is String ? double.tryParse(latVal) : null);
-          final lng =
-              lngVal is num ? lngVal.toDouble() : (lngVal is String ? double.tryParse(lngVal) : null);
-          if (lat == null || lng == null) {
-            // Skip invalid entries gracefully
-            return null;
-          }
-          return LatLng(lat, lng);
-        }).whereType<LatLng>().toList();
+        final verticesData = jsonDecode(map['vertices'] as String) as List;
+        vertices = verticesData
+            .map((v) => LatLng(v['lat'] as double, v['lng'] as double))
+            .toList();
       } catch (_) {
         vertices = null;
       }
@@ -344,7 +329,140 @@ class Geofence {
     );
   }
 
-  // (Removed ObjectBox conversion helpers to avoid web FFI dependencies)
+  // -----------------------------
+  // ObjectBox Conversion
+  // -----------------------------
+
+  /// Convert to ObjectBox GeofenceEntity
+  GeofenceEntity toEntity() {
+    // Convert to WKT (Well-Known Text) format for area field
+    String? area;
+    if (type == 'circle' && centerLat != null && centerLng != null && radius != null) {
+      area = 'CIRCLE ($centerLat $centerLng, $radius)';
+    } else if (type == 'polygon' && vertices != null && vertices!.isNotEmpty) {
+      final coords = vertices!
+          .map((v) => '${v.longitude} ${v.latitude}')
+          .join(', ');
+      // Close the polygon by repeating first vertex
+      final firstVertex = vertices!.first;
+      area = 'POLYGON(($coords, ${firstVertex.longitude} ${firstVertex.latitude}))';
+    }
+
+    // Build attributes JSON with all custom fields
+    final attributes = {
+      'userId': userId,
+      'enabled': enabled,
+      'monitoredDevices': monitoredDevices,
+      'onEnter': onEnter,
+      'onExit': onExit,
+      if (dwellMs != null) 'dwellMs': dwellMs,
+      'notificationType': notificationType,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'updatedAt': updatedAt.toUtc().toIso8601String(),
+      'syncStatus': syncStatus,
+      'version': version,
+    };
+
+    return GeofenceEntity.fromDomain(
+      geofenceId: int.tryParse(id) ?? 0, // Parse numeric ID or default to 0
+      name: name,
+      description: 'Type: $type',
+      area: area,
+      attributes: attributes,
+    );
+  }
+
+  /// Convert from ObjectBox GeofenceEntity
+  factory Geofence.fromEntity(GeofenceEntity entity) {
+    final attributes = entity.toDomain()['attributes'] as Map<String, dynamic>? ?? {};
+    
+    // Parse area WKT format
+    var type = 'circle';
+    double? centerLat;
+    double? centerLng;
+    double? radius;
+    List<LatLng>? vertices;
+
+    if (entity.area != null) {
+      final area = entity.area!;
+      if (area.startsWith('CIRCLE')) {
+        type = 'circle';
+        // Parse: CIRCLE (lat lng, radius)
+        final match = RegExp(r'CIRCLE \(([^ ]+) ([^ ]+), ([^\)]+)\)').firstMatch(area);
+        if (match != null) {
+          centerLat = double.tryParse(match.group(1)!);
+          centerLng = double.tryParse(match.group(2)!);
+          radius = double.tryParse(match.group(3)!);
+        }
+      } else if (area.startsWith('POLYGON')) {
+        type = 'polygon';
+        // Parse: POLYGON((lng1 lat1, lng2 lat2, ...))
+        final coordsMatch = RegExp(r'POLYGON\(\((.*?)\)\)').firstMatch(area);
+        if (coordsMatch != null) {
+          final coordsStr = coordsMatch.group(1)!;
+          final coordPairs = coordsStr.split(', ');
+          vertices = coordPairs.map((pair) {
+            final parts = pair.trim().split(' ');
+            if (parts.length == 2) {
+              final lng = double.tryParse(parts[0]);
+              final lat = double.tryParse(parts[1]);
+              if (lng != null && lat != null) {
+                return LatLng(lat, lng);
+              }
+            }
+            return null;
+          }).whereType<LatLng>().toList();
+          
+          // Remove duplicate closing vertex
+          if (vertices.length > 1 && 
+              vertices.first.latitude == vertices.last.latitude &&
+              vertices.first.longitude == vertices.last.longitude) {
+            vertices.removeLast();
+          }
+        }
+      }
+    }
+
+    // Parse monitored devices
+    var monitoredDevices = <String>[];
+    if (attributes['monitoredDevices'] != null) {
+      final devicesData = attributes['monitoredDevices'];
+      if (devicesData is List) {
+        monitoredDevices = devicesData.map((e) => e.toString()).toList();
+      }
+    }
+
+    // Parse timestamps
+    final createdAtStr = attributes['createdAt'] as String?;
+    final updatedAtStr = attributes['updatedAt'] as String?;
+    final createdAt = createdAtStr != null 
+        ? DateTime.tryParse(createdAtStr)?.toUtc() ?? DateTime.now().toUtc()
+        : DateTime.now().toUtc();
+    final updatedAt = updatedAtStr != null
+        ? DateTime.tryParse(updatedAtStr)?.toUtc() ?? DateTime.now().toUtc()
+        : DateTime.now().toUtc();
+
+    return Geofence(
+      id: entity.geofenceId.toString(),
+      userId: attributes['userId'] as String? ?? '',
+      name: entity.name,
+      type: type,
+      enabled: attributes['enabled'] as bool? ?? true,
+      centerLat: centerLat,
+      centerLng: centerLng,
+      radius: radius,
+      vertices: vertices,
+      monitoredDevices: monitoredDevices,
+      onEnter: attributes['onEnter'] as bool? ?? true,
+      onExit: attributes['onExit'] as bool? ?? true,
+      dwellMs: attributes['dwellMs'] as int?,
+      notificationType: attributes['notificationType'] as String? ?? 'local',
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      syncStatus: attributes['syncStatus'] as String? ?? 'synced',
+      version: attributes['version'] as int? ?? 1,
+    );
+  }
 
   // -----------------------------
   // Validation Methods

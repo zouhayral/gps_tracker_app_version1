@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
@@ -9,6 +10,7 @@ import 'package:my_app_gps/data/repositories/geofence_repository.dart';
 import 'package:my_app_gps/features/geofencing/service/geofence_evaluator_service.dart';
 import 'package:my_app_gps/features/geofencing/service/geofence_state_cache.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
+import 'package:my_app_gps/features/geofencing/diagnostics/geofence_diagnostics.dart';
 
 /// Continuously monitors device positions and evaluates geofence transitions.
 ///
@@ -86,6 +88,29 @@ class GeofenceMonitorService {
   /// Service active flag
   bool _active = false;
 
+  // =====================
+  // Health diagnostics
+  // =====================
+  DateTime? _lastPositionTime;
+  DateTime? _lastEventTime;
+  String? _lastEventType;
+  String? _lastEventFenceName;
+  final StreamController<GeofenceHealth> _healthController =
+      StreamController<GeofenceHealth>.broadcast();
+
+  /// Public stream of health snapshots
+  Stream<GeofenceHealth> get healthStream => _healthController.stream;
+
+  // =====================
+  // Evaluation profiler
+  // =====================
+  final List<double> _latencySamples = <double>[]; // ms
+  final StreamController<GeofenceEvalProfile> _profilerController =
+      StreamController<GeofenceEvalProfile>.broadcast();
+
+  /// Public stream of evaluation latency snapshots
+  Stream<GeofenceEvalProfile> get profilerStream => _profilerController.stream;
+
   /// Minimum time between evaluations (throttle)
   final Duration minEvalInterval;
 
@@ -141,6 +166,7 @@ class GeofenceMonitorService {
           debugPrint(
             '[GeofenceMonitorService] Loaded ${_activeGeofences.length} active geofences',
           );
+          _emitHealth();
         },
         onError: (Object error) {
           debugPrint('[GeofenceMonitorService] Geofence stream error: $error');
@@ -154,6 +180,7 @@ class GeofenceMonitorService {
       });
 
       debugPrint('[GeofenceMonitorService] Monitoring started successfully');
+      _emitHealth();
     } catch (e) {
       _active = false;
       debugPrint('[GeofenceMonitorService] Failed to start monitoring: $e');
@@ -192,6 +219,7 @@ class GeofenceMonitorService {
     _activeGeofences = [];
     _lastEvalTimestamp.clear();
     _lastPosition.clear();
+    _emitHealth();
 
     debugPrint('[GeofenceMonitorService] Monitoring stopped');
   }
@@ -203,14 +231,30 @@ class GeofenceMonitorService {
   ///
   /// [position] - Position update to evaluate
   Future<void> processPosition(Position position) async {
-    if (!_active) return;
+    if (!_active) {
+      if (kDebugMode) {
+        debugPrint('[GeofenceMonitorService] ⚠️ Not active, skipping position for device ${position.deviceId}');
+      }
+      return;
+    }
 
     final now = DateTime.now();
     final latlng = LatLng(position.latitude, position.longitude);
     final deviceId = position.deviceId;
 
+  // Update health with last position time as soon as we receive a position
+  _lastPositionTime = now;
+  _emitHealth();
+    
+    if (kDebugMode) {
+      debugPrint('[GeofenceMonitorService] 🔍 Processing position for device $deviceId: (${position.latitude}, ${position.longitude})');
+    }
+
     // Throttle: Skip if too soon since last evaluation
     if (_shouldThrottle(deviceId, now, latlng)) {
+      if (kDebugMode) {
+        debugPrint('[GeofenceMonitorService] ⏱️ Throttled position for device $deviceId');
+      }
       return;
     }
 
@@ -219,13 +263,20 @@ class GeofenceMonitorService {
 
     // Skip if no active geofences
     if (_activeGeofences.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('[GeofenceMonitorService] ⚠️ No active geofences to evaluate');
+      }
       return;
+    }
+
+    if (kDebugMode) {
+      debugPrint('[GeofenceMonitorService] 📊 Evaluating ${_activeGeofences.length} geofences for device $deviceId');
     }
 
     try {
       await _evaluateGeofences(position, latlng, now);
     } catch (e, stackTrace) {
-      debugPrint('[GeofenceMonitorService] Evaluation error: $e');
+      debugPrint('[GeofenceMonitorService] ❌ Evaluation error: $e');
       debugPrint('[GeofenceMonitorService] Stack trace: $stackTrace');
     }
   }
@@ -274,19 +325,45 @@ class GeofenceMonitorService {
       activeGeofences: _activeGeofences,
     );
 
+    if (kDebugMode) {
+      if (events.isEmpty) {
+        debugPrint('[GeofenceMonitorService] No geofence transitions detected for device $deviceId');
+      } else {
+        debugPrint('[GeofenceMonitorService] 🎯 Generated ${events.length} events for device $deviceId');
+      }
+    }
+
     // Process and record events
     for (final event in events) {
       try {
         await eventRepo.recordEvent(event);
         debugPrint(
-          '[GeofenceMonitorService] Recorded event: ${event.eventType} '
-          'for geofence ${event.geofenceName}',
+          '[GeofenceMonitorService] ✅ Recorded event: ${event.eventType} '
+          'for geofence ${event.geofenceName} (device: $deviceId)',
         );
 
         // Emit event to stream
         _eventStreamController.add(event);
+        debugPrint('[GeofenceMonitorService] 📢 Event emitted to stream');
+
+        // Update health fields and emit snapshot
+        _lastEventTime = event.timestamp;
+        _lastEventType = event.eventType;
+        _lastEventFenceName = event.geofenceName;
+        _emitHealth();
+
+        // Profiler: compute latency from last position receipt to event emission
+        if (_lastPositionTime != null) {
+          final latencyMs = DateTime.now()
+              .difference(_lastPositionTime!)
+              .inMilliseconds
+              .toDouble();
+          _latencySamples.add(latencyMs);
+          if (_latencySamples.length > 100) _latencySamples.removeAt(0);
+          _emitProfilerSnapshot();
+        }
       } catch (e) {
-        debugPrint('[GeofenceMonitorService] Failed to record event: $e');
+        debugPrint('[GeofenceMonitorService] ❌ Failed to record event: $e');
       }
     }
 
@@ -331,8 +408,51 @@ class GeofenceMonitorService {
   Future<void> dispose() async {
     await stopMonitoring();
     await _eventStreamController.close();
+    await _healthController.close();
+    await _profilerController.close();
     debugPrint('[GeofenceMonitorService] Service disposed');
   }
+
+  void _emitHealth() {
+    final snapshot = GeofenceHealth(
+      isMonitoring: _active,
+      activeFences: _activeGeofenceCountSafe(),
+      lastPositionTime: _lastPositionTime,
+      lastEventTime: _lastEventTime,
+      lastEventType: _lastEventType,
+      lastEventFenceName: _lastEventFenceName,
+    );
+    try {
+      _healthController.add(snapshot);
+    } catch (_) {
+      // Ignore if stream is closed or listeners are gone
+    }
+  }
+
+  int _activeGeofenceCountSafe() => _activeGeofences.length;
+
+  void _emitProfilerSnapshot() {
+    if (_latencySamples.isEmpty) return;
+    final avg = _latencySamples.reduce((a, b) => a + b) / _latencySamples.length;
+    final min = _latencySamples.reduce(math.min);
+    final max = _latencySamples.reduce(math.max);
+    try {
+      _profilerController.add(
+        GeofenceEvalProfile(avg, min, max, _latencySamples.length),
+      );
+    } catch (_) {
+      // Ignore if stream is closed
+    }
+  }
+}
+
+/// Snapshot of evaluation latency metrics
+class GeofenceEvalProfile {
+  final double avgMs;
+  final double minMs;
+  final double maxMs;
+  final int sampleCount;
+  const GeofenceEvalProfile(this.avgMs, this.minMs, this.maxMs, this.sampleCount);
 }
 
 // TODO: Future enhancements for Phase 3+:

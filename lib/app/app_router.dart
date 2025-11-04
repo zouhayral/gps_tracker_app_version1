@@ -14,6 +14,7 @@ import 'package:my_app_gps/features/geofencing/ui/geofence_list_page.dart';
 import 'package:my_app_gps/features/geofencing/ui/geofence_settings_page.dart';
 import 'package:my_app_gps/features/map/view/map_page.dart';
 import 'package:my_app_gps/features/notifications/view/notifications_page.dart';
+
 import 'package:my_app_gps/features/settings/view/locale_test_page.dart';
 import 'package:my_app_gps/features/settings/view/settings_page.dart';
 import 'package:my_app_gps/features/telemetry/telemetry_history_page.dart';

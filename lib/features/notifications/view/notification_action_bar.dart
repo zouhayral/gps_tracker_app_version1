@@ -11,14 +11,28 @@ class NotificationActionBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    
     return Container(
-      color: const Color(0xFFF5FFE2),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.grey[850] : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Row(
         children: [
-          _buildMarkAllReadChip(context, ref, t),
+          Expanded(child: _buildMarkAllReadChip(context, ref, t)),
           const SizedBox(width: 12),
-          _buildDeleteAllChip(context, ref, t),
+          Expanded(child: _buildDeleteAllChip(context, ref, t)),
         ],
       ),
     );
@@ -32,30 +46,32 @@ class NotificationActionBar extends ConsumerWidget {
         // Mark all as read
         await ref.read(markAllAsReadProvider.future);
       },
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(
-            color: Colors.grey.shade400,
-          ),
-          borderRadius: BorderRadius.circular(20),
+          color: theme.colorScheme.primaryContainer.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.done_all,
               size: 18,
-              color: theme.colorScheme.onSurface,
+              color: theme.colorScheme.primary,
             ),
             const SizedBox(width: 6),
-            Text(
-              t.markAll,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w500,
+            Flexible(
+              child: Text(
+                t.markAll,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ],
@@ -71,6 +87,9 @@ class NotificationActionBar extends ConsumerWidget {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: Text(t.deleteAllNotifications),
             content: Text(t.deleteAllNotificationsConfirm),
             actions: [
@@ -80,7 +99,12 @@ class NotificationActionBar extends ConsumerWidget {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
-                style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 child: Text(t.deleteAll),
               ),
             ],
@@ -95,30 +119,32 @@ class NotificationActionBar extends ConsumerWidget {
           }
         }
       },
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(
-            color: Colors.grey.shade400,
-          ),
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.delete_forever_rounded,
               size: 18,
-              color: Colors.redAccent.shade200,
+              color: Colors.red.shade700,
             ),
             const SizedBox(width: 6),
-            Text(
-              t.deleteAll,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w500,
+            Flexible(
+              child: Text(
+                t.deleteAll,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: Colors.red.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ],

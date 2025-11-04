@@ -30,65 +30,126 @@ class _BottomNavShellState extends ConsumerState<BottomNavShell> {
     
     // Watch unread count for badge
     final unreadCount = ref.watch(unreadCountProvider);
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
     
     return Scaffold(
       body: widget.child,
-      bottomNavigationBar: Container(
-        color: const Color(0xFFE2F998),
-        padding: const EdgeInsets.only(top: 5),
-        child: NavigationBar(
-          selectedIndex: currentIndex,
-          destinations: [
-            NavigationDestination(icon: const Icon(Icons.map), label: t.mapTitle),
-            NavigationDestination(icon: const Icon(Icons.alt_route), label: t.tripsTitle),
-            NavigationDestination(
-              icon: Badge(
-                isLabelVisible: unreadCount > 0,
-                label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
-                child: const Icon(Icons.notifications),
+      extendBody: true,
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: 16,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDarkMode ? 0.5 : 0.15),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
               ),
-              label: t.notificationsTitle,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.settings), 
-              label: t.settingsTitle,
-            ),
-          ],
-          onDestinationSelected: (i) async {
-            debugPrint('[BottomNav] Destination $i selected (current: $currentIndex)');
-            
-            // If there's a modal route on top (like fullscreen trip map), pop it first
-            if (Navigator.of(context).canPop()) {
-              debugPrint('[BottomNav] Popping modal route before navigation');
-              await Navigator.of(context).maybePop();
-              // Wait for navigation animation to complete
-              await Future<void>.delayed(const Duration(milliseconds: 100));
-            }
-            
-            // Check if we're already on the target route
-            if ((i == 0 && currentIndex == 0) ||
-                (i == 1 && currentIndex == 1) ||
-                (i == 2 && currentIndex == 2) ||
-                (i == 3 && currentIndex == 3)) {
-              debugPrint('[BottomNav] Already on target tab, skipping navigation');
-              return; // Already on this tab
-            }
-            
-            switch (i) {
-              case 0:
-                debugPrint('[BottomNav] Navigating to Map');
-                context.safeGo(AppRoutes.map);
-              case 1:
-                debugPrint('[BottomNav] Navigating to Trips');
-                context.safeGo(AppRoutes.trips);
-              case 2:
-                debugPrint('[BottomNav] Navigating to Alerts');
-                context.safeGo(AppRoutes.alerts);
-              case 3:
-                debugPrint('[BottomNav] Navigating to Settings');
-                context.safeGo(AppRoutes.settings);
-            }
-          },
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: NavigationBar(
+              selectedIndex: currentIndex,
+              height: 70,
+              elevation: 0,
+              backgroundColor: isDarkMode 
+                  ? theme.colorScheme.surface
+                  : Colors.white,
+              indicatorColor: theme.colorScheme.primaryContainer,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              animationDuration: const Duration(milliseconds: 400),
+              destinations: [
+              NavigationDestination(
+                icon: Icon(
+                  Icons.map_outlined,
+                  color: currentIndex == 0 
+                      ? theme.colorScheme.primary 
+                      : theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+                selectedIcon: Icon(
+                  Icons.map,
+                  color: theme.colorScheme.primary,
+                ),
+                label: t.mapTitle,
+              ),
+              NavigationDestination(
+                icon: Icon(
+                  Icons.route_outlined,
+                  color: currentIndex == 1 
+                      ? theme.colorScheme.primary 
+                      : theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+                selectedIcon: Icon(
+                  Icons.route,
+                  color: theme.colorScheme.primary,
+                ),
+                label: t.tripsTitle,
+              ),
+              NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: unreadCount > 0,
+                  label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+                  backgroundColor: Colors.red,
+                  textColor: Colors.white,
+                  child: Icon(
+                    Icons.notifications_outlined,
+                    color: currentIndex == 2 
+                        ? theme.colorScheme.primary 
+                        : theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                selectedIcon: Badge(
+                  isLabelVisible: unreadCount > 0,
+                  label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+                  backgroundColor: Colors.red,
+                  textColor: Colors.white,
+                  child: Icon(
+                    Icons.notifications,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                label: t.notificationsTitle,
+              ),
+              NavigationDestination(
+                icon: Icon(
+                  Icons.settings_outlined,
+                  color: currentIndex == 3 
+                      ? theme.colorScheme.primary 
+                      : theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+                selectedIcon: Icon(
+                  Icons.settings,
+                  color: theme.colorScheme.primary,
+                ),
+                label: t.settingsTitle,
+              ),
+            ],
+            onDestinationSelected: (i) {
+              // If there's a modal route on top (like fullscreen trip map), pop it first
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+              
+              switch (i) {
+                case 0:
+                  context.safeGo(AppRoutes.map);
+                case 1:
+                  context.safeGo(AppRoutes.trips);
+                case 2:
+                  context.safeGo(AppRoutes.alerts);
+                case 3:
+                  context.safeGo(AppRoutes.settings);
+              }
+            },
+          ),
+        ),
         ),
       ),
     );

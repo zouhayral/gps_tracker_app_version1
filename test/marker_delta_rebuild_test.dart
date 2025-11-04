@@ -303,7 +303,7 @@ void main() {
       expect(efficiency, greaterThan(0.95), reason: 'Should have >95% reuse rate');
     });
 
-    test('query filter reduces marker count', () async {
+    test('query does not hide markers (all remain visible)', () async {
   final pos1 = makePosition(id: 1, deviceId: 1, lat: 0, lon: 0);
   final pos2 = makePosition(id: 2, deviceId: 2, lat: 1, lon: 1);
       final devices = [
@@ -323,7 +323,7 @@ void main() {
 
       await Future<void>.delayed(const Duration(milliseconds: 350));
 
-      // Filter by "alpha"
+      // Filter by "alpha" - markers remain visible (query only affects suggestions UI)
       result = cache.getMarkersWithDiff(
         {1: pos1, 2: pos2},
         devices,
@@ -331,7 +331,7 @@ void main() {
         'alpha',
       );
 
-      expect(result.markers.length, 1, reason: 'Only "Alpha" should match');
+      expect(result.markers.length, 2, reason: 'All markers remain visible; query only affects suggestions');
     });
   });
 }

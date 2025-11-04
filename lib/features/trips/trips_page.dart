@@ -5,11 +5,10 @@ import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/features/dashboard/controller/devices_notifier.dart';
 import 'package:my_app_gps/features/trips/models/trip_filter.dart';
 import 'package:my_app_gps/features/trips/trip_details_page.dart';
-import 'package:my_app_gps/features/trips/widgets/trip_card.dart';
 import 'package:my_app_gps/features/trips/widgets/trip_filter_dialog.dart';
-import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/providers/trip_auto_refresh_registrar.dart';
 import 'package:my_app_gps/providers/trip_providers.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 
 class TripsPage extends ConsumerStatefulWidget {
   const TripsPage({this.deviceId, super.key});
@@ -21,15 +20,10 @@ class TripsPage extends ConsumerStatefulWidget {
 
 class _TripsPageState extends ConsumerState<TripsPage> {
   TripFilter? _activeFilter; // null = show welcome screen
-  final ScrollController _scrollController = ScrollController();
-  int _currentPage = 1;
-  static const int _pageSize = 20; // Load 20 trips at a time
-  bool _isLoadingMore = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
     // If deviceId provided, auto-apply filter for that device
     if (widget.deviceId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -46,35 +40,6 @@ class _TripsPageState extends ConsumerState<TripsPage> {
   }
 
   @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >= 
-        _scrollController.position.maxScrollExtent - 200) {
-      _loadMore();
-    }
-  }
-
-  void _loadMore() {
-    if (!_isLoadingMore) {
-      setState(() {
-        _currentPage++;
-        _isLoadingMore = false; // Reset after state update
-      });
-    }
-  }
-
-  void _resetPagination() {
-    setState(() {
-      _currentPage = 1;
-      _isLoadingMore = false;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
     
@@ -86,9 +51,18 @@ class _TripsPageState extends ConsumerState<TripsPage> {
       );
     }
     
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    
     return Scaffold(
+      backgroundColor: isDarkMode ? theme.colorScheme.background : Colors.grey[50],
       appBar: AppBar(
-        title: Text(t.tripsTitle),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        title: Text(
+          t.tripsTitle,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           // Filter button with badge indicator
           Stack(
@@ -124,54 +98,97 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     final t = AppLocalizations.of(context);
     if (t == null) return const SizedBox();
     
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.filter_list_outlined,
-              size: 80,
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+            // Modern icon container
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.filter_list_outlined,
+                size: 64,
+                color: theme.colorScheme.primary,
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
               t.filterYourTrips,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
               t.filterDescription,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: _showFilterDialog,
-              icon: const Icon(Icons.filter_list),
-              label: Text(t.applyFilter),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
               ),
             ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _applyQuickFilter,
-              icon: const Icon(Icons.flash_on),
-              label: Text(t.quickAllDevices),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
+            const SizedBox(height: 40),
+            // Modern card with buttons
+            Container(
+              decoration: BoxDecoration(
+                color: isDarkMode ? Colors.grey[850] : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _showFilterDialog,
+                      icon: const Icon(Icons.filter_list),
+                      label: Text(t.applyFilter),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _applyQuickFilter,
+                      icon: const Icon(Icons.flash_on),
+                      label: Text(t.quickAllDevices),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -183,7 +200,6 @@ class _TripsPageState extends ConsumerState<TripsPage> {
   // Apply quick filter: all devices, last 24 hours
   void _applyQuickFilter() {
     final now = DateTime.now();
-    _resetPagination(); // Reset pagination when applying quick filter
     setState(() {
       _activeFilter = TripFilter(
         deviceIds: const [], // Empty = all devices
@@ -224,7 +240,6 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     );
 
     if (result != null) {
-      _resetPagination(); // Reset pagination when filter changes
       setState(() {
         _activeFilter = result;
       });
@@ -255,40 +270,63 @@ class _TripsPageState extends ConsumerState<TripsPage> {
   Widget _buildActiveFilterChip(TripFilter filter) {
     final deviceCount = filter.isAllDevices ? 'All Devices' : '${filter.deviceIds.length} Device${filter.deviceIds.length > 1 ? 's' : ''}';
     final dateRange = '${DateFormat('MMM d').format(filter.from)} - ${DateFormat('MMM d').format(filter.to)}';
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+        color: isDarkMode ? Colors.grey[850] : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
           ),
-        ),
+        ],
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.filter_list,
-            size: 20,
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '$deviceCount • $dateRange',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
-                  ),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.filter_list,
+              size: 20,
+              color: theme.colorScheme.primary,
             ),
           ),
-          TextButton.icon(
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  deviceCount,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  dateRange,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
             onPressed: _showFilterDialog,
-            icon: const Icon(Icons.edit, size: 16),
-            label: const Text('Edit'),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+            icon: const Icon(Icons.edit),
+            style: IconButton.styleFrom(
+              backgroundColor: theme.colorScheme.primaryContainer.withOpacity(0.5),
             ),
           ),
         ],
@@ -339,35 +377,8 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     );
   }
 
-  // Aggregate trips from multiple devices using OPTIMIZED batch provider
+  // Aggregate trips from multiple devices
   Widget _buildAggregatedTrips(List<int> deviceIds, TripFilter filter) {
-    // OPTIMIZATION: Use batch provider instead of N individual providers
-    // This reduces provider subscriptions from N to 1 and enables parallel fetching
-    final batchQuery = BatchTripQuery(
-      deviceIds: deviceIds,
-      from: filter.from,
-      to: filter.to,
-    );
-    
-    // Activate auto-refresh for all devices
-    for (final deviceId in deviceIds) {
-      ref.watch(tripAutoRefreshRegistrarProvider(deviceId));
-    }
-    
-    final tripsAsync = ref.watch(batchTripsByDevicesProvider(batchQuery));
-    
-    return tripsAsync.when(
-      data: (trips) => _buildTripsList(trips, filter),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => _buildError(context, e, () {
-        ref.invalidate(batchTripsByDevicesProvider(batchQuery));
-      }),
-    );
-  }
-
-  // OLD IMPLEMENTATION (KEPT FOR REFERENCE - REMOVE AFTER TESTING)
-  /*
-  Widget _buildAggregatedTripsOld(List<int> deviceIds, TripFilter filter) {
     // Watch all device providers
     final allTripsAsync = deviceIds.map((deviceId) {
       // Activate auto-refresh for each device
@@ -406,7 +417,6 @@ class _TripsPageState extends ConsumerState<TripsPage> {
 
     return _buildTripsList(allTrips, filter);
   }
-  */
 
   // Build error widget
   Widget _buildError(BuildContext context, Object error, VoidCallback? onRetry) {
@@ -513,57 +523,26 @@ class _TripsPageState extends ConsumerState<TripsPage> {
         }
       },
       child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(16),
-        // Performance optimization: itemExtent tells ListView the exact height
-        // of each item, reducing layout passes during scrolling by ~70-80%.
-        // TripCard has fixed height: 16 (top padding) + 160 (card) + 12 (bottom margin) = 188px
-        // Summary card at index 0 has variable height, so we use null for dynamic sizing
-        // Use prototypeItem for more accurate measurement in case of variations
-        prototypeItem: const SizedBox(height: 188), // Fixed height for trip cards
-        itemCount: () {
-          // Calculate visible trips based on pagination
-          final visibleCount = (_currentPage * _pageSize).clamp(0, trips.length);
-          // +1 for summary card, +1 for loading indicator if more trips available
-          return visibleCount + 1 + (visibleCount < trips.length ? 1 : 0);
-        }(),
+        padding: const EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 100, // Extra padding for floating bottom nav bar
+        ),
+        itemCount: trips.length + 1, // +1 for summary card
+        cacheExtent: 1000, // Cache more items for smoother scrolling
         itemBuilder: (context, index) {
           // Summary card at top
           if (index == 0) {
             return _buildSummaryCard(context, trips, filter);
           }
 
-          // Calculate visible trips
-          final visibleCount = (_currentPage * _pageSize).clamp(0, trips.length);
-          
-          // Loading indicator at bottom if more trips available
-          if (index == visibleCount + 1 && visibleCount < trips.length) {
-            return const Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          // Trip card
-          final tripIndex = index - 1;
-          if (tripIndex >= visibleCount) {
-            return const SizedBox(); // Safety check
-          }
-          
-          final t = trips[tripIndex];
+          final t = trips[index - 1];
           final deviceName = _getDeviceName(devices, t.deviceId);
-          return TripCard(
-            trip: t,
-            deviceName: deviceName,
-            onTap: () {
-              // Use root navigator to bypass BottomNavShell and hide bottom nav bar
-              Navigator.of(context, rootNavigator: true).push<Widget>(
-                MaterialPageRoute<Widget>(
-                  builder: (_) => TripDetailsPage(trip: t),
-                  fullscreenDialog: true,
-                ),
-              );
-            },
+          // Add key for better performance
+          return KeyedSubtree(
+            key: ValueKey('trip_${t.id}_${t.startTime}'),
+            child: _buildModernTripCard(context, t, deviceName),
           );
         },
       ),
@@ -696,6 +675,257 @@ class _TripsPageState extends ConsumerState<TripsPage> {
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
               ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModernTripCard(BuildContext context, Trip trip, String deviceName) {
+    final t = AppLocalizations.of(context);
+    if (t == null) return const SizedBox();
+    
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    // Wrap in RepaintBoundary for better performance
+    return RepaintBoundary(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+          ),
+          boxShadow: [
+            BoxShadow(
+        color: isDarkMode
+          ? Colors.black26
+          : Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            // Navigate to trip details with smooth animation
+            Navigator.of(context, rootNavigator: true).push<Widget>(
+              PageRouteBuilder<Widget>(
+                pageBuilder: (context, animation, secondaryAnimation) => 
+                  TripDetailsPage(trip: trip),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  const curve = Curves.easeInOutCubic;
+                  final curvedAnimation = CurvedAnimation(
+                    parent: animation,
+                    curve: curve,
+                  );
+                  
+                  return FadeTransition(
+                    opacity: curvedAnimation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.0, 0.03),
+                        end: Offset.zero,
+                      ).animate(curvedAnimation),
+                      child: child,
+                    ),
+                  );
+                },
+                transitionDuration: const Duration(milliseconds: 300),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Device name header
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.directions_car,
+                            size: 14,
+                            color: Theme.of(context).colorScheme.onSecondaryContainer,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            deviceName,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Date and time row
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 14,
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            DateFormat('MMM d').format(trip.startTime),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                
+                // Time range
+                Row(
+                  children: [
+                    Icon(
+                      Icons.schedule,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      DateFormat('HH:mm').format(trip.startTime),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(
+                        Icons.arrow_forward,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    Text(
+                      DateFormat('HH:mm').format(trip.endTime),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Trip stats
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildTripStat(
+                        context,
+                        Icons.timer_outlined,
+                        _formatDuration(trip.duration),
+                        t.duration,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 40,
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                    ),
+                    Expanded(
+                      child: _buildTripStat(
+                        context,
+                        Icons.straighten,
+                        trip.formattedDistanceKm,
+                        t.distance,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 40,
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                    ),
+                    Expanded(
+                      child: _buildTripStat(
+                        context,
+                        Icons.speed,
+                        trip.formattedAvgSpeed,
+                        t.avgSpeed,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      ), // Close RepaintBoundary
+    );
+  }
+
+  Widget _buildTripStat(
+    BuildContext context,
+    IconData icon,
+    String value,
+    String label,
+  ) {
+    return Column(
+      children: [
+        Icon(
+          icon,
+          size: 18,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+          textAlign: TextAlign.center,
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+          textAlign: TextAlign.center,
         ),
       ],
     );

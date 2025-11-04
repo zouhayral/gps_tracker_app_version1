@@ -25,23 +25,21 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
 
   /// Loads daily analytics report for the specified device.
   ///
-  /// Fetches data for the specified date (midnight to 23:59:59).
-  /// If no date is specified, uses the current day.
+  /// Fetches data for the current day (midnight to 23:59:59).
   ///
   /// Parameters:
   /// - [deviceId]: The ID of the device to fetch analytics for
-  /// - [date]: Optional specific date to fetch. Defaults to today.
   ///
   /// Updates state with loading, data, or error status.
-  Future<void> loadDaily(int deviceId, {DateTime? date}) async {
-    final targetDate = date ?? DateTime.now();
-    _log.debug('Loading daily report for device $deviceId on ${_formatDate(targetDate)}');
+  Future<void> loadDaily(int deviceId) async {
+    _log.debug('Loading daily report for device $deviceId');
 
     // Set loading state
     state = const AsyncValue.loading();
 
     try {
-      final report = await _repository.fetchDailyReport(targetDate, deviceId);
+      final date = DateTime.now();
+      final report = await _repository.fetchDailyReport(date, deviceId);
 
       // Check if still mounted before updating state
       if (!mounted) {
@@ -73,23 +71,20 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
 
   /// Loads weekly analytics report for the specified device.
   ///
-  /// Fetches data for 7 days ending on the specified date.
-  /// If no date is specified, uses the current date.
+  /// Fetches data for the last 7 days starting from 7 days ago.
   ///
   /// Parameters:
   /// - [deviceId]: The ID of the device to fetch analytics for
-  /// - [endDate]: Optional end date for the week. Defaults to today.
   ///
   /// Updates state with loading, data, or error status.
-  Future<void> loadWeekly(int deviceId, {DateTime? endDate}) async {
-    final targetDate = endDate ?? DateTime.now();
-    _log.debug('Loading weekly report for device $deviceId ending ${_formatDate(targetDate)}');
+  Future<void> loadWeekly(int deviceId) async {
+    _log.debug('Loading weekly report for device $deviceId');
 
     // Set loading state
     state = const AsyncValue.loading();
 
     try {
-      final startDate = targetDate.subtract(const Duration(days: 7));
+      final startDate = DateTime.now().subtract(const Duration(days: 7));
       final report = await _repository.fetchWeeklyReport(startDate, deviceId);
 
       // Check if still mounted before updating state
@@ -122,23 +117,20 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
 
   /// Loads monthly analytics report for the specified device.
   ///
-  /// Fetches data for 30 days ending on the specified date.
-  /// If no date is specified, uses the current date.
+  /// Fetches data for the last 30 days starting from 30 days ago.
   ///
   /// Parameters:
   /// - [deviceId]: The ID of the device to fetch analytics for
-  /// - [endDate]: Optional end date for the month. Defaults to today.
   ///
   /// Updates state with loading, data, or error status.
-  Future<void> loadMonthly(int deviceId, {DateTime? endDate}) async {
-    final targetDate = endDate ?? DateTime.now();
-    _log.debug('Loading monthly report for device $deviceId ending ${_formatDate(targetDate)}');
+  Future<void> loadMonthly(int deviceId) async {
+    _log.debug('Loading monthly report for device $deviceId');
 
     // Set loading state
     state = const AsyncValue.loading();
 
     try {
-      final startDate = targetDate.subtract(const Duration(days: 30));
+      final startDate = DateTime.now().subtract(const Duration(days: 30));
       final report = await _repository.fetchMonthlyReport(startDate, deviceId);
 
       // Check if still mounted before updating state
@@ -169,11 +161,6 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
     }
   }
 
-  /// Helper to format date for logging
-  String _formatDate(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-
   /// Loads analytics report for a custom date range.
   ///
   /// Useful for user-selected date ranges in the UI.
@@ -197,20 +184,8 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
     state = const AsyncValue.loading();
 
     try {
-      // Ensure 'from' starts at beginning of day and 'to' ends at end of day
-      final adjustedFrom = DateTime(from.year, from.month, from.day);
-      final adjustedTo = DateTime(to.year, to.month, to.day, 23, 59, 59);
-      
-      _log.debug(
-        'Adjusted custom range: $adjustedFrom to $adjustedTo',
-      );
-      
-      // Fetch the report for the custom date range
-      final report = await _repository.fetchCustomReport(
-        adjustedFrom,
-        adjustedTo,
-        deviceId,
-      );
+  // Always fetch using explicit range to match the UI selection exactly
+      final report = await _repository.fetchRangeReport(from, to, deviceId);
 
       // Check if still mounted before updating state
       if (!mounted) {
@@ -250,16 +225,8 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
     if (currentState is AsyncData<AnalyticsReport?>) {
       final report = currentState.value;
       if (report != null) {
-        // Determine which period to reload based on the current report's date range
-        final daysDifference = report.endTime.difference(report.startTime).inDays;
-        
-        if (daysDifference <= 1) {
-          await loadDaily(deviceId);
-        } else if (daysDifference <= 7) {
-          await loadWeekly(deviceId);
-        } else {
-          await loadMonthly(deviceId);
-        }
+  // Re-fetch the exact same range shown in the UI for consistency
+        await loadRange(deviceId, report.startTime, report.endTime);
       }
     }
   }
@@ -268,5 +235,19 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
   void clear() {
     _log.debug('Clearing analytics state');
     state = const AsyncValue.data(null);
+  }
+
+  /// Load report for an explicit range. Convenience for UI and refresh.
+  Future<void> loadRange(int deviceId, DateTime from, DateTime to) async {
+    _log.debug('Loading explicit range report for device $deviceId: $from → $to');
+    state = const AsyncValue.loading();
+    try {
+      final report = await _repository.fetchRangeReport(from, to, deviceId);
+      if (!mounted) return;
+      state = AsyncValue.data(report);
+    } catch (e, st) {
+      if (!mounted) return;
+      state = AsyncValue.error(e, st);
+    }
   }
 }
