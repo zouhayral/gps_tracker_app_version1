@@ -15,15 +15,21 @@ class ClusterHud extends ConsumerWidget {
     final usedIso = telemetry.usedIsolate ? 'iso' : 'sync';
     final hitRate = (telemetry.cacheHitRate * 100).toStringAsFixed(0);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: DefaultTextStyle(
-        style: const TextStyle(color: Colors.white, fontSize: 11),
-        child: Row(
+    // OPTIMIZATION (Phase 1, Step 2): Wrap HUD in RepaintBoundary
+    // Benefits: Isolates telemetry overlay from map repaints
+    // - HUD updates ~1/sec but map can pan/zoom 60fps
+    // - Prevents HUD from triggering repaints during map interaction
+    // - Lightweight widget but good practice for all overlays
+    return RepaintBoundary(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.white, fontSize: 11),
+          child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.blur_circular, color: Colors.white, size: 14),
@@ -40,6 +46,7 @@ class ClusterHud extends ConsumerWidget {
           ],
         ),
       ),
-    );
+    ),  // Close Container
+    );  // Close RepaintBoundary
   }
 }

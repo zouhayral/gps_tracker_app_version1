@@ -154,13 +154,13 @@ class GeofenceNotificationBridge {
   Future<void> _handleEvent(GeofenceEvent event) async {
     try {
       debugPrint(
-        '[GeofenceNotificationBridge] Processing event: '
-        '${event.eventType} at ${event.geofenceName}',
+        '[GeofenceNotificationBridge] 🔔 Received event: '
+        '${event.eventType} at ${event.geofenceName} (device: ${event.deviceId})',
       );
 
       // Check for duplicate (prevent flapping)
       if (_isDuplicate(event)) {
-        debugPrint('[GeofenceNotificationBridge] Duplicate event, skipping notification');
+        debugPrint('[GeofenceNotificationBridge] ⚠️ Duplicate event detected, skipping notification');
         return;
       }
 
@@ -171,15 +171,19 @@ class GeofenceNotificationBridge {
       // Find associated geofence
       final geofence = _findGeofence(event.geofenceId);
       if (geofence == null) {
-        debugPrint('[GeofenceNotificationBridge] Geofence not found: ${event.geofenceId}');
+        debugPrint('[GeofenceNotificationBridge] ⚠️ Geofence not found: ${event.geofenceId}');
         return;
       }
 
+      debugPrint('[GeofenceNotificationBridge] Found geofence: ${geofence.name} (onEnter: ${geofence.onEnter}, onExit: ${geofence.onExit})');
+
       // Check if event should trigger notification based on geofence config
       if (!_shouldNotify(event, geofence)) {
-        debugPrint('[GeofenceNotificationBridge] Event does not trigger notification');
+        debugPrint('[GeofenceNotificationBridge] ⚠️ Event does not trigger notification (check onEnter/onExit flags)');
         return;
       }
+
+      debugPrint('[GeofenceNotificationBridge] ✅ Event should trigger notification');
 
       // Persist event to repository (idempotent by eventId)
       await _persistEvent(event);
@@ -187,9 +191,9 @@ class GeofenceNotificationBridge {
       // Show notification based on type
       await _showNotification(event, geofence);
 
-      debugPrint('[GeofenceNotificationBridge] Event processed successfully');
+      debugPrint('[GeofenceNotificationBridge] ✅ Event processed successfully - notification shown!');
     } catch (e, stackTrace) {
-      debugPrint('[GeofenceNotificationBridge] Error processing event: $e');
+      debugPrint('[GeofenceNotificationBridge] ❌ Error processing event: $e');
       debugPrint('[GeofenceNotificationBridge] Stack trace: $stackTrace');
     }
   }

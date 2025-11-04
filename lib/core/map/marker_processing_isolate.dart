@@ -121,6 +121,47 @@ class MarkerProcessingIsolate {
     }
   }
 
+  /// Decimate markers in the background isolate using distance threshold
+  /// Keeps markers at least [minDistanceMeters] apart, capped to [markerCap].
+  Future<List<MapMarkerData>> decimateMarkers(
+    List<MapMarkerData> markers, {
+    required int markerCap,
+    double minDistanceMeters = 100,
+  }) async {
+    if (!_isInitialized || _sendPort == null) {
+      // Fallback on main thread
+      return _decimateByDistance(markers, markerCap, minDistanceMeters);
+    }
+
+    try {
+      final completer = Completer<List<MapMarkerData>>();
+      StreamSubscription<List<MapMarkerData>>? subscription;
+      subscription = _resultStreamController?.stream.listen((result) {
+        if (!completer.isCompleted) {
+          completer.complete(result);
+          subscription?.cancel();
+        }
+      });
+
+      _sendPort!.send(_DecimationRequest(
+        markers: markers,
+        markerCap: markerCap,
+        minDistanceMeters: minDistanceMeters,
+      ));
+
+      // Use a short timeout; fall back to sync if isolate is busy
+      return completer.future.timeout(
+        const Duration(milliseconds: 100),
+        onTimeout: () {
+          subscription?.cancel();
+          return _decimateByDistance(markers, markerCap, minDistanceMeters);
+        },
+      );
+    } catch (_) {
+      return _decimateByDistance(markers, markerCap, minDistanceMeters);
+    }
+  }
+
   /// Dispose the isolate
   void dispose() {
     _isolate?.kill(priority: Isolate.immediate);
@@ -152,6 +193,13 @@ class MarkerProcessingIsolate {
           message.query,
         );
         mainSendPort.send(markers);
+      } else if (message is _DecimationRequest) {
+        final decimated = _decimateByDistance(
+          message.markers,
+          message.markerCap,
+          message.minDistanceMeters,
+        );
+        mainSendPort.send(decimated);
       }
     });
   }
@@ -229,6 +277,44 @@ class MarkerProcessingIsolate {
     return markers;
   }
 
+  /// Simple greedy decimator: keeps markers at least [minDistanceMeters] apart
+  /// until [maxCount] reached. Suitable for quick LOD downsampling.
+  static List<MapMarkerData> _decimateByDistance(
+    List<MapMarkerData> markers,
+    int maxCount,
+    double minDistanceMeters,
+  ) {
+    if (markers.length <= maxCount) return List<MapMarkerData>.from(markers);
+
+    const distance = Distance();
+    final result = <MapMarkerData>[];
+
+    for (final m in markers) {
+      bool farEnough = true;
+      for (final kept in result) {
+        final d = distance.as(LengthUnit.Meter, m.position, kept.position);
+        if (d < minDistanceMeters) {
+          farEnough = false;
+          break;
+        }
+      }
+      if (farEnough) {
+        result.add(m);
+        if (result.length >= maxCount) break;
+      }
+    }
+
+    // If we didn't reach the cap due to strict spacing, fill with remaining
+    if (result.length < maxCount) {
+      for (final m in markers) {
+        if (result.length >= maxCount) break;
+        if (!result.contains(m)) result.add(m);
+      }
+    }
+
+    return result;
+  }
+
   static bool _valid(double? lat, double? lon) =>
       lat != null &&
       lon != null &&
@@ -259,4 +345,17 @@ class _MarkerProcessingRequest {
   final List<Map<String, dynamic>> devices;
   final Set<int> selectedIds;
   final String query;
+}
+
+/// Request message for decimation
+class _DecimationRequest {
+  const _DecimationRequest({
+    required this.markers,
+    required this.markerCap,
+    required this.minDistanceMeters,
+  });
+
+  final List<MapMarkerData> markers;
+  final int markerCap;
+  final double minDistanceMeters;
 }

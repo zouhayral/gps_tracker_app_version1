@@ -204,7 +204,7 @@ extension GeofenceOptimizerStateX on GeofenceOptimizerState {
   
   /// Calculate battery savings percentage
   double get batterySavingsPercent {
-    if (totalEvaluations == 0) return 0.0;
+    if (totalEvaluations == 0) return 0;
     final throttledCount = batterySaveCount + idleThrottleCount;
     return (throttledCount / totalEvaluations) * 100.0;
   }

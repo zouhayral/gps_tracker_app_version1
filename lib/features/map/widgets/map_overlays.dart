@@ -191,6 +191,9 @@ class MapOfflineBanner extends StatelessWidget {
       color: bgColor,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: SafeArea(
+        // External positioning already accounts for the status bar. Disable top padding here
+        // to avoid doubling the offset and keep the banner height tight.
+        top: false,
         bottom: false,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

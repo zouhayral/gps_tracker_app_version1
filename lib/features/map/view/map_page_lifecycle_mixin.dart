@@ -72,7 +72,8 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
     final deviceIds = activeDeviceIds;
 
     if (deviceIds.isNotEmpty) {
-      repo.refreshAll();
+      // Use incremental refresh to avoid large reloads after resume
+      repo.incrementalRefreshAll();
       if (kDebugMode) {
         debugPrint('[LIFECYCLE] Refreshing ${deviceIds.length} devices');
       }
@@ -121,7 +122,8 @@ mixin MapPageLifecycleMixin<T extends ConsumerStatefulWidget>
         final deviceIds = activeDeviceIds;
 
         if (deviceIds.isNotEmpty) {
-          repo.refreshAll();
+          // Use incremental refresh for first-open path as well
+          repo.incrementalRefreshAll();
         }
       });
     }

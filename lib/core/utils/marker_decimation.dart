@@ -2,6 +2,7 @@
 /// 
 /// Spatial algorithms for reducing marker density while maintaining
 /// representative coverage across the viewport.
+library;
 
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -89,7 +90,7 @@ class MarkerDecimator {
   }) {
     if (markers.length <= maxCount) return markers;
 
-    final distance = const Distance();
+    const distance = Distance();
     final clusters = <List<T>>[];
     final processed = <bool>[];
 

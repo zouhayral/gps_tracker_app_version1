@@ -70,16 +70,16 @@ class MapBottomSheetState extends State<MapBottomSheet>
 
   /// Programmatically expand the sheet to maximum height with spring animation
   void expand() {
-    _animDuration = const Duration(milliseconds: 280);
-    _animCurve = Curves.easeOutBack;
+    _animDuration = const Duration(milliseconds: 500);
+    _animCurve = Curves.easeInOutCubic;
     HapticFeedback.selectionClick();
     setState(() => _fraction = widget.maxFraction);
   }
 
   /// Programmatically collapse the sheet to minimum height with spring animation
   void collapse() {
-    _animDuration = const Duration(milliseconds: 280);
-    _animCurve = Curves.easeOutBack;
+    _animDuration = const Duration(milliseconds: 500);
+    _animCurve = Curves.easeInOutCubic;
     HapticFeedback.selectionClick();
     setState(() => _fraction = widget.minFraction);
   }
@@ -93,7 +93,7 @@ class MapBottomSheetState extends State<MapBottomSheet>
   void _onDragStart(DragStartDetails d) {
     _dragStart = d.globalPosition.dy;
     _startFraction = _fraction;
-    _isDragging = true;
+    setState(() => _isDragging = true);
     // Instant reaction while dragging - no animation delay
     _animDuration = Duration.zero;
   }
@@ -110,7 +110,6 @@ class MapBottomSheetState extends State<MapBottomSheet>
   }
 
   void _onDragEnd(DragEndDetails d) {
-    _isDragging = false;
     final velocity = d.primaryVelocity ?? 0;
 
     double target;
@@ -129,29 +128,37 @@ class MapBottomSheetState extends State<MapBottomSheet>
 
     HapticFeedback.selectionClick();
     // Smooth settle after drag ends
-    _animDuration = const Duration(milliseconds: 220);
-    _animCurve = Curves.easeOutCubic;
-    setState(() => _fraction = target);
+    _animDuration = const Duration(milliseconds: 450);
+    _animCurve = Curves.easeInOutCubic;
+    setState(() {
+      _isDragging = false;
+      _fraction = target;
+    });
   }
 
   void _onTap() {
     final midpoint = (widget.minFraction + widget.maxFraction) / 2;
     final target = (_fraction < midpoint) ? widget.maxFraction : widget.minFraction;
     HapticFeedback.selectionClick();
-    _animDuration = const Duration(milliseconds: 260);
-    _animCurve = Curves.easeOutBack;
+    _animDuration = const Duration(milliseconds: 500);
+    _animCurve = Curves.easeInOutCubic;
     setState(() => _fraction = target);
   }
 
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final midpoint = (widget.minFraction + widget.maxFraction) / 2;
-    final isExpanded = _fraction > midpoint;
+    final isCollapsed = _fraction <= widget.minFraction + 0.01; // Almost fully collapsed
+    final isFullyExpanded = _fraction >= widget.maxFraction - 0.01; // Almost fully expanded
+    
+    // Only show decorations when NOT dragging and fully expanded (not during any transition)
+    final showDecorations = !_isDragging && isFullyExpanded;
 
     return Align(
       alignment: Alignment.bottomCenter,
-      child: GestureDetector(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 90), // Add padding for floating bottom nav bar
+        child: GestureDetector(
         onVerticalDragStart: _onDragStart,
         onVerticalDragUpdate: _onDragUpdate,
         onVerticalDragEnd: _onDragEnd,
@@ -162,42 +169,70 @@ class MapBottomSheetState extends State<MapBottomSheet>
           curve: _animCurve,
           height: screenHeight * _fraction,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isCollapsed ? Colors.transparent : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: widget.borderColor, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 10,
-                offset: const Offset(0, -3),
-              ),
-            ],
+            // CRITICAL FIX: Always provide border (even if transparent) to prevent interpolation
+            border: showDecorations
+                ? Border.all(color: widget.borderColor, width: 2)
+                : Border.all(color: Colors.transparent, width: 0), // Use transparent instead of null
+            // CRITICAL FIX: Always provide empty shadow array instead of null
+            // to prevent interpolation issues during AnimatedContainer transitions
+            // Switching between null and [shadow] caused negative blur radius errors
+            boxShadow: showDecorations
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 10.0,
+                      offset: const Offset(0, -3),
+                      spreadRadius: 0.0,
+                    ),
+                  ]
+                : const [], // Use empty array instead of null
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final available = constraints.biggest.height;
+              final available = constraints.biggest.height.clamp(0.0, double.infinity);
               // Adapt the grab handle size/margins to avoid overflow on tiny heights
-              final handleHeight = available.clamp(0, double.infinity) * 0.15;
-              final safeHandleHeight = handleHeight.clamp(2.0, 8.0);
-              final handleVMargin = (available * 0.10).clamp(4.0, 10.0);
+              // Ensure all values are positive and reasonable
+              final handleHeight = (available * 0.15).clamp(0.0, double.infinity);
+              final safeHandleHeight = handleHeight.clamp(4.0, 8.0);
+              final handleVMargin = (available * 0.10).clamp(6.0, 12.0);
 
+              // When collapsed, show only the drag handle
+              if (isCollapsed) {
+                return Column(
+                  children: [
+                    SizedBox(height: handleVMargin),
+                    // Drag handle only when collapsed
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 56,
+                      height: safeHandleHeight,
+                      decoration: BoxDecoration(
+                        color: widget.collapsedColor,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              // When expanded, show handle + content
               return Column(
                 children: [
                   SizedBox(height: handleVMargin),
-                  // Drag handle that changes color based on state
+                  // Drag handle when expanded
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     width: 56,
                     height: safeHandleHeight,
                     decoration: BoxDecoration(
-                      color: isExpanded
-                          ? widget.expandedColor
-                          : widget.collapsedColor,
+                      color: widget.expandedColor,
                       borderRadius: BorderRadius.circular(40),
                     ),
                   ),
                   SizedBox(height: handleVMargin),
-                  // Ensure content never overflows: make it scrollable when space is tight
+                  // Content area - visible only when expanded
                   Expanded(
                     child: ClipRect(
                       child: SingleChildScrollView(
@@ -212,6 +247,7 @@ class MapBottomSheetState extends State<MapBottomSheet>
             },
           ),
         ),
+        ), // Close Padding
       ),
     );
   }

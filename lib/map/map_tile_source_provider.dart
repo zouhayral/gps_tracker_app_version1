@@ -58,17 +58,23 @@ class MapTileSourceNotifier extends StateNotifier<MapTileSource> {
 
   /// Set the active tile source and persist the choice
   Future<void> setSource(MapTileSource newSource) async {
+    final oldSource = state;
+    
     // Update timestamp to force FlutterMap rebuild with new key
     _lastSwitchTimestamp = DateTime.now().millisecondsSinceEpoch;
     
     if (kDebugMode) {
-      debugPrint('[PROVIDER] 🔄 Updating map tile source to: ${newSource.id} (${newSource.name})');
+      debugPrint('[PROVIDER] 🔄 Switching tile source: ${oldSource.id} → ${newSource.id}');
       debugPrint('[PROVIDER] 🕐 Switch timestamp: $_lastSwitchTimestamp');
     }
     
     // Trigger explicit map rebuild via MapRebuildProvider
     // This ensures FlutterMap's ValueKey changes and forces full reconstruction
+    // Note: This triggers tile provider cache disposal in FlutterMapAdapter
     _ref.read(mapRebuildProvider.notifier).trigger();
+    
+    // Small async delay to smooth provider transition and allow cleanup to complete
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     
     state = newSource;
     
@@ -89,6 +95,7 @@ class MapTileSourceNotifier extends StateNotifier<MapTileSource> {
     // NOTE: We don't clear FMTC cache here to preserve offline functionality
     // The timestamp-based keys in flutter_map_adapter.dart force fresh tile rendering
     if (kDebugMode) {
+      debugPrint('🗺️ Tile provider switched: ${oldSource.id} → ${newSource.id}');
       debugPrint('[PROVIDER] 🎯 Timestamp-based keys will force immediate tile refresh');
     }
   }

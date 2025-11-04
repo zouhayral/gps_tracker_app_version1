@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"android":{"default":{"projectId":"app-gps-version","appId":"1:521212931651:android:34e56d7d06fb32959beef6","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"app-gps-version","configurations":{"android":"1:521212931651:android:34e56d7d06fb32959beef6"}}}}}}

@@ -51,9 +51,18 @@ class _TripsPageState extends ConsumerState<TripsPage> {
       );
     }
     
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    
     return Scaffold(
+      backgroundColor: isDarkMode ? theme.colorScheme.background : Colors.grey[50],
       appBar: AppBar(
-        title: Text(t.tripsTitle),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        title: Text(
+          t.tripsTitle,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           // Filter button with badge indicator
           Stack(
@@ -89,54 +98,97 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     final t = AppLocalizations.of(context);
     if (t == null) return const SizedBox();
     
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.filter_list_outlined,
-              size: 80,
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+            // Modern icon container
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.filter_list_outlined,
+                size: 64,
+                color: theme.colorScheme.primary,
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
               t.filterYourTrips,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
               t.filterDescription,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: _showFilterDialog,
-              icon: const Icon(Icons.filter_list),
-              label: Text(t.applyFilter),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
               ),
             ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _applyQuickFilter,
-              icon: const Icon(Icons.flash_on),
-              label: Text(t.quickAllDevices),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
+            const SizedBox(height: 40),
+            // Modern card with buttons
+            Container(
+              decoration: BoxDecoration(
+                color: isDarkMode ? Colors.grey[850] : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _showFilterDialog,
+                      icon: const Icon(Icons.filter_list),
+                      label: Text(t.applyFilter),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _applyQuickFilter,
+                      icon: const Icon(Icons.flash_on),
+                      label: Text(t.quickAllDevices),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -218,40 +270,63 @@ class _TripsPageState extends ConsumerState<TripsPage> {
   Widget _buildActiveFilterChip(TripFilter filter) {
     final deviceCount = filter.isAllDevices ? 'All Devices' : '${filter.deviceIds.length} Device${filter.deviceIds.length > 1 ? 's' : ''}';
     final dateRange = '${DateFormat('MMM d').format(filter.from)} - ${DateFormat('MMM d').format(filter.to)}';
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+        color: isDarkMode ? Colors.grey[850] : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
           ),
-        ),
+        ],
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.filter_list,
-            size: 20,
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '$deviceCount • $dateRange',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
-                  ),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.filter_list,
+              size: 20,
+              color: theme.colorScheme.primary,
             ),
           ),
-          TextButton.icon(
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  deviceCount,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  dateRange,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
             onPressed: _showFilterDialog,
-            icon: const Icon(Icons.edit, size: 16),
-            label: const Text('Edit'),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+            icon: const Icon(Icons.edit),
+            style: IconButton.styleFrom(
+              backgroundColor: theme.colorScheme.primaryContainer.withOpacity(0.5),
             ),
           ),
         ],
@@ -448,8 +523,14 @@ class _TripsPageState extends ConsumerState<TripsPage> {
         }
       },
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 100, // Extra padding for floating bottom nav bar
+        ),
         itemCount: trips.length + 1, // +1 for summary card
+        cacheExtent: 1000, // Cache more items for smoother scrolling
         itemBuilder: (context, index) {
           // Summary card at top
           if (index == 0) {
@@ -458,7 +539,11 @@ class _TripsPageState extends ConsumerState<TripsPage> {
 
           final t = trips[index - 1];
           final deviceName = _getDeviceName(devices, t.deviceId);
-          return _buildModernTripCard(context, t, deviceName);
+          // Add key for better performance
+          return KeyedSubtree(
+            key: ValueKey('trip_${t.id}_${t.startTime}'),
+            child: _buildModernTripCard(context, t, deviceName),
+          );
         },
       ),
     );
@@ -601,33 +686,55 @@ class _TripsPageState extends ConsumerState<TripsPage> {
     
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-        ),
-        boxShadow: [
-          BoxShadow(
-      color: isDarkMode
-        ? Colors.black26
-        : Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    // Wrap in RepaintBoundary for better performance
+    return RepaintBoundary(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+          ),
+          boxShadow: [
+            BoxShadow(
+        color: isDarkMode
+          ? Colors.black26
+          : Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
           onTap: () {
-            Navigator.push<Widget>(
-              context,
-              MaterialPageRoute<Widget>(
-                builder: (_) => TripDetailsPage(trip: trip),
+            // Navigate to trip details with smooth animation
+            Navigator.of(context, rootNavigator: true).push<Widget>(
+              PageRouteBuilder<Widget>(
+                pageBuilder: (context, animation, secondaryAnimation) => 
+                  TripDetailsPage(trip: trip),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  const curve = Curves.easeInOutCubic;
+                  final curvedAnimation = CurvedAnimation(
+                    parent: animation,
+                    curve: curve,
+                  );
+                  
+                  return FadeTransition(
+                    opacity: curvedAnimation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.0, 0.03),
+                        end: Offset.zero,
+                      ).animate(curvedAnimation),
+                      child: child,
+                    ),
+                  );
+                },
+                transitionDuration: const Duration(milliseconds: 300),
               ),
             );
           },
@@ -788,6 +895,7 @@ class _TripsPageState extends ConsumerState<TripsPage> {
           ),
         ),
       ),
+      ), // Close RepaintBoundary
     );
   }
 

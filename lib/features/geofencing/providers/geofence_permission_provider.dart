@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import '../service/geofence_permission_service.dart';
+import 'package:my_app_gps/features/geofencing/service/geofence_permission_service.dart';
 
 /// Provider for checking current location permission status
 ///
@@ -79,7 +79,7 @@ final permissionDescriptionProvider = Provider<String>((ref) {
   final permissionAsync = ref.watch(geofencePermissionProvider);
   
   return permissionAsync.maybeWhen(
-    data: (perm) => service.getPermissionDescription(perm),
+    data: service.getPermissionDescription,
     loading: () => 'Checking permission...',
     error: (_, __) => 'Unable to check permission',
     orElse: () => 'Unknown permission status',
@@ -174,7 +174,7 @@ class PermissionStateNotifier extends StateNotifier<AsyncValue<LocationPermissio
 
   /// Get comprehensive permission summary
   Future<Map<String, dynamic>> getSummary() async {
-    return await _service.getPermissionSummary();
+    return _service.getPermissionSummary();
   }
 }
 

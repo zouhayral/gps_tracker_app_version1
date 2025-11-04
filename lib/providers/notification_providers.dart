@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:my_app_gps/core/database/dao/devices_dao.dart';
+import 'package:my_app_gps/core/data/services/cached_devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
 import 'package:my_app_gps/core/utils/banner_prefs.dart' show BannerPrefs;
@@ -24,7 +24,7 @@ final notificationsRepositoryProvider =
   
   // Properly await DAO initialization
   final eventsDao = await ref.watch(eventsDaoProvider.future);
-  final devicesDao = await ref.watch(devicesDaoProvider.future);
+  final devicesDao = await ref.watch(cachedDevicesDaoProvider.future);
 
   final repository = NotificationsRepository(
     eventService: eventService,
@@ -435,7 +435,7 @@ final notificationStatsProvider =
 final notificationsBootInitializer = FutureProvider<void>((ref) async {
   // Await DAO readiness
   await ref.watch(eventsDaoProvider.future);
-  await ref.watch(devicesDaoProvider.future);
+  await ref.watch(cachedDevicesDaoProvider.future);
 
   // Now initialize the repository (sets up websocket listeners etc.)
   await ref.read(notificationsRepositoryProvider.future);

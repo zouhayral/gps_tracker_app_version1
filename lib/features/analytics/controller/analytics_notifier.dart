@@ -184,17 +184,8 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
     state = const AsyncValue.loading();
 
     try {
-      // Determine which method to use based on the date range
-      final daysDifference = to.difference(from).inDays;
-      
-      AnalyticsReport report;
-      if (daysDifference <= 1) {
-        report = await _repository.fetchDailyReport(from, deviceId);
-      } else if (daysDifference <= 7) {
-        report = await _repository.fetchWeeklyReport(from, deviceId);
-      } else {
-        report = await _repository.fetchMonthlyReport(from, deviceId);
-      }
+  // Always fetch using explicit range to match the UI selection exactly
+      final report = await _repository.fetchRangeReport(from, to, deviceId);
 
       // Check if still mounted before updating state
       if (!mounted) {
@@ -234,16 +225,8 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
     if (currentState is AsyncData<AnalyticsReport?>) {
       final report = currentState.value;
       if (report != null) {
-        // Determine which period to reload based on the current report's date range
-        final daysDifference = report.endTime.difference(report.startTime).inDays;
-        
-        if (daysDifference <= 1) {
-          await loadDaily(deviceId);
-        } else if (daysDifference <= 7) {
-          await loadWeekly(deviceId);
-        } else {
-          await loadMonthly(deviceId);
-        }
+  // Re-fetch the exact same range shown in the UI for consistency
+        await loadRange(deviceId, report.startTime, report.endTime);
       }
     }
   }
@@ -252,5 +235,19 @@ class AnalyticsNotifier extends StateNotifier<AsyncValue<AnalyticsReport?>> {
   void clear() {
     _log.debug('Clearing analytics state');
     state = const AsyncValue.data(null);
+  }
+
+  /// Load report for an explicit range. Convenience for UI and refresh.
+  Future<void> loadRange(int deviceId, DateTime from, DateTime to) async {
+    _log.debug('Loading explicit range report for device $deviceId: $from → $to');
+    state = const AsyncValue.loading();
+    try {
+      final report = await _repository.fetchRangeReport(from, to, deviceId);
+      if (!mounted) return;
+      state = AsyncValue.data(report);
+    } catch (e, st) {
+      if (!mounted) return;
+      state = AsyncValue.error(e, st);
+    }
   }
 }

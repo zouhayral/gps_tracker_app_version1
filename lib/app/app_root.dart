@@ -6,16 +6,23 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/app/app_router.dart';
 import 'package:my_app_gps/core/data/vehicle_data_repository.dart';
+import 'package:my_app_gps/core/performance/icon_precache_service.dart';
 import 'package:my_app_gps/data/models/event.dart';
 // Debug HUD disabled globally; overlay imports removed
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
+import 'package:my_app_gps/features/geofencing/service/geofence_position_feeder.dart';
+import 'package:my_app_gps/features/geofencing/diagnostics/geofence_health_overlay.dart';
 import 'package:my_app_gps/features/localization/locale_provider.dart';
 import 'package:my_app_gps/features/map/view/marker_assets.dart';
+
 import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/providers/notification_providers.dart';
 import 'package:my_app_gps/repositories/trip_repository.dart';
 import 'package:my_app_gps/services/notification_service.dart';
 import 'package:my_app_gps/theme/app_theme.dart';
+
+// Debug toggle for Geofence Health overlay
+const bool _showGeofenceOverlay = true;
 
 /// Lifecycle observer to automatically clean up expired trip cache
 /// when the app goes to background or becomes inactive
@@ -92,6 +99,9 @@ class _AppRootState extends ConsumerState<AppRoot> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         precacheCommonMarkers(context);
+        
+        // ✨ NEW OPTIMIZATION: Precache Material Icon glyphs
+        IconPrecacheService.instance.warmup(context);
       }
     });
 
@@ -111,6 +121,41 @@ class _AppRootState extends ConsumerState<AppRoot> {
         } catch (e) {
           if (kDebugMode) {
             debugPrint('[AppRoot] ⚠️ Failed to initialize geofence notifications: $e');
+          }
+        }
+        
+        // 🎯 Initialize geofence position feeder
+        // This connects VehicleDataRepository position updates to GeofenceMonitor
+        try {
+          ref.read(geofencePositionFeederProvider);
+          if (kDebugMode) {
+            debugPrint('[AppRoot] 📍 Geofence position feeder initializing');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[AppRoot] ⚠️ Failed to initialize geofence position feeder: $e');
+          }
+        }
+
+        // ▶️ Ensure geofence monitor auto-starts for authenticated users
+        try {
+          ref.read(geofenceAutoMonitorProvider);
+          if (kDebugMode) {
+            debugPrint('[AppRoot] 🚀 Geofence auto-monitor initializer wired');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[AppRoot] ⚠️ Failed to wire auto-monitor initializer: $e');
+          }
+        }
+
+        // 🛰 Attach Geofence Health overlay in debug
+        if (kDebugMode && _showGeofenceOverlay) {
+          try {
+            GeofenceHealthOverlay.attach(context);
+            debugPrint('[AppRoot] 🛰 Geofence Health overlay attached');
+          } catch (e) {
+            debugPrint('[AppRoot] ⚠️ Failed to attach Geofence Health overlay: $e');
           }
         }
       }

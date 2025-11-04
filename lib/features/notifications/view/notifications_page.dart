@@ -58,10 +58,18 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final t = AppLocalizations.of(context)!;
     // Show paged notifications list without search/filter bar
     final events = ref.watch(pagedNotificationsProvider);
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDarkMode ? theme.colorScheme.background : Colors.grey[50],
       appBar: AppBar(
-        title: Text(t.alertsTitle),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        title: Text(
+          t.alertsTitle,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           // Unread count badge
           NotificationBadge(
@@ -115,7 +123,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       },
       child: ListView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        padding: const EdgeInsets.only(
+          top: 12,
+          left: 12,
+          right: 12,
+          bottom: 100, // Extra padding for floating bottom nav bar
+        ),
         itemCount: events.length,
         itemBuilder: (context, index) {
           final event = events[index];

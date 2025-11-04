@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:my_app_gps/core/performance/performance_traces.dart';
 import 'package:my_app_gps/features/map/data/position_model.dart';
 import 'package:my_app_gps/services/auth_service.dart';
 import 'package:my_app_gps/services/ws_connect_stub.dart'
@@ -11,6 +12,17 @@ import 'package:my_app_gps/services/ws_connect_stub.dart'
     if (dart.library.html) 'package:my_app_gps/services/ws_connect_web.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
+
+/// Top-level isolate function for parsing large WebSocket JSON payloads
+/// This must be top-level to work with compute()
+Map<String, dynamic>? _parseJsonIsolate(String jsonText) {
+  try {
+    final decoded = jsonDecode(jsonText);
+    return decoded is Map<String, dynamic> ? decoded : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Provides a singleton TraccarSocketService.
 final traccarSocketServiceProvider = Provider<TraccarSocketService>((ref) {
@@ -125,7 +137,7 @@ class TraccarSocketService {
       if (_lastPayloadHash != null && currHash == _lastPayloadHash) {
         if (kDebugMode && verboseSocketLogs) {
           // ignore: avoid_print
-          print('[SOCKET] � Duplicate payload skipped (hash=$currHash)');
+          print('[SOCKET] 🔁 Duplicate payload skipped (hash=$currHash)');
         }
         return;
       }
@@ -133,74 +145,106 @@ class TraccarSocketService {
 
       if (kDebugMode && verboseSocketLogs) {
         // ignore: avoid_print
-        print('[SOCKET] �📨 RAW WebSocket message received:');
+        print('[SOCKET] 📨 RAW WebSocket message received:');
         print(
             '[SOCKET] ${text.length > 500 ? '${text.substring(0, 500)}...' : text}',);
       }
 
+      // 🚀 START PERFORMANCE TRACE
+      PerformanceTraces().startJsonParseTrace(text.length);
+
+      // 🚀 Async optimization: Use compute() isolate for large payloads (>1KB)
+      // This prevents main thread blocking for complex JSON parsing
+      if (text.length > 1024) {
+        compute(_parseJsonIsolate, text).then((jsonObj) {
+          if (jsonObj != null) {
+            // 🚀 STOP TRACE: Used isolate
+            final deviceCount = (jsonObj['positions'] as List?)?.length ?? 0;
+            PerformanceTraces().stopJsonParseTrace(
+              usedIsolate: true,
+              deviceCount: deviceCount,
+            );
+            _processWebSocketMessage(jsonObj);
+          }
+        });
+        return;
+      }
+
+      // Small payloads: parse synchronously (faster than isolate overhead)
       final jsonObj = jsonDecode(text);
       if (jsonObj is Map<String, dynamic>) {
-        // Diagnostic: Log all keys in the WebSocket message
-        if (kDebugMode && verboseSocketLogs) {
-          final keys = jsonObj.keys.toList();
-          // ignore: avoid_print
-          print('[SOCKET] 🔑 Message contains keys: ${keys.join(', ')}');
-        }
-
-        // Event guard logging (skip processing if no events key when desired)
-        if (!jsonObj.containsKey('events')) {
-          if (kDebugMode && verboseSocketLogs) {
-            // ignore: avoid_print
-            print('[SOCKET] ⚠ No events key - skipping event handling');
-          }
-          // Note: do NOT return here as other consumers rely on positions/devices
-        }
-
-        // positions
-        if (jsonObj.containsKey('positions')) {
-          final list = (jsonObj['positions'] as List<dynamic>?)
-                  ?.whereType<Map<String, dynamic>>()
-                  .toList() ??
-              const <Map<String, dynamic>>[];
-          final positions = list.map(Position.fromJson).toList();
-          if (kDebugMode && verboseSocketLogs) {
-            // ignore: avoid_print
-            print(
-                '[SOCKET] 📍 Received ${positions.length} positions from WebSocket',);
-            for (final pos in positions) {
-              print(
-                  '[SOCKET]   Device ${pos.deviceId}: ignition=${pos.attributes['ignition']}, speed=${pos.speed}',);
-            }
-          }
-          _controller?.add(TraccarSocketMessage.positions(positions));
-        }
-        // events (opaque here)
-        if (jsonObj.containsKey('events')) {
-          final eventsCount = jsonObj['events'] is List 
-              ? (jsonObj['events'] as List).length 
-              : 1;
-          if (kDebugMode && verboseSocketLogs) {
-            // ignore: avoid_print
-            print('[SOCKET] 🔔 ✅ EVENTS RECEIVED from WebSocket ($eventsCount events)');
-            print('[SOCKET] Events payload: ${jsonObj['events']}');
-          }
-          _controller?.add(TraccarSocketMessage.events(jsonObj['events']));
-        }
-        // devices updates (optional)
-        if (jsonObj.containsKey('devices')) {
-          if (kDebugMode && verboseSocketLogs) {
-            // ignore: avoid_print
-            print('[SOCKET] 📱 Received device updates from WebSocket');
-            print('[SOCKET] Devices payload: ${jsonObj['devices']}');
-          }
-          _controller?.add(TraccarSocketMessage.devices(jsonObj['devices']));
-        }
+        // 🚀 STOP TRACE: Sync parse
+        final deviceCount = (jsonObj['positions'] as List?)?.length ?? 0;
+        PerformanceTraces().stopJsonParseTrace(
+          usedIsolate: false,
+          deviceCount: deviceCount,
+        );
+        _processWebSocketMessage(jsonObj);
       }
     } catch (e) {
       if (kDebugMode) {
         // ignore: avoid_print
         print('[SOCKET] ❌ Parse error: $e');
       }
+    }
+  }
+
+  /// Process parsed WebSocket message (extracted for reuse with compute() isolate)
+  void _processWebSocketMessage(Map<String, dynamic> jsonObj) {
+    // Diagnostic: Log all keys in the WebSocket message
+    if (kDebugMode && verboseSocketLogs) {
+      final keys = jsonObj.keys.toList();
+      // ignore: avoid_print
+      print('[SOCKET] 🔑 Message contains keys: ${keys.join(', ')}');
+    }
+
+    // Event guard logging (skip processing if no events key when desired)
+    if (!jsonObj.containsKey('events')) {
+      if (kDebugMode && verboseSocketLogs) {
+        // ignore: avoid_print
+        print('[SOCKET] ⚠ No events key - skipping event handling');
+      }
+      // Note: do NOT return here as other consumers rely on positions/devices
+    }
+
+    // positions
+    if (jsonObj.containsKey('positions')) {
+      final list = (jsonObj['positions'] as List<dynamic>?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          const <Map<String, dynamic>>[];
+      final positions = list.map(Position.fromJson).toList();
+      if (kDebugMode && verboseSocketLogs) {
+        // ignore: avoid_print
+        print(
+            '[SOCKET] 📍 Received ${positions.length} positions from WebSocket',);
+        for (final pos in positions) {
+          print(
+              '[SOCKET]   Device ${pos.deviceId}: ignition=${pos.attributes['ignition']}, speed=${pos.speed}',);
+        }
+      }
+      _controller?.add(TraccarSocketMessage.positions(positions));
+    }
+    // events (opaque here)
+    if (jsonObj.containsKey('events')) {
+      final eventsCount = jsonObj['events'] is List 
+          ? (jsonObj['events'] as List).length 
+          : 1;
+      if (kDebugMode && verboseSocketLogs) {
+        // ignore: avoid_print
+        print('[SOCKET] 🔔 ✅ EVENTS RECEIVED from WebSocket ($eventsCount events)');
+        print('[SOCKET] Events payload: ${jsonObj['events']}');
+      }
+      _controller?.add(TraccarSocketMessage.events(jsonObj['events']));
+    }
+    // devices updates (optional)
+    if (jsonObj.containsKey('devices')) {
+      if (kDebugMode && verboseSocketLogs) {
+        // ignore: avoid_print
+        print('[SOCKET] 📱 Received device updates from WebSocket');
+        print('[SOCKET] Devices payload: ${jsonObj['devices']}');
+      }
+      _controller?.add(TraccarSocketMessage.devices(jsonObj['devices']));
     }
   }
 
@@ -281,4 +325,23 @@ class TraccarSocketMessage {
       TraccarSocketMessage._('devices', payload: devices);
   factory TraccarSocketMessage.error(String error) =>
       TraccarSocketMessage._('error', payload: error);
+}
+
+extension TraccarSocketPing on TraccarSocketService {
+  /// Sends a tiny heartbeat frame over the WebSocket connection.
+  ///
+  /// Notes:
+  /// - On mobile (IO), a low-level ping frame is also issued automatically by
+  ///   IOWebSocketChannel via pingInterval; this method is complementary and
+  ///   harmless if the server ignores unknown messages.
+  /// - On web, browsers don't expose low-level pings, so this small text frame
+  ///   helps detect broken TCPs/NATs; Traccar typically ignores unknown keys.
+  void ping() {
+    try {
+      // Keep the payload small and JSON-like to be well-formed and ignorable
+      _channel?.sink.add('{"ping":1}');
+    } catch (_) {
+      // Non-fatal; ping is best-effort
+    }
+  }
 }

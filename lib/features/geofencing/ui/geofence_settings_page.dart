@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/navigation/safe_navigation.dart';
@@ -9,6 +10,7 @@ import 'package:my_app_gps/features/geofencing/models/geofence_optimizer_state.d
 import 'package:my_app_gps/features/geofencing/providers/geofence_optimizer_provider.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_permission_provider.dart';
 import 'package:my_app_gps/features/geofencing/providers/geofence_providers.dart';
+import 'package:my_app_gps/features/geofencing/service/geofence_position_feeder.dart';
 import 'package:my_app_gps/features/geofencing/ui/widgets/permission_prompt_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -95,6 +97,26 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
       appBar: AppBar(
         title: Text(t?.geofenceSettings ?? 'Geofence Settings'),
         actions: [
+          // Debug diagnostics button
+          if (kDebugMode)
+            IconButton(
+              icon: const Icon(Icons.bug_report),
+              tooltip: 'Print Diagnostics',
+              onPressed: () {
+                final controller = ref.read(geofenceMonitorProvider.notifier);
+                controller.printDiagnostics();
+                
+                // Just initialize the feeder to check if it's accessible
+                ref.read(geofencePositionFeederProvider);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('📋 Diagnostics printed to console - check debug output'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.info_outline),
             tooltip: t?.aboutGeofenceSettings ?? 'About Geofence Settings',
@@ -222,7 +244,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(t?.geofenceMonitoringStopped ?? '⏸️ Geofence monitoring stopped'),
-                        duration: Duration(seconds: 2),
+                        duration: const Duration(seconds: 2),
                       ),
                     );
                   }
@@ -312,7 +334,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(t?.foregroundOnlyModeActivated ?? '⚠️ Foreground-only mode activated'),
-                      duration: Duration(seconds: 2),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }
@@ -439,7 +461,7 @@ class _GeofenceSettingsPageState extends ConsumerState<GeofenceSettingsPage> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(t?.adaptiveOptimizationDisabled ?? '⏸️ Adaptive optimization disabled'),
-                      duration: Duration(seconds: 2),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }

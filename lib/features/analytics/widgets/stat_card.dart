@@ -58,8 +58,8 @@ class _StatCardState extends State<StatCard>
 
     // Fade-in animation
     _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
+      begin: 0,
+      end: 1,
     ).animate(
       CurvedAnimation(
         parent: _controller,
@@ -259,8 +259,8 @@ class _StatCardVerticalState extends State<StatCardVertical>
     );
 
     _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
+      begin: 0,
+      end: 1,
     ).animate(
       CurvedAnimation(
         parent: _controller,

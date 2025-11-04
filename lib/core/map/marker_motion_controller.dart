@@ -24,19 +24,24 @@ class MarkerMotionController {
     this.maxExtrapolation = const Duration(seconds: 8),
     this.minSpeedKmhForExtrapolation = 3.0,
   }) {
-    // Disable periodic ticker in tests to avoid pending timers in widget tests.
-    _ticker = testMode ? null : Timer.periodic(motionInterval, _onTick);
+    // Lazy scheduling: only tick when there are active devices.
+    // Also disable timers entirely in tests to avoid pending timers.
+    if (!testMode) {
+      _maybeScheduleTick();
+    }
   }
 
   // Config
-  final Duration motionInterval; // ~200ms
+  /// Target tick cadence for motion updates (default ~200ms for balanced smoothness)
+  Duration motionInterval; // ~200ms
   final Duration interpolationDuration; // ~1200ms (between real updates)
   final Curve curve;
   final bool enableExtrapolation;
   final Duration maxExtrapolation;
   final double minSpeedKmhForExtrapolation;
 
-  late final Timer? _ticker;
+  /// Single-shot timer used for on-demand scheduling (avoids idle wakeups)
+  Timer? _ticker;
   final ValueNotifier<int> _tick = ValueNotifier<int>(0);
   
   // Track devices that should be processed on each tick
@@ -102,10 +107,13 @@ class MarkerMotionController {
     // Ensure device is marked active for ticking
     _activeDevices.add(deviceId);
 
+  // Schedule ticking if not already scheduled
+  if (!testMode) _maybeScheduleTick();
+
     _logMotion('[MOTION] Device #$deviceId interpolating: (${from.latitude.toStringAsFixed(6)}, ${from.longitude.toStringAsFixed(6)})  (${target.latitude.toStringAsFixed(6)}, ${target.longitude.toStringAsFixed(6)}) over ${interpolationDuration.inMilliseconds} ms');
   }
 
-  void _onTick(Timer _) {
+  void _onTick() {
     final now = DateTime.now();
     var anyActive = false;
 
@@ -195,6 +203,40 @@ class MarkerMotionController {
     // Notify global listeners only if any device is actively moving
     if (anyActive) {
       _tick.value = _tick.value + 1;
+    }
+
+    // Reschedule next tick if there are still active devices
+    if (!testMode) _maybeScheduleTick(force: anyActive && _activeDevices.isNotEmpty);
+  }
+
+  /// Schedules the next motion tick if needed using a single-shot timer.
+  ///
+  /// This design avoids a constantly running periodic timer when there are no
+  /// active devices, reducing CPU wakeups and GPU overdraw from unnecessary
+  /// repaints.
+  void _maybeScheduleTick({bool force = false}) {
+    if (_ticker?.isActive == true && !force) return;
+    if (_activeDevices.isEmpty) {
+      // Nothing to animate, ensure timer is cancelled
+      _ticker?.cancel();
+      _ticker = null;
+      return;
+    }
+    _ticker?.cancel();
+    _ticker = Timer(motionInterval, _onTick);
+  }
+
+  /// Allows external systems (e.g., Adaptive LOD) to adjust the motion
+  /// tick interval at runtime. Takes effect on the next scheduled tick.
+  void setMotionInterval(Duration interval) {
+    if (interval == motionInterval) return;
+    motionInterval = interval;
+    if (!testMode) {
+      // Re-arm the timer with the new interval if currently scheduled
+      if (_ticker?.isActive == true) {
+        _ticker?.cancel();
+        _ticker = Timer(motionInterval, _onTick);
+      }
     }
   }
 

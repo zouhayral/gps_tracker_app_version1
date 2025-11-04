@@ -31,39 +31,21 @@ class MarkerAssets {
           onlineIcon,
           size: size,
           color: onlineColor,
-          shadows: const [
-            Shadow(
-              color: Colors.black54,
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
+          // Removed shadows to prevent negative blur radius errors during animations
         );
       case MarkerStatus.offline:
         return Icon(
           offlineIcon,
           size: size,
           color: offlineColor,
-          shadows: const [
-            Shadow(
-              color: Colors.black54,
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
+          // Removed shadows to prevent negative blur radius errors during animations
         );
       case MarkerStatus.disconnected:
         return Icon(
           disconnectedIcon,
           size: size,
           color: disconnectedColor,
-          shadows: const [
-            Shadow(
-              color: Colors.black54,
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
+          // Removed shadows to prevent negative blur radius errors during animations
         );
     }
   }

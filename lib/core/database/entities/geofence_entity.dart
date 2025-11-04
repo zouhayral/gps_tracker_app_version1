@@ -19,6 +19,8 @@ class GeofenceEntity {
     required this.geofenceId,
     required this.name,
     this.id = 0,
+    this.userId,
+    this.enabled = true,
     this.description,
     this.area,
     this.calendarId,
@@ -40,6 +42,14 @@ class GeofenceEntity {
   @Index()
   String name;
 
+  /// User ID who owns this geofence - indexed for filtering by user
+  @Index()
+  String? userId;
+
+  /// Whether this geofence is currently enabled - indexed for active geofence queries
+  @Index()
+  bool enabled;
+
   /// Optional description
   String? description;
 
@@ -52,7 +62,8 @@ class GeofenceEntity {
   int? calendarId;
 
   /// JSON string for additional attributes
-  /// Now stores: userId, enabled, monitoredDevices, triggers, notifications, etc.
+  /// Now stores: monitoredDevices, triggers, notifications, etc.
+  /// Note: userId and enabled moved to separate indexed fields for query performance
   String attributesJson;
 
   /// Factory constructor from domain entity
@@ -64,25 +75,44 @@ class GeofenceEntity {
     int? calendarId,
     Map<String, dynamic>? attributes,
   }) {
+    // Extract userId and enabled from attributes for indexed fields
+    final userId = attributes?['userId'] as String?;
+    final enabled = attributes?['enabled'] as bool? ?? true;
+    
+    // Remove userId and enabled from attributes JSON since they're now separate fields
+    Map<String, dynamic>? filteredAttributes;
+    if (attributes != null) {
+      filteredAttributes = Map<String, dynamic>.from(attributes)
+        ..remove('userId')
+        ..remove('enabled');
+    }
+    
     return GeofenceEntity(
       geofenceId: geofenceId,
       name: name,
+      userId: userId,
+      enabled: enabled,
       description: description,
       area: area,
       calendarId: calendarId,
-      attributesJson: attributes != null ? _encodeAttributes(attributes) : '{}',
+      attributesJson: filteredAttributes != null ? _encodeAttributes(filteredAttributes) : '{}',
     );
   }
 
   /// Convert to domain entity
   Map<String, dynamic> toDomain() {
+    // Merge userId and enabled back into attributes for domain model
+    final attributes = _decodeAttributes(attributesJson);
+    attributes['userId'] = userId;
+    attributes['enabled'] = enabled;
+    
     return {
       'id': geofenceId,
       'name': name,
       'description': description,
       'area': area,
       'calendarId': calendarId,
-      'attributes': _decodeAttributes(attributesJson),
+      'attributes': attributes,
     };
   }
 

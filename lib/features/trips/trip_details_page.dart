@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:my_app_gps/core/map/modern_marker_flutter_map.dart';
 import 'package:my_app_gps/data/models/trip.dart';
 import 'package:my_app_gps/features/trips/trip_playback_controls.dart';
+import 'package:my_app_gps/l10n/app_localizations.dart';
 import 'package:my_app_gps/map/map_tile_source_provider.dart';
 import 'package:my_app_gps/map/tile_network_client.dart';
 import 'package:my_app_gps/providers/trip_providers.dart';
@@ -136,6 +137,7 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
     final playback = ref.watch(tripPlaybackProvider);
     final tileSource = ref.watch(mapTileSourceProvider);
     final ts = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
+    final t = AppLocalizations.of(context);
 
     // Brand colors
     const accent = Color(0xFF5C6B2F); // olive
@@ -149,9 +151,9 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
         elevation: 0,
         backgroundColor: bg,
         foregroundColor: accent,
-        title: const Text(
-          'Trip Details',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          t?.tripDetails ?? 'Trip Details',
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       body: SingleChildScrollView(
@@ -169,10 +171,10 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
             ),
             const SizedBox(height: 8),
             // Stats rows
-            _TripStatRow(icon: Icons.route, label: 'Distance', value: widget.trip.formattedDistanceKm),
-            _TripStatRow(icon: Icons.speed, label: 'Avg Speed', value: widget.trip.formattedAvgSpeed),
-            _TripStatRow(icon: Icons.schedule, label: 'Start Time', value: widget.trip.formattedStartTime),
-            _TripStatRow(icon: Icons.flag, label: 'End Time', value: widget.trip.formattedEndTime),
+            _TripStatRow(icon: Icons.route, label: t?.distance ?? 'Distance', value: widget.trip.formattedDistanceKm),
+            _TripStatRow(icon: Icons.speed, label: t?.avgSpeed ?? 'Avg Speed', value: widget.trip.formattedAvgSpeed),
+            _TripStatRow(icon: Icons.schedule, label: t?.startTime ?? 'Start Time', value: widget.trip.formattedStartTime),
+            _TripStatRow(icon: Icons.flag, label: t?.endTime ?? 'End Time', value: widget.trip.formattedEndTime),
             const SizedBox(height: 20),
 
             // Map Card
@@ -246,24 +248,26 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
 
                     return Stack(
                       children: [
-                        FlutterMap(
-                          mapController: _animatedMapController.mapController,
-                          options: const MapOptions(
-                            initialCenter: LatLng(0, 0),
-                            initialZoom: 2,
-                            maxZoom: 18,
-                          ),
-                          children: [
-                            TileLayer(
-                              key: ValueKey('trip_tiles_${tileSource.id}_${url.hashCode}_$ts'),
-                              urlTemplate: url,
-                              userAgentPackageName: TileNetworkClient.userAgent,
-                              maxZoom: tileSource.maxZoom.toDouble(),
-                              minZoom: tileSource.minZoom.toDouble(),
+                        RepaintBoundary(
+                          child: FlutterMap(
+                            mapController: _animatedMapController.mapController,
+                            options: const MapOptions(
+                              initialCenter: LatLng(0, 0),
+                              initialZoom: 2,
+                              maxZoom: 18,
                             ),
-                            PolylineLayer(polylines: [polyline]),
-                            if (markers.isNotEmpty) MarkerLayer(markers: markers),
-                          ],
+                            children: [
+                              TileLayer(
+                                key: ValueKey('trip_tiles_${tileSource.id}_${url.hashCode}_$ts'),
+                                urlTemplate: url,
+                                userAgentPackageName: TileNetworkClient.userAgent,
+                                maxZoom: tileSource.maxZoom.toDouble(),
+                                minZoom: tileSource.minZoom.toDouble(),
+                              ),
+                              PolylineLayer(polylines: [polyline]),
+                              if (markers.isNotEmpty) MarkerLayer(markers: markers),
+                            ],
+                          ),
                         ),
                         // Fullscreen toggle (top-left)
                         Positioned(
@@ -325,9 +329,9 @@ class _TripDetailsPageState extends ConsumerState<TripDetailsPage> with TickerPr
                                       size: 18,
                                     ),
                                     const SizedBox(width: 6),
-                                    const Text(
-                                      'Follow',
-                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                    Text(
+                                      t?.follow ?? 'Follow',
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                                     ),
                                   ],
                                 ),
@@ -467,6 +471,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
     final positionsAsync = ref.watch(tripPositionsProvider(widget.trip));
     final tileSource = ref.watch(mapTileSourceProvider);
     final ts = ref.read(mapTileSourceProvider.notifier).lastSwitchTimestamp;
+    final t = AppLocalizations.of(context);
     const accent = Color(0xFF5C6B2F);
 
     return Scaffold(
@@ -523,20 +528,22 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
 
             return Stack(
               children: [
-                FlutterMap(
-                  mapController: _animatedMapController.mapController,
-                  options: const MapOptions(initialCenter: LatLng(0, 0), initialZoom: 2, maxZoom: 18),
-                  children: [
-                    TileLayer(
-                      key: ValueKey('trip_tiles_full_${tileSource.id}_${url.hashCode}_$ts'),
-                      urlTemplate: url,
-                      userAgentPackageName: TileNetworkClient.userAgent,
-                      maxZoom: tileSource.maxZoom.toDouble(),
-                      minZoom: tileSource.minZoom.toDouble(),
-                    ),
-                    PolylineLayer(polylines: [polyline]),
-                    if (markers.isNotEmpty) MarkerLayer(markers: markers),
-                  ],
+                RepaintBoundary(
+                  child: FlutterMap(
+                    mapController: _animatedMapController.mapController,
+                    options: const MapOptions(initialCenter: LatLng(0, 0), initialZoom: 2, maxZoom: 18),
+                    children: [
+                      TileLayer(
+                        key: ValueKey('trip_tiles_full_${tileSource.id}_${url.hashCode}_$ts'),
+                        urlTemplate: url,
+                        userAgentPackageName: TileNetworkClient.userAgent,
+                        maxZoom: tileSource.maxZoom.toDouble(),
+                        minZoom: tileSource.minZoom.toDouble(),
+                      ),
+                      PolylineLayer(polylines: [polyline]),
+                      if (markers.isNotEmpty) MarkerLayer(markers: markers),
+                    ],
+                  ),
                 ),
                 // Exit button
                 Positioned(
@@ -576,7 +583,7 @@ class _TripMapFullscreenPageState extends ConsumerState<TripMapFullscreenPage> w
                               size: 18,
                             ),
                             const SizedBox(width: 6),
-                            const Text('Follow', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            Text(t?.follow ?? 'Follow', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ),

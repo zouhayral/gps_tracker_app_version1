@@ -146,14 +146,7 @@ class ClusterMarkerGenerator {
         color: Colors.white,
         fontSize: fontSize,
         fontWeight: FontWeight.bold,
-        shadows: [
-          // Text shadow for better contrast
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            offset: const Offset(0, 1),
-            blurRadius: 2,
-          ),
-        ],
+        // Removed shadows to prevent negative blur radius errors during animations
       ),
     );
 

@@ -7,6 +7,7 @@ import 'package:my_app_gps/core/database/dao/devices_dao.dart';
 import 'package:my_app_gps/core/database/dao/events_dao.dart';
 import 'package:my_app_gps/core/database/entities/event_entity.dart';
 import 'package:my_app_gps/core/diagnostics/dev_diagnostics.dart';
+import 'package:my_app_gps/core/lifecycle/stream_lifecycle_manager.dart';
 import 'package:my_app_gps/data/models/event.dart';
 import 'package:my_app_gps/services/customer/customer_websocket.dart';
 import 'package:my_app_gps/services/event_service.dart';
@@ -45,14 +46,19 @@ class NotificationsRepository {
   final DevicesDaoBase _devicesDao;
   final Ref _ref;
 
-  // Stream controller for emitting events to UI
-  final _eventsController = StreamController<List<Event>>.broadcast();
-  // Stream controller for emitting individual enriched events (banner usage)
-  final _newEventsController = StreamController<Event>.broadcast();
+  // 🧹 LIFECYCLE: Unified stream and subscription manager
+  final _lifecycle = StreamLifecycleManager(name: 'NotificationsRepo');
 
-  // WebSocket subscription
-  StreamSubscription<CustomerWebSocketMessage>? _wsSubscription;
-  // Vehicle repo backfill subscription (raw event maps rebroadcast on reconnect)
+  // Stream controller for emitting events to UI - TRACKED
+  late final _eventsController = _lifecycle.trackController(
+    StreamController<List<Event>>.broadcast(),
+  );
+  // Stream controller for emitting individual enriched events (banner usage) - TRACKED
+  late final _newEventsController = _lifecycle.trackController(
+    StreamController<Event>.broadcast(),
+  );
+
+  // Vehicle repo backfill subscription - will be tracked when created
   StreamSubscription<Map<String, dynamic>>? _vehicleEventSubscription;
   // Provider subscription to customerWebSocketProvider to avoid dispose race
   ProviderSubscription<AsyncValue<CustomerWebSocketMessage>>?
@@ -139,11 +145,13 @@ class NotificationsRepository {
       // Also listen to VehicleDataRepository.onEvent to capture backfilled events
       _listenToVehicleRepoEvents();
 
-      // Periodically persist the dedup set to disk and prune old entries
+      // Periodically persist the dedup set to disk and prune old entries - TRACKED
       _recentIdsCleanupTimer?.cancel();
-      _recentIdsCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-        unawaited(_persistRecentEventIds());
-      });
+      _recentIdsCleanupTimer = _lifecycle.trackTimer(
+        Timer.periodic(const Duration(minutes: 5), (_) {
+          unawaited(_persistRecentEventIds());
+        }),
+      );
     } catch (e) {
       _log('❌ Failed to initialize repository: $e');
     }
@@ -411,8 +419,8 @@ class NotificationsRepository {
 
       // Close any existing subscription before creating a new one
       _wsProviderSubscription?.close();
-      _wsSubscription?.cancel();
 
+      // Track provider subscription with lifecycle manager
       _wsProviderSubscription =
           _ref.listen<AsyncValue<CustomerWebSocketMessage>>(
         customerWebSocketProvider,
@@ -441,6 +449,8 @@ class NotificationsRepository {
         },
         fireImmediately: false,
       );
+      // Note: ProviderSubscription doesn't have a StreamSubscription interface,
+      // so we'll handle it manually in dispose
 
       _log('✅ WebSocket subscription (ref.listen) initiated');
     } catch (e) {
@@ -458,16 +468,19 @@ class NotificationsRepository {
       _log('🧩 Subscribing to VehicleDataRepository.onEvent');
       _vehicleEventSubscription?.cancel();
       final vehicleRepo = _ref.read(vehicleDataRepositoryProvider);
-      _vehicleEventSubscription = vehicleRepo.onEvent.listen((raw) {
-        if (_disposed) return;
-        try {
-          final event = Event.fromJson(raw);
-          // Reuse common addEvent path (enriches, persists, updates cache, anchor, notifications)
-          unawaited(addEvent(event));
-        } catch (e) {
-          _log('⚠️ Failed to parse VehicleRepo event: $e');
-        }
-      });
+      // Track vehicle event subscription with lifecycle manager
+      _vehicleEventSubscription = _lifecycle.track(
+        vehicleRepo.onEvent.listen((raw) {
+          if (_disposed) return;
+          try {
+            final event = Event.fromJson(raw);
+            // Reuse common addEvent path (enriches, persists, updates cache, anchor, notifications)
+            unawaited(addEvent(event));
+          } catch (e) {
+            _log('⚠️ Failed to parse VehicleRepo event: $e');
+          }
+        }),
+      );
       _log('✅ VehicleRepo events subscription started');
     } catch (e) {
       _log('⚠️ Failed to subscribe to VehicleRepo events: $e');
@@ -967,21 +980,22 @@ class NotificationsRepository {
     // Persist dedup state before cleanup
     unawaited(_persistRecentEventIds());
 
-    // Cancel WebSocket subscriptions
-    _wsSubscription?.cancel();
-    _wsProviderSubscription?.close();
-    _vehicleEventSubscription?.cancel();
+    // 🧹 LIFECYCLE: Dispose all tracked resources
+    // This handles: _vehicleEventSubscription, _recentIdsCleanupTimer,
+    // _eventsController, _newEventsController
+    _lifecycle.disposeAll();
 
-    // Close stream controllers
-    _eventsController.close();
-    _newEventsController.close();
-    _recentIdsCleanupTimer?.cancel();
+    // Manually close ProviderSubscription (not compatible with StreamSubscription interface)
+    _wsProviderSubscription?.close();
 
     // Clear caches
     _cachedEvents.clear();
     _deviceNameCache.clear();
     _recentEventIds.clear();
 
-    _log('✅ Repository disposed');
+    // Log final cleanup status
+    _lifecycle.logStatus();
+
+    _log('✅ Repository disposed successfully');
   }
 }

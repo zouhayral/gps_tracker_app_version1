@@ -105,8 +105,8 @@ class _SpeedChartState extends State<SpeedChart> {
       borderData: FlBorderData(
         show: true,
         border: Border(
-          bottom: BorderSide(color: Colors.grey[300]!, width: 1),
-          left: BorderSide(color: Colors.grey[300]!, width: 1),
+          bottom: BorderSide(color: Colors.grey[300]!),
+          left: BorderSide(color: Colors.grey[300]!),
         ),
       ),
       minX: 0,
@@ -121,7 +121,6 @@ class _SpeedChartState extends State<SpeedChart> {
           barWidth: 3,
           isStrokeCapRound: true,
           dotData: FlDotData(
-            show: true,
             getDotPainter: (spot, percent, barData, index) {
               return FlDotCirclePainter(
                 radius: index == touchedIndex ? 6 : 3,
@@ -136,7 +135,7 @@ class _SpeedChartState extends State<SpeedChart> {
             gradient: LinearGradient(
               colors: [
                 lineColor.withOpacity(0.3),
-                lineColor.withOpacity(0.0),
+                lineColor.withOpacity(0),
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -156,7 +155,6 @@ class _SpeedChartState extends State<SpeedChart> {
 
   LineTouchData _buildTouchData(Color lineColor) {
     return LineTouchData(
-      enabled: true,
       touchCallback: (FlTouchEvent event, LineTouchResponse? touchResponse) {
         setState(() {
           if (touchResponse?.lineBarSpots != null &&
@@ -192,27 +190,24 @@ class _SpeedChartState extends State<SpeedChart> {
           }).toList();
         },
       ),
-      handleBuiltInTouches: true,
     );
   }
 
   FlGridData _buildGridData() {
     return FlGridData(
-      show: true,
       drawVerticalLine: true,
-      drawHorizontalLine: true,
       horizontalInterval: _calculateHorizontalInterval(),
       verticalInterval: _calculateVerticalInterval(),
       getDrawingHorizontalLine: (value) {
         return FlLine(
-          color: Colors.grey[300]!,
+          color: Colors.grey[300],
           strokeWidth: 1,
           dashArray: [5, 5],
         );
       },
       getDrawingVerticalLine: (value) {
         return FlLine(
-          color: Colors.grey[300]!,
+          color: Colors.grey[300],
           strokeWidth: 1,
           dashArray: [5, 5],
         );
@@ -222,7 +217,6 @@ class _SpeedChartState extends State<SpeedChart> {
 
   FlTitlesData _buildTitlesData(AppLocalizations t) {
     return FlTitlesData(
-      show: true,
       bottomTitles: AxisTitles(
         axisNameWidget: Text(
           t.time,
@@ -277,10 +271,10 @@ class _SpeedChartState extends State<SpeedChart> {
         ),
       ),
       topTitles: const AxisTitles(
-        sideTitles: SideTitles(showTitles: false),
+        
       ),
       rightTitles: const AxisTitles(
-        sideTitles: SideTitles(showTitles: false),
+        
       ),
     );
   }

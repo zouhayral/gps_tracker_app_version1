@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_app_gps/core/network/traccar_api.dart';
 import 'package:my_app_gps/core/utils/app_logger.dart';
 import 'package:my_app_gps/features/analytics/models/analytics_report.dart';
+import 'package:my_app_gps/repositories/trip_repository.dart';
 
 /// Provider for AnalyticsRepository.
 final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
   final api = ref.watch(traccarApiProvider);
-  return AnalyticsRepository(api);
+  return AnalyticsRepository(api, ref);
 });
 
 /// Repository for aggregating tracking data into analytics reports.
@@ -18,9 +19,10 @@ final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
 class AnalyticsRepository {
   static final _log = 'AnalyticsRepository'.logger;
 
-  const AnalyticsRepository(this._api);
+  const AnalyticsRepository(this._api, this._ref);
 
   final TraccarApi _api;
+  final Ref _ref;
 
   /// Fetches a daily analytics report for a specific date and device.
   ///
@@ -36,7 +38,8 @@ class AnalyticsRepository {
   Future<AnalyticsReport> fetchDailyReport(DateTime date, int deviceId) async {
     try {
       final from = DateTime(date.year, date.month, date.day);
-      final to = DateTime(date.year, date.month, date.day, 23, 59, 59);
+      // Use exclusive end bound at next midnight to match Traccar expectations
+      final to = from.add(const Duration(days: 1));
 
       _log.debug(
         'Fetching daily report: deviceId=$deviceId, '
@@ -128,24 +131,27 @@ class AnalyticsRepository {
     DateTime from,
     DateTime to,
   ) async {
-    // Fetch all data sources in parallel for efficiency
+    // Fetch trips using TripRepository to ensure parity with Trips page
+    final tripRepo = _ref.read(tripRepositoryProvider);
+    final trips = await tripRepo.fetchTrips(deviceId: deviceId, from: from, to: to);
+
+    // In parallel, fetch summary and positions for speed/fuel when available
     final results = await Future.wait([
       _api.getSummaryReport(deviceId, from, to),
-      _api.getTripsReport(deviceId, from, to),
       _api.getPositions(deviceId, from, to),
     ]);
-
     final summaryData = results[0];
-    final tripsData = results[1];
-    final positionsData = results[2];
+    final positionsData = results[1];
 
     _log.debug(
       'Data fetched: ${summaryData.length} summaries, '
-      '${tripsData.length} trips, ${positionsData.length} positions',
+      '${trips.length} trips, ${positionsData.length} positions',
     );
 
     // Aggregate distance from summary or trips
-    var totalDistanceKm = _computeTotalDistance(summaryData, tripsData);
+    // Primary distance/trips from TripRepository (matches Trips page)
+    var totalDistanceKm = trips.fold<double>(0.0, (s, t) => s + t.distanceKm);
+    var tripCount = trips.length;
 
     // Fallback: Calculate distance from positions if summary/trips returned 0
     if (totalDistanceKm == 0 && positionsData.isNotEmpty) {
@@ -158,23 +164,21 @@ class AnalyticsRepository {
     // Compute speed statistics from positions
     final speedStats = _computeSpeedStats(positionsData);
 
-    // Count trips
-    var tripCount = tripsData.length;
-
-    // Fallback: Estimate trip count from positions if trips returned 0
-    if (tripCount == 0 && positionsData.isNotEmpty) {
-      tripCount = _estimateTripCount(positionsData);
-      _log.debug(
-        '[AnalyticsRepository] Estimated trip count: $tripCount',
-      );
-    }
+    // No position-based fallback for trips; keep parity with Trips page
 
     // Extract fuel usage if available
     final fuelUsed = _extractFuelUsed(summaryData);
 
+    // Determine display end time: if 'to' is an exclusive midnight bound,
+    // show 23:59:59 of the previous day for readability.
+    DateTime displayEnd = to;
+    if (to.hour == 0 && to.minute == 0 && to.second == 0 && to.millisecond == 0 && to.microsecond == 0) {
+      displayEnd = to.subtract(const Duration(seconds: 1));
+    }
+
     final report = AnalyticsReport(
       startTime: from,
-      endTime: to,
+      endTime: displayEnd,
       totalDistanceKm: totalDistanceKm,
       avgSpeed: speedStats.avgSpeed,
       maxSpeed: speedStats.maxSpeed,
@@ -188,43 +192,7 @@ class AnalyticsRepository {
   }
 
   /// Computes total distance from summary or trips data.
-  double _computeTotalDistance(
-    List<Map<String, dynamic>> summaryData,
-    List<Map<String, dynamic>> tripsData,
-  ) {
-    // Try to get distance from summary data first (more accurate)
-    if (summaryData.isNotEmpty) {
-      final distance = summaryData.fold<double>(
-        0.0,
-        (sum, item) {
-          final dist = item['distance'];
-          if (dist != null) {
-            // Distance is usually in meters, convert to km
-            return sum + (dist is num ? dist.toDouble() / 1000.0 : 0.0);
-          }
-          return sum;
-        },
-      );
-      if (distance > 0) return distance;
-    }
-
-    // Fallback: Sum distances from trips data
-    if (tripsData.isNotEmpty) {
-      return tripsData.fold<double>(
-        0.0,
-        (sum, trip) {
-          final dist = trip['distance'];
-          if (dist != null) {
-            // Distance is usually in meters, convert to km
-            return sum + (dist is num ? dist.toDouble() / 1000.0 : 0.0);
-          }
-          return sum;
-        },
-      );
-    }
-
-    return 0.0;
-  }
+  // Removed legacy distance aggregation from raw summary/trips maps.
 
   /// Computes speed statistics (average and max) from positions data.
   ({double avgSpeed, double maxSpeed}) _computeSpeedStats(
@@ -285,11 +253,10 @@ class AnalyticsRepository {
     return AnalyticsReport(
       startTime: from,
       endTime: to,
-      totalDistanceKm: 0.0,
-      avgSpeed: 0.0,
-      maxSpeed: 0.0,
+      totalDistanceKm: 0,
+      avgSpeed: 0,
+      maxSpeed: 0,
       tripCount: 0,
-      fuelUsed: null,
     );
   }
 
@@ -344,33 +311,31 @@ class AnalyticsRepository {
   /// Converts degrees to radians.
   double _deg2rad(double deg) => deg * pi / 180;
 
-  /// Estimates trip count from position data based on speed thresholds.
+  // Removed legacy trip-count estimation from raw positions; we rely on TripRepository for parity.
+
+  /// Fetches analytics report for an explicit range, inclusive of the 'to' day.
   ///
-  /// This is a fallback method when Traccar's trips report is empty.
-  /// It counts trips by detecting when speed crosses above 5 km/h (moving)
-  /// and drops below 2 km/h (stopped).
-  int _estimateTripCount(List<dynamic> positions) {
-    int trips = 0;
-    bool inTrip = false;
-    
-    for (final pos in positions) {
-      final speed = pos['speed'];
-      
-      if (speed != null && speed is num) {
-        // Convert knots to km/h
-        final speedKmh = speed.toDouble() * 1.852;
-        
-        if (!inTrip && speedKmh > 5) {
-          // Started moving - new trip
-          inTrip = true;
-          trips++;
-        } else if (inTrip && speedKmh < 2) {
-          // Stopped moving - trip ended
-          inTrip = false;
-        }
-      }
+  /// From is normalized to start of day; To is treated as inclusive and expanded
+  /// to the start of the next day for API queries (exclusive upper bound).
+  Future<AnalyticsReport> fetchRangeReport(
+    DateTime from,
+    DateTime to,
+    int deviceId,
+  ) async {
+    try {
+      final fromNorm = DateTime(from.year, from.month, from.day);
+      final toExclusive = DateTime(to.year, to.month, to.day).add(const Duration(days: 1));
+
+      _log.debug(
+        'Fetching range report: deviceId=$deviceId, from=$fromNorm, toExclusive=$toExclusive',
+      );
+
+      return await _fetchAndAggregateReport(deviceId, fromNorm, toExclusive);
+    } catch (e, st) {
+      _log.error('fetchRangeReport failed', error: e, stackTrace: st);
+      final fromNorm = DateTime(from.year, from.month, from.day);
+      final toNorm = DateTime(to.year, to.month, to.day, 23, 59, 59);
+      return _createZeroedReport(fromNorm, toNorm);
     }
-    
-    return trips;
   }
 }

@@ -133,10 +133,10 @@ class PooledMarker {
 /// Marker Widget Pool with LRU eviction
 class MarkerWidgetPool {
   MarkerWidgetPool({
-    this.maxPerTier = 300,
-  });
+    int maxPerTier = 300,
+  }) : _maxPerTier = maxPerTier;
 
-  final int maxPerTier;
+  int _maxPerTier;
 
   // Separate pools per tier for optimal LOD switching
   final Map<MarkerTier, Map<String, PooledMarker>> _pools = {
@@ -230,7 +230,7 @@ class MarkerWidgetPool {
   void _evictIfNeeded(MarkerTier tier) {
     final pool = _pools[tier]!;
     
-    while (pool.length > maxPerTier) {
+    while (pool.length > _maxPerTier) {
       // Find LRU marker that's not in use
       String? lruId;
       DateTime? oldestAccess;
@@ -296,7 +296,7 @@ class MarkerWidgetPool {
         'total': pool.length,
         'inUse': inUse,
         'available': pool.length - inUse,
-        'maxPerTier': maxPerTier,
+        'maxPerTier': _maxPerTier,
       };
     }
 
@@ -348,6 +348,17 @@ class MarkerWidgetPool {
     }
     clear();
   }
+
+  /// Reconfigure pool capacity in-place and evict LRU to meet new limit.
+  void reconfigure({required int maxPerTier}) {
+    _maxPerTier = maxPerTier;
+    for (final tier in MarkerTier.values) {
+      _evictIfNeeded(tier);
+    }
+    if (kDebugMode) {
+      debugPrint('[MarkerPool] 🔧 Reconfigured in-place: $_maxPerTier per tier');
+    }
+  }
 }
 
 /// Global singleton marker pool (configurable per LOD mode)
@@ -362,13 +373,11 @@ class MarkerPoolManager {
 
   /// Reconfigure pool based on LOD mode
   static void configure({required int maxPerTier}) {
-    // If pool exists and config changed, clear and recreate
-    if (_instance != null && _instance!.maxPerTier != maxPerTier) {
-      _instance!.dispose();
-      _instance = null;
+    if (_instance != null) {
+      _instance!.reconfigure(maxPerTier: maxPerTier);
+    } else {
+      _instance = MarkerWidgetPool(maxPerTier: maxPerTier);
     }
-
-    _instance ??= MarkerWidgetPool(maxPerTier: maxPerTier);
 
     if (kDebugMode) {
       debugPrint('[MarkerPoolManager] ⚙️ Configured: $maxPerTier per tier');

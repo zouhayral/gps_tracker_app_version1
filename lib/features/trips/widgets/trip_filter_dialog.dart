@@ -91,6 +91,21 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
     }
   }
 
+  void _setToday() {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    setState(() => _dateRange = DateTimeRange(start: start, end: end));
+  }
+
+  void _setYesterday() {
+    final now = DateTime.now();
+    final y = now.subtract(const Duration(days: 1));
+    final start = DateTime(y.year, y.month, y.day);
+    final end = DateTime(y.year, y.month, y.day, 23, 59, 59);
+    setState(() => _dateRange = DateTimeRange(start: start, end: end));
+  }
+
   void _applyFilter() {
     final filter = TripFilter(
       deviceIds: _selectedDeviceIds.toList(),
@@ -126,14 +141,17 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                     color: Theme.of(context).colorScheme.onPrimaryContainer,
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    t?.filterTripsTitle ?? 'Filter Trips',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  Expanded(
+                    child: Text(
+                      t?.filterTripsTitle ?? 'Filter Trips',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                          ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.of(context).pop(),
@@ -172,6 +190,39 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    // Quick actions: Today / Yesterday
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: _setToday,
+                            icon: const Icon(Icons.today),
+                            label: const Text('Today'),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: _setYesterday,
+                            icon: const Icon(Icons.history),
+                            label: const Text('Yesterday'),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 24),
 
                     // Device Selection Section
@@ -208,9 +259,12 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                             color: Theme.of(context).colorScheme.primary,
                           ),
                           const SizedBox(width: 12),
-                          Text(
-                            t?.allDevices ?? 'All Devices',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          Expanded(
+                            child: Text(
+                              t?.allDevices ?? 'All Devices',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
@@ -219,6 +273,7 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                             ? t.devicesAvailable(widget.devices.length)
                             : '${widget.devices.length} devices available',
                         style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                       shape: RoundedRectangleBorder(
@@ -320,11 +375,22 @@ class _TripFilterDialogState extends State<TripFilterDialog> {
                     onPressed: () => Navigator.of(context).pop(),
                     child: Text(t?.cancel ?? 'Cancel'),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: _applyFilter,
-                    icon: const Icon(Icons.check),
-                    label: Text(t?.applyFilter ?? 'Apply Filter'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _applyFilter,
+                      icon: const Icon(Icons.check, size: 18),
+                      label: Text(
+                        t?.applyFilter ?? 'Apply Filter',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
